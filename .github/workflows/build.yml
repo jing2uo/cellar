@@ -23,11 +23,11 @@ jobs:
             ca-certificates git make gcc libc6-dev pkg-config \
             libgtk-4-dev libwebkitgtk-6.0-dev
 
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0  # git describe for the version string
 
-      - uses: actions/setup-go@v6
+      - uses: actions/setup-go@v7
         with:
           go-version-file: go.mod
 
@@ -45,7 +45,7 @@ jobs:
           go build -tags production -trimpath \
             -ldflags="-s -w -X main.version=$VERSION" -o dist/cellar .
 
-      - uses: actions/upload-artifact@v5
+      - uses: actions/upload-artifact@v7
         with:
           name: cellar-linux-x86_64
           path: |
