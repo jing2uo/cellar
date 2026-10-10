@@ -1,0 +1,44 @@
+# 中文环境：区域设置、CJK 字体链接与替换、次像素抗锯齿。
+#
+# 字体走宿主（或 Flatpak 的 /run/host/fonts）上的 Noto CJK，经 fc-match 找到文件后
+# 软链进 C:\windows\Fonts 并登记到 HKLM ...\Fonts —— 只放进 Fonts 目录 GDI 能用，
+# 但内嵌 CEF / DirectWrite 只认注册表登记过的字体。
+# 注册表值里的 {font:族名} 在调和时换成该族的文件名。
+
+[env]
+LANG = "zh_CN.UTF-8"
+LC_ALL = "zh_CN.UTF-8"
+
+[fonts]
+link = ["Noto Sans CJK SC", "Noto Serif CJK SC"]
+
+# 程序点名要的中文字体，映射到 Noto。
+[registry.'HKLM\Software\Microsoft\Windows NT\CurrentVersion\FontSubstitutes']
+"SimSun" = "Noto Sans CJK SC"
+"NSimSun" = "Noto Sans CJK SC"
+"宋体" = "Noto Sans CJK SC"
+"新宋体" = "Noto Sans CJK SC"
+"SimHei" = "Noto Sans CJK SC"
+"黑体" = "Noto Sans CJK SC"
+"Microsoft YaHei" = "Noto Sans CJK SC"
+"Microsoft YaHei UI" = "Noto Sans CJK SC"
+"微软雅黑" = "Noto Sans CJK SC"
+"FangSong" = "Noto Serif CJK SC"
+"仿宋" = "Noto Serif CJK SC"
+"KaiTi" = "Noto Serif CJK SC"
+"楷体" = "Noto Serif CJK SC"
+
+# 西文界面字体缺字时回落到 Noto CJK（不替换西文字形本身）。
+[registry.'HKLM\Software\Microsoft\Windows NT\CurrentVersion\FontLink\SystemLink']
+"Tahoma" = { type = "multi_sz", value = ["{font:Noto Sans CJK SC},Noto Sans CJK SC"] }
+"Segoe UI" = { type = "multi_sz", value = ["{font:Noto Sans CJK SC},Noto Sans CJK SC"] }
+"Microsoft Sans Serif" = { type = "multi_sz", value = ["{font:Noto Sans CJK SC},Noto Sans CJK SC"] }
+"MS Shell Dlg" = { type = "multi_sz", value = ["{font:Noto Sans CJK SC},Noto Sans CJK SC"] }
+"MS Shell Dlg 2" = { type = "multi_sz", value = ["{font:Noto Sans CJK SC},Noto Sans CJK SC"] }
+"Arial" = { type = "multi_sz", value = ["{font:Noto Sans CJK SC},Noto Sans CJK SC"] }
+
+[registry.'HKCU\Control Panel\Desktop']
+FontSmoothing = "2"
+FontSmoothingType = 2
+FontSmoothingGamma = 1400
+FontSmoothingOrientation = 1

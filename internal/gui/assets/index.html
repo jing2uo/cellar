@@ -1,0 +1,497 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>Cellar</title>
+<style>
+:root {
+  --bg: #f6f5f3; --panel: #ffffff; --side: #efedea; --line: #e2dfda;
+  --text: #1f1d1a; --mute: #77726b; --accent: #8a2c3b; --accent-soft: #f3e6e8;
+  --ok: #2f7d4f; --warn: #a86a12; --err: #b3261e; --mono: "JetBrains Mono", "Noto Sans Mono CJK SC", monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #1b1a19; --panel: #232220; --side: #161514; --line: #34322f;
+    --text: #ebe8e3; --mute: #9b958c; --accent: #e07a8b; --accent-soft: #3a2429;
+    --ok: #6cc28f; --warn: #e0a54a; --err: #ef6b62;
+  }
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; height: 100%; }
+body {
+  font: 14px/1.5 "Inter", "Noto Sans CJK SC", system-ui, sans-serif;
+  background: var(--bg); color: var(--text); display: flex; overflow: hidden;
+  -webkit-user-select: none; user-select: none;
+}
+aside { width: 240px; background: var(--side); border-right: 1px solid var(--line); display: flex; flex-direction: column; }
+.brand { padding: 18px 18px 10px; font-weight: 650; font-size: 16px; letter-spacing: .2px; display: flex; gap: 8px; align-items: center; }
+.brand .dot { width: 10px; height: 10px; border-radius: 50%; background: var(--accent); }
+.list { flex: 1; overflow: auto; padding: 4px 8px; }
+.group { color: var(--mute); font-size: 12px; padding: 12px 10px 4px; }
+.item { padding: 8px 10px; border-radius: 8px; cursor: default; display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+.item:hover { background: color-mix(in srgb, var(--text) 6%, transparent); }
+.item.sel { background: var(--accent-soft); color: var(--accent); font-weight: 600; }
+.item small { color: var(--mute); font-weight: 400; }
+.foot { padding: 10px 12px; border-top: 1px solid var(--line); color: var(--mute); font-size: 12px; }
+main { flex: 1; overflow: auto; padding: 28px 32px; }
+h1 { margin: 0; font-size: 22px; font-weight: 650; }
+.meta { color: var(--mute); margin-top: 4px; word-break: break-all; display: flex; gap: 14px; flex-wrap: wrap; }
+.head { flex-wrap: wrap; display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; margin-bottom: 24px; }
+.actions { display: flex; gap: 8px; }
+button {
+  white-space: nowrap; font: inherit; border: 1px solid var(--line); background: var(--panel); color: var(--text);
+  padding: 6px 14px; border-radius: 8px; cursor: default;
+}
+button:hover { border-color: var(--mute); }
+button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+button:disabled { opacity: .5; }
+section { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 16px 18px; margin-bottom: 16px; }
+section h2 { font-size: 13px; font-weight: 600; color: var(--mute); margin: 0 0 12px; text-transform: uppercase; letter-spacing: .6px; }
+.apps { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 10px; }
+.app { border: 1px solid var(--line); border-radius: 10px; padding: 12px 14px; display: flex; flex-direction: column; gap: 6px; }
+.app b { font-weight: 600; }
+.app .top { display: flex; gap: 10px; align-items: center; }
+.app img { width: 32px; height: 32px; object-fit: contain; }
+.app .btns { display: flex; gap: 6px; } .app .btns button:first-child { flex: 1; }
+.app code { color: var(--mute); font-size: 11.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.badge { font-size: 11.5px; padding: 1px 8px; border-radius: 99px; border: 1px solid currentColor; }
+.s-applied, .item small.s-applied { color: var(--ok); } .s-changed, .s-new, .item small.s-changed, .item small.s-new { color: var(--warn); } .s-error, .item small.s-error { color: var(--err); }
+.changes { font-family: var(--mono); font-size: 12px; margin: 0; padding: 0; list-style: none; max-height: 260px; overflow: auto; }
+.changes li { padding: 3px 0; border-bottom: 1px dashed var(--line); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.op { display: inline-block; width: 56px; font-weight: 600; }
+.op-set, .op-link, .op-map, .op-init { color: var(--ok); } .op-delete, .op-unlink, .op-unmap { color: var(--err); } .op-update { color: var(--warn); }
+table { width: 100%; border-collapse: collapse; font-size: 13px; }
+td { white-space: nowrap; padding: 6px 4px; border-bottom: 1px solid var(--line); }
+tr.run:hover { background: color-mix(in srgb, var(--text) 4%, transparent); }
+.mono { font-family: var(--mono); font-size: 12px; }
+.empty { color: var(--mute); padding: 6px 0; }
+.err { color: var(--err); white-space: pre-wrap; }
+dialog { border: 1px solid var(--line); border-radius: 14px; background: var(--panel); color: var(--text); width: min(880px, 92vw); padding: 18px; }
+dialog::backdrop { background: rgba(0,0,0,.35); }
+textarea, pre.log {
+  width: 100%; height: 60vh; font-family: var(--mono); font-size: 12.5px; background: var(--bg); color: var(--text);
+  border: 1px solid var(--line); border-radius: 8px; padding: 10px; margin: 10px 0; resize: vertical;
+  -webkit-user-select: text; user-select: text; overflow: auto; white-space: pre;
+}
+input { font: inherit; padding: 6px 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--bg); color: var(--text); width: 100%; margin: 4px 0 10px; }
+.row { display: flex; justify-content: flex-end; gap: 8px; }
+.welcome { color: var(--mute); margin-top: 18vh; text-align: center; }
+.banner { border: 1px solid var(--warn); background: color-mix(in srgb, var(--warn) 10%, transparent); border-radius: 12px; padding: 14px 18px; margin-bottom: 16px; display: flex; justify-content: space-between; align-items: center; gap: 16px; }
+.rlist { display: flex; flex-direction: column; gap: 8px; }
+.rrow { display: flex; align-items: center; gap: 10px; border: 1px solid var(--line); border-radius: 10px; padding: 10px 14px; }
+.rrow .grow { flex: 1; min-width: 0; }
+.rrow .sub { color: var(--mute); font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tag { font-size: 11px; padding: 0 7px; border-radius: 99px; background: color-mix(in srgb, var(--text) 8%, transparent); color: var(--mute); }
+.tag.rec { background: var(--accent-soft); color: var(--accent); }
+.warn { color: var(--warn); font-size: 12px; }
+select { font: inherit; padding: 6px 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--bg); color: var(--text); width: 100%; margin: 4px 0 10px; }
+.tools { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 10px; }
+.tools button { font-size: 12.5px; padding: 3px 10px; }
+.task { border: 1px solid var(--accent); border-radius: 12px; padding: 12px 16px; margin-bottom: 16px; }
+.task pre { margin: 8px 0 0; max-height: 180px; overflow: auto; font-family: var(--mono); font-size: 11.5px; color: var(--mute); white-space: pre-wrap; -webkit-user-select: text; user-select: text; }
+.task.err { border-color: var(--err); }
+.spin { display: inline-block; width: 10px; height: 10px; border: 2px solid var(--accent); border-right-color: transparent; border-radius: 50%; animation: spin .8s linear infinite; margin-right: 6px; }
+@keyframes spin { to { transform: rotate(360deg); } }
+.sechead { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; }
+.sechead h2 { margin: 0; }
+.x { border: none; background: none; color: var(--mute); padding: 0 4px; font-size: 16px; }
+.form { display: grid; grid-template-columns: 120px 1fr; gap: 10px 14px; align-items: center; margin: 12px 0; }
+.form label { color: var(--mute); }
+.form input, .form select { margin: 0; }
+.inline { display: flex; gap: 8px; align-items: center; }
+.inline input[type=checkbox] { width: auto; margin: 0; }
+.deps { display: grid; grid-template-columns: 1fr 1fr; gap: 4px 14px; max-height: 210px; overflow: auto; }
+.deps label { display: flex; gap: 6px; align-items: flex-start; color: var(--text); font-size: 13px; }
+.deps input { width: auto; margin: 3px 0 0; }
+.deps small { color: var(--mute); display: block; }
+.dll { display: flex; gap: 6px; margin-bottom: 6px; } .dll input, .dll select { margin: 0; }
+.plist { max-height: 46vh; overflow: auto; display: flex; flex-direction: column; gap: 6px; margin: 10px 0; }
+.prow { display: flex; gap: 10px; align-items: center; border: 1px solid var(--line); border-radius: 8px; padding: 6px 10px; }
+.prow img, .prow .ph { width: 28px; height: 28px; object-fit: contain; flex: none; }
+.prow .grow { flex: 1; min-width: 0; } .prow .sub { color: var(--mute); font-size: 11.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.crumb { font-family: var(--mono); font-size: 12px; color: var(--mute); }
+#toast { position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%); max-width: 80vw; background: var(--text); color: var(--bg);
+  padding: 8px 16px; border-radius: 10px; font-size: 13px; opacity: 0; transition: opacity .2s; pointer-events: none; white-space: pre-wrap; z-index: 10; }
+#toast.on { opacity: .94; } #toast.bad { background: var(--err); color: #fff; }
+#dlg2 { width: min(460px, 86vw); }
+</style>
+</head>
+<body>
+<aside>
+  <div class="brand"><span class="dot"></span>Cellar</div>
+  <div class="list" id="list"></div>
+  <div class="foot" id="foot"></div>
+</aside>
+<main id="main"><div class="welcome">加载中…</div></main>
+
+<dialog id="dlg"></dialog>
+<dialog id="dlg2"></dialog>
+<div id="toast"></div>
+
+<script type="module">
+import { Call } from "/wails/runtime.js";
+const S = "github.com/jing2uo/cellar/internal/gui.Service.";
+const call = (m, ...a) => Call.ByName(S + m, ...a);
+const $ = (s) => document.querySelector(s);
+const esc = (s) => String(s ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+const stateText = { applied: "已就绪", changed: "配置已改", new: "待应用", error: "错误" };
+
+let env, prefixes = [], sel = null;
+const RUNNERS = "\u0000runners", IMPORT = "\u0000import";
+let bottles = [];
+
+// load refreshes the data; it re-renders only when something changed and no
+// dialog is open, so a refresh on window focus never swaps the page out from
+// under the click that focused it.
+let lastSig = "";
+// In-page replacements for alert/confirm/prompt: WebKitGTK inside Wails is
+// not guaranteed to show the native ones, and prompt() then returns null.
+let toastTimer;
+function toast(msg, bad = false) {
+  const t = $("#toast"); t.textContent = msg; t.className = "on" + (bad ? " bad" : "");
+  clearTimeout(toastTimer); toastTimer = setTimeout(() => t.className = "", bad ? 6000 : 2500);
+}
+const fail = (e) => toast(String((e && e.message) || e), true);
+function ask(title, value = null) {
+  return new Promise((resolve) => {
+    const d = $("#dlg2");
+    d.innerHTML = `<b>${esc(title)}</b>${value !== null ? `<input id="v" value="${esc(value)}">` : ""}
+      <div class="row"><button id="no">取消</button><button id="ok" class="primary">确定</button></div>`;
+    const done = (v) => { d.close(); resolve(v); };
+    d.querySelector("#no").onclick = () => done(null);
+    d.querySelector("#ok").onclick = () => done(value !== null ? d.querySelector("#v").value.trim() : true);
+    if (value !== null) d.querySelector("#v").onkeydown = (ev) => { if (ev.key === "Enter") d.querySelector("#ok").click(); };
+    d.showModal();
+    if (value !== null) d.querySelector("#v").select();
+  });
+}
+
+async function load(force = true) {
+  const [e, ps, bs] = await Promise.all([call("Env"), call("Prefixes"), call("Bottles")]);
+  const sig = JSON.stringify([e, ps, bs, sel]);
+  if (!force && (sig === lastSig || $("#dlg").open)) return;
+  lastSig = sig;
+  env = e; prefixes = ps; bottles = bs;
+  if (!sel && location.hash.length > 1) sel = location.hash.slice(1) === "runners" ? RUNNERS : decodeURIComponent(location.hash.slice(1));
+  if (!sel && prefixes.length) sel = prefixes[0].name;
+  $("#foot").textContent = `${env.flatpak ? "Flatpak" : "宿主安装"} · ${env.version}`;
+  renderList();
+  renderMain();
+}
+
+function renderList() {
+  const local = prefixes.filter((p) => p.source === "local");
+  $("#list").innerHTML = `<div class="group">本地 prefix</div>` +
+    (local.map((p) => `<div class="item ${p.name === sel ? "sel" : ""}" data-n="${esc(p.name)}">
+      <span>${esc(p.name)}</span><small class="s-${p.state}">●</small></div>`).join("") || `<div class="empty item">还没有 prefix</div>`) +
+    `<div class="item" id="new"><small>＋ 新建 prefix</small></div>` +
+    (bottles.some((b) => !b.imported) ? `<div class="item ${sel === IMPORT ? "sel" : ""}" id="imp"><small>⇣ 从 Bottles 导入（${bottles.filter((b) => !b.imported).length}）</small></div>` : "") +
+    `<div class="group">Wine</div><div class="item ${sel === RUNNERS ? "sel" : ""}" id="runners"><span>Runner</span><small>${env.runners.length}</small></div>`;
+  document.querySelectorAll(".item[data-n]").forEach((el) => el.onclick = () => { sel = el.dataset.n; renderList(); renderMain(); });
+  $("#new").onclick = newPrefix;
+  $("#runners").onclick = () => { sel = RUNNERS; renderList(); renderMain(); };
+  if ($("#imp")) $("#imp").onclick = () => { sel = IMPORT; renderList(); renderMain(); };
+}
+
+const noWine = () => env.runners.length ? "" : `<div class="banner"><div><b>没有找到 Wine</b><div class="meta">${env.flatpak
+  ? "这个 Flatpak 应自带 Wine，构建可能不完整。" : "系统里没有安装 wine。可以用发行版的包，或下载一个社区构建（推荐 WoW64 版，不需要 32 位系统库）。"}</div></div>
+  <button class="primary" id="getwine">下载推荐的 Wine</button></div>`;
+
+function wireNoWine() {
+  const b = $("#getwine"); if (!b) return;
+  b.onclick = async () => {
+    b.disabled = true; b.textContent = "下载中…";
+    try { const cat = await call("Available"); const rec = (cat.releases || []).find((r) => r.default);
+      if (!rec) throw new Error("没有找到推荐的版本：" + (cat.warnings || []).join("；"));
+      await call("InstallRunner", rec.id); } catch (e) { fail(e); }
+    await load();
+  };
+}
+
+async function renderMain() {
+  if (sel === RUNNERS) return renderRunners();
+  if (sel === IMPORT) return renderImport();
+  const p = prefixes.find((x) => x.name === sel);
+  if (!p) { $("#main").innerHTML = noWine() + `<div class="welcome">新建一个 prefix 开始</div>`; wireNoWine(); return; }
+  $("#main").innerHTML = `
+    <div class="head">
+      <div><h1>${esc(p.name)}</h1>
+        <div class="meta"><span class="badge s-${p.state}">${stateText[p.state]}</span>
+          <span>runner：${esc(p.runner)}</span><span>配置集：${esc((p.profiles || []).join("、") || "无")}</span></div></div>
+      <div class="actions">
+        <button id="settings">设置</button><button id="install" class="primary">运行安装程序…</button></div>
+    </div>
+    ${noWine()}${p.error ? `<section><div class="err">${esc(p.error)}</div></section>` : ""}
+    <div id="task"></div>
+    <section><div class="sechead"><h2>应用</h2><button id="addapp">＋ 添加应用</button></div><div class="apps">${p.apps.map((a) => `
+      <div class="app"><div class="top">${a.icon ? `<img src="${a.icon}">` : ""}<b>${esc(a.name)}</b><span style="flex:1"></span>
+        <button class="x" data-rm="${esc(a.id)}" title="移除这个应用（不删程序文件）">×</button></div>
+      <code title="${esc(a.exe)}">${esc(a.exe)}</code>
+      <div class="btns"><button data-app="${esc(a.id)}">启动</button>
+      <button data-desk="${esc(a.id)}" data-on="${a.desktop ? 1 : ""}" title="${a.desktop ? "从应用菜单移除" : "在应用菜单里创建快捷方式"}">${a.desktop ? "移除快捷方式" : "快捷方式"}</button></div></div>`).join("") || `<div class="empty">还没有应用。先“运行安装程序”，装好后点“添加应用”。</div>`}</div></section>
+    <section><div class="sechead"><h2>待调和变更</h2><button id="apply">应用配置</button></div><div id="plan" class="empty">计算中…</div></section>
+    <section><h2>工具</h2><div class="tools">
+      ${[["winecfg", "Wine 设置"], ["regedit", "注册表"], ["explorer", "文件管理器"], ["wineconsole", "命令行"], ["taskmgr", "任务管理器"]].map(([x, t]) => `<button data-tool="${x}">${t}</button>`).join("")}
+      <button id="other">运行其他程序…</button><button id="edit">编辑 cellar.toml</button><button id="kill">结束所有进程</button></div></section>
+    <section><h2>运行记录</h2><div id="runs" class="empty">读取中…</div></section>`;
+  $("#apply").onclick = () => startTask(p.name, () => call("ApplyTask", p.name));
+  $("#settings").onclick = () => settings(p.name);
+  $("#install").onclick = () => install(p.name);
+  $("#addapp").onclick = () => addApp(p.name);
+  $("#edit").onclick = () => edit(p.name);
+  $("#other").onclick = () => runExe(p.name);
+  $("#kill").onclick = async () => { await call("Kill", p.name); setTimeout(() => showRuns(p.name), 1500); };
+  document.querySelectorAll("[data-tool]").forEach((b) => b.onclick = async () => {
+    await call("Launch", p.name, "", b.dataset.tool);
+    setTimeout(() => showRuns(p.name), 3000);
+  });
+  document.querySelectorAll("[data-app]").forEach((b) => b.onclick = () => launch(p.name, b.dataset.app, b));
+  document.querySelectorAll("[data-desk]").forEach((b) => b.onclick = async () => {
+    try { await call("Desktop", p.name, b.dataset.desk, !!b.dataset.on); } catch (e) { fail(e); }
+    await load();
+  });
+  document.querySelectorAll("[data-rm]").forEach((b) => b.onclick = async () => {
+    if (!await ask(`移除应用 ${b.dataset.rm}？程序文件保留，菜单快捷方式会删掉。`)) return;
+    try { await call("RemoveApp", p.name, b.dataset.rm); } catch (e) { fail(e); }
+    await load();
+  });
+  wireNoWine();
+  showPlan(p.name);
+  showRuns(p.name);
+  const running = await call("Running", p.name);
+  if (running) watchTask(p.name, running);
+}
+
+// ── background tasks ──────────────────────────────────────────────────────
+async function startTask(name, start) {
+  try { const id = await start(); if (id) watchTask(name, id); } catch (e) { fail(e); }
+}
+
+let watching = null;
+async function watchTask(name, id) {
+  watching = id;
+  for (;;) {
+    if (watching !== id || sel !== name || !$("#task")) return;
+    let t;
+    try { t = await call("Task", id); } catch { return; }
+    $("#task").innerHTML = `<div class="task ${t.error ? "err" : ""}"><b>${t.done ? (t.error ? "失败：" : "完成：") : `<span class="spin"></span>`}${esc(t.title)}</b>
+      ${t.error ? `<div class="err">${esc(t.error.split("\n")[0])}</div>` : ""}<pre>${esc(t.lines.slice(-60).join("\n"))}</pre></div>`;
+    const pre = $("#task pre"); if (pre) pre.scrollTop = pre.scrollHeight;
+    if (t.done) {
+      if (t.error) { // keep the panel up so the error and log stay readable
+        toast("失败：" + t.title, true);
+        prefixes = await call("Prefixes"); renderList(); showPlan(name);
+      } else {
+        toast("完成：" + t.title);
+        await load(true);
+      }
+      return;
+    }
+    await new Promise((r) => setTimeout(r, 700));
+  }
+}
+const kindText = { wow64: "WoW64", legacy: "传统 32 位" };
+
+async function renderRunners() {
+  $("#main").innerHTML = `<div class="head"><div><h1>Runner</h1><div class="meta">${env.flatpak
+      ? "“system” 是本应用自带的 Wine（org.winehq.Wine），始终可用。" : "“system” 是系统里安装的 Wine。"}
+      新建 prefix 时可以任选一个；社区构建下载到 ${esc(env.home)}/runners。</div></div></div>
+    ${noWine()}
+    <section><h2>已有</h2><div class="rlist">${env.runners.map((r) => `
+      <div class="rrow"><div class="grow"><b>${esc(r.name)}</b> ${r.default ? `<span class="tag rec">默认</span>` : ""}
+        <span class="tag">${r.source === "system" ? "系统" : "已下载"}</span> <span class="tag">${kindText[r.kind]}</span>
+        <div class="sub">${esc(r.version)} · ${esc(r.dir)}</div>
+        ${(r.problems || []).map((x) => `<div class="warn">⚠ ${esc(x)}</div>`).join("")}</div></div>`).join("") || `<div class="empty">还没有</div>`}</div></section>
+    <section><h2>可下载</h2><div id="avail" class="empty">正在查询 GitHub…</div></section>`;
+  wireNoWine();
+  try {
+    const cat = await call("Available");
+    $("#avail").outerHTML = `<div id="avail" class="rlist">${(cat.warnings || []).map((w) => `<div class="warn">⚠ ${esc(w)}</div>`).join("")}
+      ${(cat.releases || []).map((r) => `<div class="rrow"><div class="grow"><b>${esc(r.name)}</b> <span class="mono">${esc(r.version)}</span>
+        ${r.default ? `<span class="tag rec">推荐</span>` : ""} <span class="tag">${kindText[r.kind]}</span>
+        <div class="sub">${esc(r.note)}${r.size ? ` · ${(r.size / 1048576).toFixed(0)} MB` : ""}</div>
+        ${r.usable ? "" : `<div class="warn">⚠ 当前环境缺 32 位支持，装上也跑不起来</div>`}</div>
+        <button data-rid="${esc(r.id)}" ${r.installed ? "disabled" : ""}>${r.installed ? "已安装" : "下载"}</button></div>`).join("")}</div>`;
+    document.querySelectorAll("[data-rid]").forEach((b) => b.onclick = async () => {
+      b.disabled = true; b.textContent = "下载中…";
+      try { await call("InstallRunner", b.dataset.rid); } catch (e) { fail(e); b.disabled = false; b.textContent = "下载"; return; }
+      await load();
+    });
+  } catch (e) { $("#avail").innerHTML = `<div class="err">${esc(e.message || e)}</div>`; }
+}
+
+async function showPlan(name) {
+  try {
+    const pl = await call("Plan", name);
+    const warn = (pl.warnings || []).map((w) => `<div class="err">⚠ ${esc(w)}</div>`).join("");
+    $("#plan").outerHTML = `<div id="plan">${warn}${(pl.changes || []).length ? `<ul class="changes">${pl.changes.map((c) =>
+      `<li><span class="op op-${c.op}">${c.op}</span>${esc(fmt(c))}</li>`).join("")}</ul>` : `<div class="empty">已是最新（${esc(pl.wine_version)}）</div>`}</div>`;
+  } catch (e) { $("#plan").innerHTML = `<div class="err">${esc(e.message || e)}</div>`; }
+}
+
+function fmt(c) {
+  if (c.op === "init" || c.op === "update") return c.value;
+  if (c.op === "set") return `${c.key}\\${c.name} = ${c.value}`;
+  if (c.op === "delete") return `${c.key}\\${c.name}`;
+  if (c.op === "link" || c.op === "unlink") return `${c.name} → ${c.value}`;
+  return `${c.name}: → ${c.value}`;
+}
+
+async function showRuns(name) {
+  const runs = await call("Runs", name);
+  $("#runs").outerHTML = `<div id="runs">${runs.length ? `<table>${runs.map((r) => `
+    <tr class="run" data-id="${esc(r.id)}"><td class="mono">${esc(r.id)}</td><td>${esc(r.app || "—")}</td>
+    <td class="${r.exit_code ? "s-error" : "s-applied"}">退出码 ${r.exit_code}</td><td>${r.seconds.toFixed(1)}s</td>
+    <td class="mono">${esc(r.argv.slice(1).join(" "))}</td></tr>`).join("")}</table>` : `<div class="empty">还没运行过</div>`}</div>`;
+  document.querySelectorAll("tr.run").forEach((tr) => tr.onclick = () => showLog(name, tr.dataset.id));
+}
+
+
+async function launch(name, app, b) {
+  b.disabled = true; b.textContent = "已启动";
+  try { await call("Launch", name, app, ""); } catch (e) { fail(e); }
+  setTimeout(() => { b.disabled = false; b.textContent = "启动"; showRuns(name); }, 3000);
+}
+
+function dialog(html, wire) { const d = $("#dlg"); d.innerHTML = html; wire(d); d.showModal(); }
+
+async function edit(name) {
+  const text = await call("ReadConfig", name);
+  dialog(`<b>编辑 ${esc(name)}/cellar.toml</b><textarea id="cfg" spellcheck="false">${esc(text)}</textarea>
+    <div id="cfgerr" class="err"></div><div class="row"><button id="c">取消</button><button id="s" class="primary">保存</button></div>`, (d) => {
+    d.querySelector("#c").onclick = () => d.close();
+    d.querySelector("#s").onclick = async () => {
+      try { await call("SaveConfig", name, d.querySelector("#cfg").value); d.close(); load(); }
+      catch (e) { d.querySelector("#cfgerr").textContent = e.message || e; }
+    };
+  });
+}
+
+async function showLog(name, id) {
+  const text = await call("Log", name, id);
+  dialog(`<b>运行 ${esc(id)}</b><pre class="log">${esc(text)}</pre><div class="row"><button id="c">关闭</button></div>`,
+    (d) => d.querySelector("#c").onclick = () => d.close());
+}
+
+function runExe(name) {
+  dialog(`<b>在 ${esc(name)} 里运行</b><div class="meta">Windows 路径、宿主路径，或 winecfg / regedit 这类内置程序</div>
+    <input id="x" value="winecfg"><div class="row"><button id="c">取消</button><button id="r" class="primary">运行</button></div>`, (d) => {
+    d.querySelector("#c").onclick = () => d.close();
+    d.querySelector("#r").onclick = async () => { await call("Launch", name, "", d.querySelector("#x").value); d.close(); setTimeout(() => showRuns(name), 3000); };
+  });
+}
+
+const WINVER = [["win11", "Windows 11"], ["win10", "Windows 10"], ["win81", "Windows 8.1"], ["win7", "Windows 7"], ["winxp", "Windows XP"]];
+const DLLMODE = [["native,builtin", "原生优先"], ["builtin,native", "内置优先"], ["native", "仅原生"], ["builtin", "仅内置"], ["disabled", "禁用"]];
+const DPIS = [[0, "默认"], [96, "100%"], [120, "125%"], [144, "150%"], [168, "175%"], [192, "200%"]];
+
+async function settings(name) {
+  const [st, cat] = await Promise.all([call("Settings", name), call("DependencyCatalog")]);
+  const known = new Set(cat.map((d) => d.verb));
+  const extra = st.dependencies.filter((v) => !known.has(v));
+  const dllRow = (k = "", v = "native,builtin") => `<div class="dll"><input class="dk" placeholder="dll 名，如 mfc42" value="${esc(k)}">
+    <select class="dv">${DLLMODE.map(([m, t]) => `<option value="${m}" ${m === v ? "selected" : ""}>${t}（${m}）</option>`).join("")}</select>
+    <button class="x dx">×</button></div>`;
+  dialog(`<b>${esc(name)} 设置</b>
+    <div class="form">
+      <label>Windows 版本</label><select id="wv"><option value="">默认（Windows 10）</option>${WINVER.map(([v, t]) => `<option value="${v}" ${st.windows_version === v ? "selected" : ""}>${t}</option>`).join("")}</select>
+      <label>虚拟桌面</label><div class="inline"><input type="checkbox" id="vd" ${st.virtual_desktop ? "checked" : ""}>
+        <input id="vdres" placeholder="1920x1080" value="${esc(st.virtual_desktop || "1920x1080")}" style="width:140px"><small class="meta">程序都开在一个 Wine 桌面窗口里</small></div>
+      <label>缩放（DPI）</label><select id="dpi">${DPIS.map(([v, t]) => `<option value="${v}" ${st.dpi === v ? "selected" : ""}>${t}${v ? `（${v}）` : ""}</option>`).join("")}
+        ${st.dpi && !DPIS.some(([v]) => v === st.dpi) ? `<option value="${st.dpi}" selected>${st.dpi}</option>` : ""}</select>
+      <label>中文环境</label><div class="inline"><input type="checkbox" id="zh" ${st.profiles.includes("zh-cn") ? "checked" : ""}><small class="meta">zh-cn 配置集：中文区域、Noto CJK 字体链接与替换</small></div>
+    </div>
+    <div class="meta">依赖（winetricks 安装，已装的会跳过）</div>
+    <div class="deps">${cat.map((d) => `<label><input type="checkbox" value="${d.verb}" ${st.dependencies.includes(d.verb) ? "checked" : ""}>
+      <span>${d.verb}${d.slow ? "（慢）" : ""}<small>${esc(d.note)}</small></span></label>`).join("")}</div>
+    <input id="extra" placeholder="其他 winetricks verb，空格分隔" value="${esc(extra.join(" "))}">
+    <div class="meta">DLL 覆盖</div><div id="dlls">${Object.entries(st.dll_overrides).map(([k, v]) => dllRow(k, v)).join("")}</div>
+    <button id="adddll">＋ DLL</button>
+    <div id="e" class="err"></div>
+    <div class="row"><button id="c">取消</button><button id="s" class="primary">保存并应用</button></div>`, (d) => {
+    const wireX = () => d.querySelectorAll(".dx").forEach((b) => b.onclick = () => b.parentElement.remove());
+    wireX();
+    d.querySelector("#adddll").onclick = () => { d.querySelector("#dlls").insertAdjacentHTML("beforeend", dllRow()); wireX(); };
+    d.querySelector("#c").onclick = () => d.close();
+    d.querySelector("#s").onclick = async () => {
+      const deps = [...d.querySelectorAll(".deps input:checked")].map((i) => i.value)
+        .concat(d.querySelector("#extra").value.split(/\s+/).filter(Boolean));
+      const dll = {};
+      d.querySelectorAll(".dll").forEach((r) => { const k = r.querySelector(".dk").value.trim(); if (k) dll[k] = r.querySelector(".dv").value; });
+      let profiles = st.profiles.filter((x) => x !== "zh-cn");
+      if (d.querySelector("#zh").checked) profiles = ["zh-cn", ...profiles];
+      const next = { ...st, profiles, windows_version: d.querySelector("#wv").value,
+        virtual_desktop: d.querySelector("#vd").checked ? d.querySelector("#vdres").value.trim() : "",
+        dpi: +d.querySelector("#dpi").value, dll_overrides: dll, dependencies: [...new Set(deps)] };
+      try { await call("SaveSettings", name, next); d.close(); await load(); startTask(name, () => call("ApplyTask", name)); }
+      catch (e) { d.querySelector("#e").textContent = e.message || e; }
+    };
+  });
+}
+
+async function install(name) {
+  const run = await call("Running", name);
+  if (run) { toast("这个 prefix 还有任务在跑，等它完成再装。", true); return; }
+  let path;
+  try { path = await call("PickInstaller"); } catch (e) { return; }
+  if (!path) return;
+  try { await call("RunInstaller", name, path); } catch (e) { fail(e); return; }
+  $("#task").innerHTML = `<div class="task"><b>安装程序已启动</b><div class="meta">${esc(path)}<br>按安装向导装完后，点“＋ 添加应用”选出主程序；运行记录里能看到安装过程的日志。</div></div>`;
+  setTimeout(() => showRuns(name), 3000);
+}
+
+async function addApp(name) {
+  dialog(`<b>添加应用</b><div class="meta">从开始菜单快捷方式和 drive_c 里找到的程序；主程序通常排在前面。</div>
+    <div class="plist" id="pl"><div class="empty">扫描中…</div></div>
+    <div class="row"><button id="br">浏览 drive_c…</button><span style="flex:1"></span><button id="c">关闭</button></div>`, async (d) => {
+    d.querySelector("#c").onclick = () => d.close();
+    d.querySelector("#br").onclick = () => browse(d, name, "C:\\");
+    const progs = await call("Programs", name);
+    d.querySelector("#pl").innerHTML = progs.map((pr, i) => `<div class="prow">${pr.icon ? `<img src="${pr.icon}">` : `<span class="ph"></span>`}
+      <div class="grow"><b>${esc(pr.name)}</b> <span class="tag">${pr.from === "start-menu" ? "开始菜单" : "扫描"}</span><div class="sub">${esc(pr.exe)} ${esc(pr.args || "")}</div></div>
+      <button data-i="${i}">添加</button></div>`).join("") || `<div class="empty">没找到程序。用“浏览 drive_c…”手动选。</div>`;
+    d.querySelectorAll("[data-i]").forEach((b) => b.onclick = () => doAdd(d, name, progs[+b.dataset.i]));
+  });
+}
+
+async function doAdd(d, name, prog) {
+  const label = await ask("应用名称（菜单里显示的名字）", prog.name);
+  if (!label) return;
+  try { await call("AddApp", name, { name: label, exe: prog.exe, args: prog.args || "", workdir: prog.workdir || "", from: prog.from || "manual" }); d.close(); await load(); }
+  catch (e) { fail(e); }
+}
+
+async function browse(d, name, path) {
+  let ents;
+  try { ents = await call("Browse", name, path); } catch (e) { fail(e); return; }
+  const up = path.replace(/\\[^\\]+\\?$/, "") || "C:";
+  d.querySelector("#pl").innerHTML = `<div class="crumb">${esc(path)}</div>` +
+    (path.length > 3 ? `<div class="prow" data-up="1"><span class="ph"></span><div class="grow">..</div></div>` : "") +
+    ents.map((e, i) => `<div class="prow" data-j="${i}"><span class="ph">${e.dir ? "📁" : "⚙"}</span><div class="grow">${esc(e.name)}</div>${e.dir ? "" : `<button data-k="${i}">添加</button>`}</div>`).join("");
+  const upRow = d.querySelector("[data-up]"); if (upRow) upRow.onclick = () => browse(d, name, up.length <= 2 ? "C:\\" : up);
+  d.querySelectorAll("[data-j]").forEach((r) => { const e = ents[+r.dataset.j]; if (e.dir) r.onclick = () => browse(d, name, e.path); });
+  d.querySelectorAll("[data-k]").forEach((b) => b.onclick = (ev) => { ev.stopPropagation(); const e = ents[+b.dataset.k];
+    doAdd(d, name, { name: e.name.replace(/\.exe$/i, ""), exe: e.path, from: "manual" }); });
+}
+
+function newPrefix() {
+  if (!env.runners.length) { sel = RUNNERS; renderList(); renderMain(); return; }
+  dialog(`<b>新建 prefix</b><div class="meta">名称</div><input id="n" placeholder="例如 wechat">
+    <div class="meta">runner</div><select id="r">${env.runners.map((r) => `<option value="${esc(r.name)}" ${r.default ? "selected" : ""}>${esc(r.name)} — ${esc(r.version)}${r.problems && r.problems.length ? "（⚠ 缺 32 位支持）" : ""}</option>`).join("")}</select>
+    <div class="meta">配置集（逗号分隔；zh-cn = 中文区域与 Noto CJK 字体）</div><input id="p" value="zh-cn">
+    <div id="e" class="err"></div><div class="row"><button id="c">取消</button><button id="k" class="primary">创建</button></div>`, (d) => {
+    d.querySelector("#c").onclick = () => d.close();
+    d.querySelector("#k").onclick = async () => {
+      const n = d.querySelector("#n").value.trim();
+      const prof = d.querySelector("#p").value.split(",").map((s) => s.trim()).filter(Boolean);
+      try { const id = await call("Create", n, d.querySelector("#r").value, prof); sel = n; d.close(); await load(); if (id) watchTask(n, id); }
+      catch (e) { d.querySelector("#e").textContent = e.message || e; }
+    };
+  });
+}
+
+window.addEventListener("focus", () => load(false).catch(() => {}));
+load().catch((e) => { $("#main").innerHTML = `<div class="err">${esc(e.message || e)}</div>`; });
+</script>
+</body>
+</html>

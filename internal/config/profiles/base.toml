@@ -1,0 +1,13 @@
+# Applied to every prefix before anything else.
+
+windows_version = "win10"
+
+[dll_overrides]
+# Wine's own menu builder writes .desktop files into the host's menus with
+# Exec lines pointing at the runner; cellar makes its own launchers instead.
+"winemenubuilder.exe" = "disabled"
+
+[drives]
+# No Z: drive: Windows programs don't get to browse the whole host
+# filesystem. Map the folders an app needs as their own letters instead.
+z = ""

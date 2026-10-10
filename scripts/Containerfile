@@ -1,0 +1,20 @@
+# cellar GUI build environment: keeps the GTK 4 / WebKitGTK 6 -dev packages
+# off the host. No COPY: the repo and the Go toolchain are bind-mounted at run
+# time (see Makefile), so the image only changes when these packages do.
+#
+# sid, not trixie: the binary is packaged on org.gnome.Platform//51 (WebKitGTK
+# 2.50+, glibc 2.44) and must not link symbols the runtime lacks - sid tracks
+# the same upstream versions.
+FROM docker.io/library/debian:sid
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        ca-certificates \
+        gcc \
+        libc6-dev \
+        pkg-config \
+        libgtk-4-dev \
+        libwebkitgtk-6.0-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+ENV GOROOT=/opt/go PATH=/opt/go/bin:$PATH GOFLAGS=-buildvcs=false GOTOOLCHAIN=local
+WORKDIR /work

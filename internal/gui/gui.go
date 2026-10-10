@@ -1,0 +1,560 @@
+//go:build !nogui
+
+// Package gui is the Wails front end. It is another client of the same
+// engine the CLI drives; launching programs goes through `cellar run` in a
+// child process, so a closed window never takes a running app with it.
+package gui
+
+import (
+	"embed"
+	"encoding/base64"
+	"errors"
+	"fmt"
+	"os"
+	"os/exec"
+	"path/filepath"
+	"sort"
+	"strings"
+	"syscall"
+
+	"github.com/wailsapp/wails/v3/pkg/application"
+
+	"github.com/jing2uo/cellar/internal/appmgr"
+	"github.com/jing2uo/cellar/internal/config"
+	"github.com/jing2uo/cellar/internal/desktop"
+	"github.com/jing2uo/cellar/internal/importer"
+	"github.com/jing2uo/cellar/internal/launch"
+	"github.com/jing2uo/cellar/internal/reconcile"
+	"github.com/jing2uo/cellar/internal/runner"
+	"github.com/jing2uo/cellar/internal/store"
+	"github.com/jing2uo/cellar/internal/winapp"
+)
+
+//go:embed assets
+var assets embed.FS
+
+// AppID is the Flatpak id; Wails passes it to GTK so WebKit's sandboxed
+// web process gets an a11y bus name the Flatpak portal accepts.
+const AppID = "org.flatpark.Cellar"
+
+// Run opens the window; view picks the first page ("runners", or a prefix
+// name), "" for the default.
+func Run(version, view string) error {
+	self, err := os.Executable()
+	if err != nil {
+		return err
+	}
+	svc := &Service{self: self, version: version}
+	app := application.New(application.Options{
+		Name:        "Cellar",
+		Description: "Wine prefixes from cellar.toml",
+		Services:    []application.Service{application.NewService(svc)},
+		Assets:      application.AssetOptions{Handler: application.BundledAssetFileServer(assets)},
+		Linux:       application.LinuxOptions{ApplicationID: AppID},
+	})
+	svc.app = app
+	app.Window.NewWithOptions(application.WebviewWindowOptions{
+		Title:  "Cellar",
+		Width:  1080,
+		Height: 720,
+		URL:    "/#" + view,
+	})
+	return app.Run()
+}
+
+type Service struct {
+	self    string
+	version string
+	app     *application.App
+	tasks   tasks
+}
+
+type Env struct {
+	Version  string        `json:"version"`
+	Home     string        `json:"home"`
+	Packaged bool          `json:"packaged"`
+	Flatpak  bool          `json:"flatpak"`
+	Runners  []runner.Info `json:"runners"`
+	Default  string        `json:"default_runner"`
+	Profiles []string      `json:"profiles"`
+}
+
+func (s *Service) Env() Env {
+	def, _ := runner.Default()
+	infos := runner.Infos()
+	if infos == nil {
+		infos = []runner.Info{}
+	}
+	return Env{
+		Version: s.version, Home: store.Home(), Packaged: store.Packaged(), Flatpak: runner.InFlatpak(),
+		Runners: infos, Default: def, Profiles: config.Profiles(),
+	}
+}
+
+type Catalog struct {
+	Releases []runner.Release `json:"releases"`
+	Warnings []string         `json:"warnings"`
+}
+
+func (s *Service) Available() (Catalog, error) {
+	rels, warns, err := runner.Available(3)
+	if rels == nil {
+		rels = []runner.Release{}
+	}
+	if warns == nil {
+		warns = []string{}
+	}
+	return Catalog{Releases: rels, Warnings: warns}, err
+}
+
+// InstallRunner downloads "<source>[@<version>]" and returns its name.
+func (s *Service) InstallRunner(id string) (string, error) {
+	return runner.InstallID(id, nil)
+}
+
+type AppRow struct {
+	ID      string `json:"id"`
+	Name    string `json:"name"`
+	Exe     string `json:"exe"`
+	Icon    string `json:"icon,omitempty"` // data: URL
+	Desktop bool   `json:"desktop"`        // launcher installed
+}
+
+type PrefixRow struct {
+	Name     string       `json:"name"`
+	Source   string       `json:"source"` // local | flatpak
+	Runner   string       `json:"runner"`
+	Profiles []string     `json:"profiles"`
+	State    string       `json:"state"` // new | applied | changed | error
+	Apps     []AppRow     `json:"apps"`
+	Config   string       `json:"config"`
+	Error    string       `json:"error,omitempty"`
+	LastRun  *launch.Meta `json:"last_run,omitempty"`
+}
+
+func (s *Service) Prefixes() ([]PrefixRow, error) {
+	names, err := store.List()
+	if err != nil {
+		return nil, err
+	}
+	rows := []PrefixRow{}
+	for _, n := range names {
+		r := PrefixRow{Name: n, Source: "local", State: "error", Apps: []AppRow{}}
+		p, err := store.Open(n)
+		var c *config.Config
+		if err == nil {
+			r.Config = p.Config
+			c, err = p.Load()
+		}
+		if err != nil {
+			r.Error = err.Error()
+			rows = append(rows, r)
+			continue
+		}
+		st, _ := p.State()
+		r.Runner, r.Profiles = c.Runner, c.Profiles
+		switch {
+		case st.Hash == "":
+			r.State = "new"
+		case st.Hash != c.Hash():
+			r.State = "changed"
+		default:
+			r.State = "applied"
+		}
+		for _, a := range c.Apps {
+			name := a.Name
+			if name == "" {
+				name = a.ID
+			}
+			row := AppRow{ID: a.ID, Name: name, Exe: a.Exe, Icon: iconURL(p, a.Icon)}
+			_, err := os.Stat(filepath.Join(desktop.Dir(), desktop.FileName(p.Name, a.ID)))
+			row.Desktop = err == nil
+			r.Apps = append(r.Apps, row)
+		}
+		if runs, _ := launch.Runs(p); len(runs) > 0 {
+			r.LastRun = &runs[0]
+		}
+		rows = append(rows, r)
+	}
+	return rows, nil
+}
+
+func open(name string) (*store.Prefix, *config.Config, error) {
+	p, err := store.Open(name)
+	if err != nil {
+		return nil, nil, err
+	}
+	c, err := p.Load()
+	return p, c, err
+}
+
+func (s *Service) Plan(name string) (*reconcile.Plan, error) {
+	p, c, err := open(name)
+	if err != nil {
+		return nil, err
+	}
+	return reconcile.Compute(p, c, false)
+}
+
+func (s *Service) Apply(name string) (*reconcile.Plan, error) {
+	pl, err := s.Plan(name)
+	if err != nil {
+		return nil, err
+	}
+	return pl, pl.Apply(func(string) {})
+}
+
+func (s *Service) Runs(name string) ([]launch.Meta, error) {
+	p, err := store.Open(name)
+	if err != nil {
+		return nil, err
+	}
+	runs, err := launch.Runs(p)
+	if runs == nil {
+		runs = []launch.Meta{}
+	}
+	return runs, err
+}
+
+func (s *Service) Log(name, id string) (string, error) {
+	runs, err := s.Runs(name)
+	if err != nil {
+		return "", err
+	}
+	for _, m := range runs {
+		if m.ID == id {
+			b, err := os.ReadFile(m.Log)
+			if err != nil {
+				return "", err
+			}
+			lines := strings.Split(string(b), "\n")
+			for i, l := range lines {
+				lines[i] = launch.Readable(l)
+			}
+			return strings.Join(lines, "\n"), nil
+		}
+	}
+	return "", errors.New("no such run")
+}
+
+func (s *Service) ReadConfig(name string) (string, error) {
+	p, err := store.Open(name)
+	if err != nil {
+		return "", err
+	}
+	b, err := os.ReadFile(p.Config)
+	return string(b), err
+}
+
+// SaveConfig writes cellar.toml only if it still loads; the old file is kept
+// otherwise.
+func (s *Service) SaveConfig(name, text string) error {
+	p, err := store.Open(name)
+	if err != nil {
+		return err
+	}
+	tmp := filepath.Join(p.Dir, ".cellar.toml.new")
+	if err := os.WriteFile(tmp, []byte(text), 0o644); err != nil {
+		return err
+	}
+	if _, err := config.Load(tmp, ""); err != nil {
+		os.Remove(tmp)
+		return err
+	}
+	return os.Rename(tmp, p.Config)
+}
+
+// Launch starts `cellar run` detached and returns at once; the run shows up
+// in Runs when it ends.
+func (s *Service) Launch(name, app, exe string) error {
+	args := []string{"run", name}
+	if app != "" {
+		args[1] = name + "/" + app
+	}
+	if exe != "" {
+		args = append(args, "--exe", exe)
+	}
+	cmd := exec.Command(s.self, args...)
+	cmd.SysProcAttr = &syscall.SysProcAttr{Setsid: true}
+	if err := cmd.Start(); err != nil {
+		return err
+	}
+	go cmd.Wait()
+	return nil
+}
+
+// Create makes the prefix and starts its first apply (wineboot, fonts),
+// returning the task id.
+func (s *Service) Create(name, runnerName string, profiles []string) (string, error) {
+	if runnerName == "" {
+		var err error
+		if runnerName, err = runner.Default(); err != nil {
+			return "", err
+		}
+	}
+	if _, err := runner.Resolve(runnerName); err != nil {
+		return "", err
+	}
+	if _, err := store.Create(name, runnerName, profiles); err != nil {
+		return "", err
+	}
+	return s.ApplyTask(name)
+}
+
+func iconURL(p *store.Prefix, rel string) string {
+	if rel == "" {
+		return ""
+	}
+	b, err := os.ReadFile(filepath.Join(p.Dir, rel))
+	if err != nil || len(b) > 1<<20 {
+		return ""
+	}
+	mime := "image/png"
+	if strings.HasSuffix(strings.ToLower(rel), ".svg") {
+		mime = "image/svg+xml"
+	}
+	return "data:" + mime + ";base64," + base64.StdEncoding.EncodeToString(b)
+}
+
+// Desktop installs (or with remove, deletes) the host launcher of an app.
+func (s *Service) Desktop(name, app string, remove bool) (string, error) {
+	p, c, err := open(name)
+	if err != nil {
+		return "", err
+	}
+	if remove {
+		return desktop.Remove(p, app)
+	}
+	a, err := c.App(app)
+	if err != nil {
+		return "", err
+	}
+	return desktop.Install(s.self, p, a)
+}
+
+type BottleRow struct {
+	importer.Bottle
+	Imported bool `json:"imported"`
+}
+
+// Bottles lists Bottles bottles that could be imported.
+func (s *Service) Bottles() []BottleRow {
+	have := map[string]bool{}
+	names, _ := store.List()
+	for _, n := range names {
+		have[n] = true
+	}
+	rows := []BottleRow{}
+	for _, b := range importer.Find() {
+		rows = append(rows, BottleRow{Bottle: b, Imported: have[b.Name]})
+	}
+	return rows
+}
+
+func (s *Service) ImportBottle(dir string) (*importer.Result, error) {
+	return importer.Import(dir, "")
+}
+
+// ApplyTask runs apply in the background.
+func (s *Service) ApplyTask(name string) (string, error) {
+	if id := s.tasks.running(name); id != "" {
+		return id, nil
+	}
+	pl, err := s.Plan(name)
+	if err != nil {
+		return "", err
+	}
+	title := "应用配置"
+	for _, c := range pl.Changes {
+		if c.Op == "init" {
+			title = "初始化 prefix"
+		}
+	}
+	return s.tasks.start(name, title, func(log func(string)) error {
+		for _, c := range pl.Changes {
+			log(c.String())
+		}
+		return pl.Apply(log)
+	}), nil
+}
+
+func (s *Service) Task(id string) (Task, error) {
+	t, ok := s.tasks.get(id)
+	if !ok {
+		return t, errors.New("no such task")
+	}
+	return t, nil
+}
+
+func (s *Service) Running(name string) string { return s.tasks.running(name) }
+
+// Settings / SaveSettings back the settings dialog.
+func (s *Service) Settings(name string) (config.Settings, error) {
+	p, err := store.Open(name)
+	if err != nil {
+		return config.Settings{}, err
+	}
+	return config.ReadSettings(p.Config)
+}
+
+func (s *Service) SaveSettings(name string, st config.Settings) error {
+	p, err := store.Open(name)
+	if err != nil {
+		return err
+	}
+	return config.WriteSettings(p.Config, st)
+}
+
+type Dep struct {
+	Verb string `json:"verb"`
+	Note string `json:"note"`
+	Slow bool   `json:"slow,omitempty"`
+}
+
+// DependencyCatalog is the short list worth offering; any winetricks verb
+// can still be typed in.
+func (s *Service) DependencyCatalog() []Dep {
+	return []Dep{
+		{"vcrun2022", "VC++ 2015–2022 运行库，大多数新软件需要", false},
+		{"vcrun2013", "VC++ 2013 运行库", false},
+		{"vcrun2010", "VC++ 2010 运行库", false},
+		{"vcrun2008", "VC++ 2008 运行库，较老的软件", false},
+		{"vcrun6", "VC6 运行库，很老的软件", false},
+		{"mfc42", "MFC 4.2，老式国产软件常用", false},
+		{"riched20", "RichEdit 控件，聊天框、编辑框显示异常时装", false},
+		{"gdiplus", "GDI+，图片或图表显示异常时装", false},
+		{"msxml6", "MSXML 6", false},
+		{"corefonts", "微软核心英文字体（Arial、Times 等）", false},
+		{"d3dx9", "DirectX 9 组件，老游戏", false},
+		{"dxvk", "DXVK：用 Vulkan 跑 D3D 9–11，游戏用", false},
+		{"dotnet48", ".NET Framework 4.8", true},
+	}
+}
+
+// PickInstaller asks for an installer (.exe / .msi) with the system file
+// chooser.
+func (s *Service) PickInstaller() (string, error) {
+	home, _ := os.UserHomeDir()
+	dir := filepath.Join(home, "Downloads")
+	if out, err := exec.Command("xdg-user-dir", "DOWNLOAD").Output(); err == nil {
+		dir = strings.TrimSpace(string(out))
+	}
+	return s.app.Dialog.OpenFile().
+		SetTitle("选择安装程序").
+		SetDirectory(dir).
+		AddFilter("Windows 程序 (*.exe, *.msi)", "*.exe;*.msi;*.EXE;*.MSI").
+		AddFilter("所有文件", "*").
+		PromptForSingleSelection()
+}
+
+// RunInstaller starts an installer detached; .msi goes through msiexec.
+func (s *Service) RunInstaller(name, path string) error {
+	args := []string{"run", name, "--exe", path}
+	if strings.EqualFold(filepath.Ext(path), ".msi") {
+		args = []string{"run", name, "--exe", "msiexec", "--", "/i", path}
+	}
+	cmd := exec.Command(s.self, args...)
+	cmd.SysProcAttr = &syscall.SysProcAttr{Setsid: true}
+	if err := cmd.Start(); err != nil {
+		return err
+	}
+	go cmd.Wait()
+	return nil
+}
+
+type Found struct {
+	winapp.Program
+	Icon string `json:"icon,omitempty"`
+}
+
+// Programs lists what is installed in the prefix but not yet an app.
+func (s *Service) Programs(name string) ([]Found, error) {
+	p, c, err := open(name)
+	if err != nil {
+		return nil, err
+	}
+	out := []Found{}
+	tmp, _ := os.MkdirTemp("", "cellar-icon-")
+	defer os.RemoveAll(tmp)
+	for i, prog := range appmgr.Discover(p, c) {
+		f := Found{Program: prog}
+		if i < 40 {
+			png := filepath.Join(tmp, fmt.Sprintf("%d.png", i))
+			if winapp.ExtractIcon(winapp.UnixPath(p.Pfx, prog.Exe), png) == nil {
+				f.Icon = iconURL(&store.Prefix{Dir: tmp}, filepath.Base(png))
+			}
+		}
+		out = append(out, f)
+	}
+	return out, nil
+}
+
+type Entry struct {
+	Name string `json:"name"`
+	Path string `json:"path"` // Windows path
+	Dir  bool   `json:"dir"`
+}
+
+// Browse lists a folder of the prefix's drive_c for picking a program.
+func (s *Service) Browse(name, win string) ([]Entry, error) {
+	p, err := store.Open(name)
+	if err != nil {
+		return nil, err
+	}
+	if win == "" {
+		win = `C:\`
+	}
+	ents, err := os.ReadDir(winapp.UnixPath(p.Pfx, win))
+	if err != nil {
+		return nil, err
+	}
+	out := []Entry{}
+	for _, e := range ents {
+		isDir := e.IsDir()
+		if e.Type()&os.ModeSymlink != 0 {
+			continue
+		}
+		if !isDir && !strings.EqualFold(filepath.Ext(e.Name()), ".exe") {
+			continue
+		}
+		out = append(out, Entry{Name: e.Name(), Path: strings.TrimRight(win, `\`) + `\` + e.Name(), Dir: isDir})
+	}
+	sort.SliceStable(out, func(i, j int) bool { return out[i].Dir && !out[j].Dir })
+	return out, nil
+}
+
+// AddApp records a program as an app, extracts its icon and installs its
+// menu launcher.
+func (s *Service) AddApp(name string, prog winapp.Program) (string, error) {
+	p, c, err := open(name)
+	if err != nil {
+		return "", err
+	}
+	a, err := appmgr.Add(p, c, prog, s.self, false)
+	if a == nil {
+		return "", err
+	}
+	return a.ID, err
+}
+
+func (s *Service) RemoveApp(name, id string) error {
+	p, err := store.Open(name)
+	if err != nil {
+		return err
+	}
+	return appmgr.Remove(p, id)
+}
+
+// Kill ends every process in the prefix (wineserver -k).
+func (s *Service) Kill(name string) error {
+	p, c, err := open(name)
+	if err != nil {
+		return err
+	}
+	r, err := runner.Resolve(c.Runner)
+	if err != nil {
+		return err
+	}
+	r.Server(p.Pfx, "-k")
+	return nil
+}
