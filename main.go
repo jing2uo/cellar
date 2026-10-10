@@ -44,6 +44,8 @@ const usage = `cellar - Wine prefixes from cellar.toml
   cellar app rm <prefix> <id>
   cellar import bottles [--list] [<bottle>...] [--as NAME]
   cellar runner list | available [--n 3] | install <source[@ver]|url>
+  cellar icon <program.exe> <out.png>   extract a program's icon (packaging)
+  cellar extract                     a package's apply_extra: unpack its installer
   cellar profiles
   cellar gui [runners|<prefix>]
 
@@ -74,7 +76,13 @@ func main() {
 		},
 		"version": func([]string) error { fmt.Println(version); return nil },
 	}
+	cmds["extract"], cmds["icon"] = cmdExtract, cmdIcon
 	f, ok := cmds[os.Args[1]]
+	if !ok && store.Packaged() {
+		// Inside a package the launcher is called as `cellar [files...]`
+		// (the .desktop Exec): run the default app with them.
+		os.Exit(exit(cmdRun(append([]string{"--"}, os.Args[1:]...))))
+	}
 	if !ok {
 		if os.Args[1] == "help" || os.Args[1] == "-h" || os.Args[1] == "--help" {
 			fmt.Print(usage)
@@ -357,11 +365,15 @@ func cmdRun(args []string) error {
 	if err != nil {
 		return err
 	}
-	if st.Hash != c.Hash() || !p.Initialized() {
-		pl, err := reconcile.Compute(p, c, false)
-		if err != nil {
-			return err
-		}
+	// Plan on every launch, not only when cellar.toml changed: a new cellar
+	// (or a package update) can change what the same file means, and links,
+	// fonts or drives can drift. The plan is cheap; apply runs only if due.
+	_ = st
+	pl, err := reconcile.Compute(p, c, false)
+	if err != nil {
+		return err
+	}
+	if len(pl.Changes) > 0 {
 		if err := pl.Apply(func(s string) { fmt.Fprintln(os.Stderr, "cellar: apply:", s) }); err != nil {
 			return fmt.Errorf("apply before run: %w", err)
 		}
@@ -703,6 +715,54 @@ func cmdApp(args []string) error {
 		return fmt.Errorf("unknown app command %q", args[0])
 	}
 	return nil
+}
+
+// cmdExtract is a FlatPark package's apply_extra: it unpacks an
+// extract-method installer into /app/extra once, at install time, offline.
+func cmdExtract(args []string) error {
+	if _, _, err := parse(flag.NewFlagSet("extract", flag.ContinueOnError), args); err != nil {
+		return err
+	}
+	if !store.Packaged() && os.Getenv("CELLAR_EXTRA") == "" {
+		return errors.New("extract runs inside a package (apply_extra)")
+	}
+	p, err := store.Open("")
+	if err != nil {
+		return err
+	}
+	c, err := config.Load(p.Config, "")
+	if err != nil {
+		return err
+	}
+	if c.Install == nil || c.Install.Method != "extract" {
+		return nil // run-method installers stay as they are for first launch
+	}
+	src := filepath.Join(reconcile.ExtraDir(), c.Install.Source)
+	fp, err := reconcile.Fingerprint(src)
+	if err != nil {
+		return err
+	}
+	if err := reconcile.Unpack(src, reconcile.Unpacked(), c.Install.Subdir); err != nil {
+		return err
+	}
+	// Per-user writable copies compare against this to notice updates.
+	if err := os.WriteFile(reconcile.UnpackedSource(), []byte(fp+"\n"), 0o644); err != nil {
+		return err
+	}
+	// The vendor file has served its purpose; don't keep two copies.
+	return os.Remove(src)
+}
+
+// cmdIcon extracts a program's icon as PNG, for packagers.
+func cmdIcon(args []string) error {
+	pos, _, err := parse(flag.NewFlagSet("icon", flag.ContinueOnError), args)
+	if err != nil {
+		return err
+	}
+	if len(pos) != 2 {
+		return errors.New("usage: cellar icon <program.exe> <out.png>")
+	}
+	return winapp.ExtractIcon(pos[0], pos[1])
 }
 
 func cmdProfiles(args []string) error {

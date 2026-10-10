@@ -1,0 +1,22 @@
+# Notepad3: upstream's official x64 portable zip, unmodified (extra-data).
+# apply_extra unpacks it once; since it is the portable build (Notepad3.ini
+# next to the .exe selects portable mode), each user gets a writable copy
+# in their prefix, refreshed on updates with their settings carried over.
+
+profiles = ["cjk"]  # CJK fonts; the UI language follows the user's own LANG
+
+[install]
+source = "notepad3.zip"   # the extra-data filename
+method = "extract"
+target = 'C:\Program Files\Notepad3'
+writable = true
+keep = ["Notepad3.ini", "minipath.ini", "Favorites", "Themes", "grepWin"]
+
+[drives]
+# Windows file dialogs see the home folder as H: (there is no Z:).
+h = "~"
+
+[[apps]]
+id = "notepad3"
+name = "Notepad3"
+exe = 'C:\Program Files\Notepad3\Notepad3.exe'

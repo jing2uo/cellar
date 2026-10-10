@@ -1,0 +1,50 @@
+# Prototype of a FlatPark wine package: the vendor's Windows installer as
+# extra-data (unmodified), Wine from the org.winehq.Wine base, and cellar's
+# static launcher reading /app/share/cellar/cellar.toml.
+id: org._7_zip.SevenZip
+runtime: org.freedesktop.Platform
+runtime-version: '26.08'
+sdk: org.freedesktop.Sdk
+base: org.winehq.Wine
+base-version: stable-26.08
+command: cellar
+finish-args:
+  - --share=ipc
+  # Wine draws through X11 (XWayland on Wayland desktops).
+  - --socket=x11
+  - --device=dri
+  # New-WoW64 Wine needs it for any 32-bit Windows code (no i386 libs).
+  - --allow=multiarch
+  # Shown to Windows programs as H: (see cellar.toml).
+  - --filesystem=home
+modules:
+  - name: cellar
+    buildsystem: simple
+    build-commands:
+      - install -Dm755 cellar /app/bin/cellar
+      - install -Dm644 cellar.toml /app/share/cellar/cellar.toml
+      - install -Dm755 apply_extra /app/bin/apply_extra
+      - install -Dm644 org._7_zip.SevenZip.desktop /app/share/applications/org._7_zip.SevenZip.desktop
+      - install -Dm644 org._7_zip.SevenZip.png /app/share/icons/hicolor/48x48/apps/org._7_zip.SevenZip.png
+      - install -Dm644 org._7_zip.SevenZip.metainfo.xml /app/share/metainfo/org._7_zip.SevenZip.metainfo.xml
+    sources:
+      - type: file
+        path: ../../../dist/cellar-cli
+        dest-filename: cellar
+      - type: file
+        path: cellar.toml
+      - type: file
+        path: org._7_zip.SevenZip.desktop
+      - type: file
+        path: org._7_zip.SevenZip.png
+      - type: file
+        path: org._7_zip.SevenZip.metainfo.xml
+      - type: script
+        dest-filename: apply_extra
+        commands:
+          - exec /app/bin/cellar extract
+      - type: extra-data
+        filename: 7zip-setup.exe
+        url: https://github.com/ip7z/7zip/releases/download/26.04/7z2604-x64.exe
+        sha256: d54bf805f9f3704d1e8db2fa3498ae7ef2df0312b40b558e7c71c734430a665d
+        size: 1664082

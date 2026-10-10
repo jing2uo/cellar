@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<component type="desktop-application">
+  <id>com.foobar2000.Foobar2000</id>
+  <name>foobar2000</name>
+  <summary>Advanced freeware audio player</summary>
+  <metadata_license>CC0-1.0</metadata_license>
+  <project_license>LicenseRef-proprietary</project_license>
+  <description>
+    <p>Upstream's official Windows x64 installer of foobar2000, unmodified, installed and run under Wine on first launch.</p>
+  </description>
+  <launchable type="desktop-id">com.foobar2000.Foobar2000.desktop</launchable>
+  <url type="homepage">https://www.foobar2000.org</url>
+  <content_rating type="oars-1.1"/>
+  <releases><release version="2.26.1" date="2026-10-09"/></releases>
+</component>

@@ -1,0 +1,52 @@
+# Prototype of a FlatPark wine package: the vendor's Windows installer as
+# extra-data (unmodified), Wine from the org.winehq.Wine base, and cellar's
+# static launcher reading /app/share/cellar/cellar.toml.
+id: com.foobar2000.Foobar2000
+runtime: org.freedesktop.Platform
+runtime-version: '26.08'
+sdk: org.freedesktop.Sdk
+base: org.winehq.Wine
+base-version: stable-26.08
+command: cellar
+finish-args:
+  - --share=ipc
+  # Wine draws through X11 (XWayland on Wayland desktops).
+  - --socket=x11
+  - --device=dri
+  # Sound, through Wine's winepulse driver.
+  - --socket=pulseaudio
+  # New-WoW64 Wine needs it for any 32-bit Windows code (no i386 libs).
+  - --allow=multiarch
+  # Shown to Windows programs as H: (see cellar.toml).
+  - --filesystem=home
+modules:
+  - name: cellar
+    buildsystem: simple
+    build-commands:
+      - install -Dm755 cellar /app/bin/cellar
+      - install -Dm644 cellar.toml /app/share/cellar/cellar.toml
+      - install -Dm755 apply_extra /app/bin/apply_extra
+      - install -Dm644 com.foobar2000.Foobar2000.desktop /app/share/applications/com.foobar2000.Foobar2000.desktop
+      - install -Dm644 com.foobar2000.Foobar2000.png /app/share/icons/hicolor/256x256/apps/com.foobar2000.Foobar2000.png
+      - install -Dm644 com.foobar2000.Foobar2000.metainfo.xml /app/share/metainfo/com.foobar2000.Foobar2000.metainfo.xml
+    sources:
+      - type: file
+        path: ../../../dist/cellar-cli
+        dest-filename: cellar
+      - type: file
+        path: cellar.toml
+      - type: file
+        path: com.foobar2000.Foobar2000.desktop
+      - type: file
+        path: com.foobar2000.Foobar2000.png
+      - type: file
+        path: com.foobar2000.Foobar2000.metainfo.xml
+      - type: script
+        dest-filename: apply_extra
+        commands:
+          - exec /app/bin/cellar extract
+      - type: extra-data
+        filename: foobar2000-setup.exe
+        url: https://www.foobar2000.org/downloads/foobar2000-x64_v2.26.1.exe
+        sha256: 72fe15a88b085ee4e49d68114e2bb9655000c2e0fdf40dcc128bbef8bcaf3600
+        size: 8013712

@@ -1,0 +1,50 @@
+# Prototype of a FlatPark wine package: the vendor's Windows installer as
+# extra-data (unmodified), Wine from the org.winehq.Wine base, and cellar's
+# static launcher reading /app/share/cellar/cellar.toml.
+id: com.rizonesoft.Notepad3
+runtime: org.freedesktop.Platform
+runtime-version: '26.08'
+sdk: org.freedesktop.Sdk
+base: org.winehq.Wine
+base-version: stable-26.08
+command: cellar
+finish-args:
+  - --share=ipc
+  # Wine draws through X11 (XWayland on Wayland desktops).
+  - --socket=x11
+  - --device=dri
+  # New-WoW64 Wine needs it for any 32-bit Windows code (no i386 libs).
+  - --allow=multiarch
+  # Shown to Windows programs as H: (see cellar.toml).
+  - --filesystem=home
+modules:
+  - name: cellar
+    buildsystem: simple
+    build-commands:
+      - install -Dm755 cellar /app/bin/cellar
+      - install -Dm644 cellar.toml /app/share/cellar/cellar.toml
+      - install -Dm755 apply_extra /app/bin/apply_extra
+      - install -Dm644 com.rizonesoft.Notepad3.desktop /app/share/applications/com.rizonesoft.Notepad3.desktop
+      - install -Dm644 com.rizonesoft.Notepad3.png /app/share/icons/hicolor/256x256/apps/com.rizonesoft.Notepad3.png
+      - install -Dm644 com.rizonesoft.Notepad3.metainfo.xml /app/share/metainfo/com.rizonesoft.Notepad3.metainfo.xml
+    sources:
+      - type: file
+        path: ../../../dist/cellar-cli
+        dest-filename: cellar
+      - type: file
+        path: cellar.toml
+      - type: file
+        path: com.rizonesoft.Notepad3.desktop
+      - type: file
+        path: com.rizonesoft.Notepad3.png
+      - type: file
+        path: com.rizonesoft.Notepad3.metainfo.xml
+      - type: script
+        dest-filename: apply_extra
+        commands:
+          - exec /app/bin/cellar extract
+      - type: extra-data
+        filename: notepad3.zip
+        url: https://github.com/rizonesoft/Notepad3/releases/download/RELEASE_7.26.602.1/Notepad3_7.26.602.1_x64_Portable.zip
+        sha256: 4f8d02c5c1d5943cd0495c4322ee2e3d07c4734f15d29e2e24ae6f5fcbc1a9eb
+        size: 6868273

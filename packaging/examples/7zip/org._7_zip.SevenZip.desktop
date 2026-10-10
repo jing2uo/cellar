@@ -1,0 +1,11 @@
+[Desktop Entry]
+Type=Application
+Name=7-Zip
+Comment=File archiver with a high compression ratio
+Comment[zh_CN]=高压缩率的文件压缩工具
+Exec=cellar %f
+Icon=org._7_zip.SevenZip
+Terminal=false
+Categories=Utility;Archiving;Compression;
+MimeType=application/x-7z-compressed;application/zip;application/x-rar;application/vnd.rar;application/x-tar;application/gzip;application/x-xz;application/x-bzip2;application/x-zstd;application/x-iso9660-image;
+StartupWMClass=7zfm.exe

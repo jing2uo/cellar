@@ -41,8 +41,33 @@ type Config struct {
 	// installed once each; removing one from the list does not uninstall it.
 	Dependencies []string `toml:"dependencies,omitempty" json:"dependencies,omitempty"`
 	// DPI sets the Windows font scaling (96 = 100%, 144 = 150%, 192 = 200%).
-	DPI  int   `toml:"dpi,omitempty" json:"dpi,omitempty"`
-	Apps []App `toml:"apps,omitempty" json:"apps,omitempty"`
+	// Unset follows the host's Xft.dpi on every launch.
+	DPI     int      `toml:"dpi,omitempty" json:"dpi,omitempty"`
+	Install *Install `toml:"install,omitempty" json:"install,omitempty"`
+	Apps    []App    `toml:"apps,omitempty" json:"apps,omitempty"`
+}
+
+// Install is the vendor's installer, used unmodified. In a FlatPark package
+// Source is its extra-data file name under /app/extra; locally it is a path
+// (relative to the prefix directory).
+//
+//   - extract: unpack it with 7z (no Wine involved). In a package this
+//     happens once at install time (apply_extra) into /app/extra, read-only
+//     and shared, and each user's prefix links Target to it.
+//   - run: run it with Args (silent switches) in the user's prefix on first
+//     launch, and again whenever the installer file changes (an update).
+type Install struct {
+	Source string   `toml:"source" json:"source"`
+	Method string   `toml:"method" json:"method"`
+	Target string   `toml:"target,omitempty" json:"target,omitempty"` // extract: Windows folder the files appear in
+	Subdir string   `toml:"subdir,omitempty" json:"subdir,omitempty"` // extract: use only this folder of the archive
+	Args   []string `toml:"args,omitempty" json:"args,omitempty"`     // run
+	// Writable gives each user their own copy of the unpacked files instead
+	// of a link to the shared read-only one: for portable programs that save
+	// settings next to their .exe. Keep lists what the program writes there
+	// (relative paths), carried over when a package update refreshes the copy.
+	Writable bool     `toml:"writable,omitempty" json:"writable,omitempty"`
+	Keep     []string `toml:"keep,omitempty" json:"keep,omitempty"`
 }
 
 type Fonts struct {
@@ -118,6 +143,45 @@ func profile(name string) (map[string]any, error) {
 	return parse(b, "profile "+name)
 }
 
+// expand resolves profile includes (a profile's `include = [...]`), each
+// included profile placed before the one including it, once.
+func expand(names []string) ([]map[string]any, []string, error) {
+	var layers []map[string]any
+	var order []string
+	seen := map[string]bool{}
+	var visit func(n string, depth int) error
+	visit = func(n string, depth int) error {
+		if seen[n] {
+			return nil
+		}
+		if depth > 8 {
+			return fmt.Errorf("profile include loop at %q", n)
+		}
+		seen[n] = true
+		p, err := profile(n)
+		if err != nil {
+			return err
+		}
+		if inc, ok := p["include"].([]any); ok {
+			for _, i := range inc {
+				if err := visit(fmt.Sprint(i), depth+1); err != nil {
+					return err
+				}
+			}
+		}
+		delete(p, "include")
+		layers = append(layers, p)
+		order = append(order, n)
+		return nil
+	}
+	for _, n := range names {
+		if err := visit(n, 0); err != nil {
+			return nil, nil, err
+		}
+	}
+	return layers, order, nil
+}
+
 func parse(b []byte, what string) (map[string]any, error) {
 	m := map[string]any{}
 	if err := toml.Unmarshal(b, &m); err != nil {
@@ -159,11 +223,11 @@ func Load(path, override string) (*Config, error) {
 		}
 	}
 	merged := map[string]any{}
-	for _, n := range names {
-		p, err := profile(n)
-		if err != nil {
-			return nil, err
-		}
+	layers, _, err := expand(names)
+	if err != nil {
+		return nil, err
+	}
+	for _, p := range layers {
 		merge(merged, p)
 	}
 	merge(merged, user)

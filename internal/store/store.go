@@ -134,6 +134,7 @@ type State struct {
 	Registry  map[string]map[string]string `json:"registry"`
 	Fonts     map[string]string            `json:"fonts"`
 	Drives    map[string]string            `json:"drives"`
+	Install   string                       `json:"install,omitempty"` // fingerprint of the installer last run/unpacked
 	AppliedAt time.Time                    `json:"applied_at"`
 }
 

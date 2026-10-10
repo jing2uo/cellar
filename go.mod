@@ -3,6 +3,7 @@ module github.com/jing2uo/cellar
 go 1.27.2
 
 require (
+	github.com/jezek/xgb v1.3.1
 	github.com/pelletier/go-toml/v2 v2.4.3
 	github.com/tc-hib/winres v0.3.1
 	github.com/ulikunitz/xz v0.5.17

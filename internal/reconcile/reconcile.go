@@ -6,6 +6,7 @@ package reconcile
 import (
 	"bufio"
 	"bytes"
+	"errors"
 	"fmt"
 	"io"
 	"maps"
@@ -19,6 +20,7 @@ import (
 	"time"
 
 	"github.com/jing2uo/cellar/internal/config"
+	"github.com/jing2uo/cellar/internal/launch"
 	"github.com/jing2uo/cellar/internal/runner"
 	"github.com/jing2uo/cellar/internal/store"
 )
@@ -48,6 +50,12 @@ func (c Change) String() string {
 	case "map", "unmap":
 		return fmt.Sprintf("%-6s drive   %s: -> %s", c.Op, c.Name, c.Value)
 	case "install":
+		switch c.Name {
+		case "link", "extract":
+			return fmt.Sprintf("install %-7s %s <- %s", c.Name, c.Key, c.Value)
+		case "run":
+			return "install run     " + c.Value
+		}
 		return fmt.Sprintf("install winetricks %s", c.Name)
 	}
 	return c.Op
@@ -61,17 +69,22 @@ type Plan struct {
 	Changes  []Change `json:"changes"`
 	Warnings []string `json:"warnings,omitempty"`
 
-	p      *store.Prefix
-	c      *config.Config
-	r      *runner.Runner
-	st     *store.State
-	want   *desired
-	sets   map[string]map[string]value
-	dels   map[string]map[string]value
-	links  map[string]string // font file name -> host path
-	unlink []string
-	drives map[string]string // letter -> host path, "" removes
-	deps   []string          // winetricks verbs to install
+	p       *store.Prefix
+	c       *config.Config
+	r       *runner.Runner
+	st      *store.State
+	want    *desired
+	sets    map[string]map[string]value
+	dels    map[string]map[string]value
+	links   map[string]string // font file name -> host path
+	unlink  []string
+	drives  map[string]string // letter -> host path, "" removes
+	deps    []string          // winetricks verbs to install
+	install *Change           // vendor installer step
+
+	// RunProgram runs a Windows program in the prefix and waits; set by the
+	// caller (it lives in package launch, which records the run).
+	RunProgram func(exe string, args []string) error `json:"-"`
 }
 
 type desired struct {
@@ -95,6 +108,27 @@ func Compute(p *store.Prefix, c *config.Config, force bool) (*Plan, error) {
 	pl.want, pl.Warnings, err = want(c)
 	if err != nil {
 		return nil, err
+	}
+	if c.DPI == 0 {
+		// Automatic: follow the host's Xft.dpi; with no display to ask (a
+		// headless apply), keep whatever was applied last.
+		key := normKey(`HKCU\Control Panel\Desktop`)
+		if dpi := hostDPI(); dpi > 0 {
+			put(pl.want.reg, key, "LogPixels", value(fmt.Sprintf("dword:%08x", dpi)))
+		} else if old, ok := st.Registry[key]["LogPixels"]; ok {
+			put(pl.want.reg, key, "LogPixels", value(old))
+		}
+	}
+	// Installers run like any program, so the run is recorded in runs/.
+	pl.RunProgram = func(exe string, args []string) error {
+		m, err := launch.Run(p, c, r, launch.Options{Exe: exe, Args: args})
+		if err != nil {
+			return err
+		}
+		if m.ExitCode != 0 {
+			return fmt.Errorf("installer exited %d (log: %s)", m.ExitCode, m.Log)
+		}
+		return nil
 	}
 	pl.diff(force)
 	return pl, nil
@@ -174,6 +208,14 @@ func (pl *Plan) diff(force bool) {
 		}
 	}
 
+	pl.install = nil
+	if ch, err := pl.installChange(); err != nil {
+		pl.Warnings = appendOnce(pl.Warnings, err.Error())
+	} else if ch != nil {
+		pl.install = ch
+		pl.Changes = append(pl.Changes, *ch)
+	}
+
 	// Before init there is no dosdevices yet; wineboot creates z:, so plan
 	// its removal now and let Apply recompute after wineboot.
 	if !initialized && pl.want.drives["z"] == "" {
@@ -187,7 +229,7 @@ func (pl *Plan) diff(force bool) {
 func opOrder(c Change) string {
 	o := map[string]string{"init": "0", "update": "0", "delete": "1", "set": "2", "unlink": "3", "link": "4", "unmap": "5", "map": "6", "install": "7"}[c.Op]
 	if c.Op == "install" {
-		return o // keep the order the config lists them in
+		return o // dependencies in config order, the app's installer last
 	}
 	return o + c.Key + "\x00" + c.Name
 }
@@ -262,8 +304,8 @@ func want(c *config.Config) (*desired, []string, error) {
 		}
 		put(d.reg, normKey(`HKCU\Software\Wine\DllOverrides`), dll, value("sz:"+mode))
 	}
-	if c.DPI > 0 {
-		put(d.reg, normKey(`HKCU\Control Panel\Desktop`), "LogPixels", value(fmt.Sprintf("dword:%08x", c.DPI)))
+	if dpi := c.DPI; dpi > 0 {
+		put(d.reg, normKey(`HKCU\Control Panel\Desktop`), "LogPixels", value(fmt.Sprintf("dword:%08x", dpi)))
 	}
 	if c.WindowsVersion != "" {
 		put(d.reg, normKey(`HKCU\Software\Wine`), "Version", value("sz:"+c.WindowsVersion))
@@ -324,7 +366,9 @@ func hostPath(s string) (string, error) {
 		}
 		return s, nil
 	}
-	if rest, ok := strings.CutPrefix(s, "~/"); ok {
+	if s == "~" {
+		s = home
+	} else if rest, ok := strings.CutPrefix(s, "~/"); ok {
 		s = filepath.Join(home, rest)
 	}
 	s = os.ExpandEnv(s)
@@ -393,6 +437,19 @@ func (pl *Plan) Apply(log func(string)) error {
 		}
 	}
 
+	installFP := pl.st.Install
+	if pl.install != nil {
+		run := pl.RunProgram
+		if run == nil {
+			return errors.New("install: no program runner set")
+		}
+		fp, err := pl.doInstall(pl.install, run, log)
+		if err != nil {
+			return fmt.Errorf("install: %w", err)
+		}
+		installFP = fp
+	}
+
 	// Make wineserver flush the registry before we record success.
 	if err := pl.r.Server(pl.p.Pfx, "-w"); err != nil {
 		return fmt.Errorf("wineserver -w: %w", err)
@@ -401,7 +458,7 @@ func (pl *Plan) Apply(log func(string)) error {
 	st := &store.State{
 		Hash: pl.Hash, Runner: pl.Runner, Wine: pl.Wine,
 		Registry: map[string]map[string]string{}, Fonts: maps.Clone(pl.want.fonts),
-		Drives: maps.Clone(pl.want.drives), AppliedAt: time.Now().UTC(),
+		Drives: maps.Clone(pl.want.drives), Install: installFP, AppliedAt: time.Now().UTC(),
 	}
 	for key, vals := range pl.want.reg {
 		st.Registry[key] = map[string]string{}
@@ -584,4 +641,13 @@ func (pl *Plan) winetricks(verb string, log func(string)) error {
 		return fmt.Errorf("winetricks %s finished but did not record the verb", verb)
 	}
 	return nil
+}
+
+func appendOnce(xs []string, x string) []string {
+	for _, y := range xs {
+		if y == x {
+			return xs
+		}
+	}
+	return append(xs, x)
 }

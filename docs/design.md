@@ -53,6 +53,24 @@ GUI 既能宿主直接安装，也能作为 Flatpak 运行；同一份二进制�
 - GitHub API 匿名配额按 IP 计（共享代理常被耗尽）：先用 `GITHUB_TOKEN` / `GH_TOKEN` / `gh auth token`，
   失败退到 `releases.atom`（最近 10 个 release，按 tag 规则拼 asset，无大小信息），单个仓库失败只记警告。
 
+## FlatPark wine 包（原型：packaging/examples/7zip）
+
+- runtime `org.freedesktop.Platform//26.08` + base `org.winehq.Wine//stable-26.08`，启动器是 nogui 静态 cellar
+  （`command: cellar`），配置在 `/app/share/cellar/cellar.toml`（只读），用户覆盖在 `~/.var/app/<id>/config/cellar/override.toml`。
+- 厂商安装包原样作为 extra-data，`[install]` 声明预制安装动作：
+  - `extract`：`apply_extra` 执行 `cellar extract`，用 base 自带的 7z 离线解到 `/app/extra/cellar-install`，删掉原文件；
+    运行时每个用户的 prefix 把 `target`（如 `C:\Program Files\7-Zip`）软链过去。程序文件只读、共享，包更新原地替换，链接不变。
+    **只适合不往自己安装目录写数据的程序**（通达信这类把数据写进程序目录的要用 run）。
+  - `run`：首次启动在用户 prefix 里用 `args`（静默参数）跑安装程序；按安装包内容指纹（sha256，Flatpak 部署文件 mtime 固定）
+    判断，包更新换了安装包就重跑。安装过程同样记录在 runs/。
+- 每次启动都 plan 一次（约 0.1s），有变更才 apply：新版 cellar 或包更新改变了期望状态、链接/字体/盘符漂移都会被修正。
+- desktop：由 Flatpak 在构建期导出（`Exec=cellar %f`，Flatpak 自动改写成 `flatpak run --command=cellar --file-forwarding`），
+  打包模式下 cellar 拒绝写 `~/.local/share/applications`；winemenubuilder 在 base 配置集里禁用。
+  `cellar [files...]`（非子命令）= 用这些文件运行默认应用；宿主路径经已有盘符（如 `H: = ~`）或 `Y:` 转成 Windows 路径。
+- 默认带 `cjk` 配置集（只管 CJK 字体，不设区域）：界面语言跟随用户自己的 LANG，`flatpak override --env=LANG=zh_CN.UTF-8 <id>` 切中文。
+- 本地测试：bundle 装不了 extra-data 应用（"Extra data missing in detached metadata"），要把构建出的 repo 加成
+  `--no-gpg-verify` 的 user remote 再装。
+
 ## GUI 安装流程（对标 Bottles）
 
 1. **新建 prefix**：默认 runner、默认 `zh-cn` 配置集（中文区域 + Noto CJK 字体复制、登记、替换），创建后立即后台 apply。

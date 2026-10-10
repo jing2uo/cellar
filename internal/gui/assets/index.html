@@ -383,7 +383,7 @@ function runExe(name) {
 
 const WINVER = [["win11", "Windows 11"], ["win10", "Windows 10"], ["win81", "Windows 8.1"], ["win7", "Windows 7"], ["winxp", "Windows XP"]];
 const DLLMODE = [["native,builtin", "原生优先"], ["builtin,native", "内置优先"], ["native", "仅原生"], ["builtin", "仅内置"], ["disabled", "禁用"]];
-const DPIS = [[0, "默认"], [96, "100%"], [120, "125%"], [144, "150%"], [168, "175%"], [192, "200%"]];
+const DPIS = [[0, "自动（跟随系统 Xft.dpi）"], [96, "100%"], [120, "125%"], [144, "150%"], [168, "175%"], [192, "200%"]];
 
 async function settings(name) {
   const [st, cat] = await Promise.all([call("Settings", name), call("DependencyCatalog")]);

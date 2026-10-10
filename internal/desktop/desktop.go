@@ -80,7 +80,14 @@ X-Cellar-App=%s
 `, name, name, p.Name, cellarBin, p.Name, a.ID, files, icon, class, p.Name, a.ID)
 }
 
+// ErrPackaged: a FlatPark package exports its own .desktop at build time;
+// cellar never writes host menus from inside one.
+var ErrPackaged = fmt.Errorf("packaged app: launchers come from the Flatpak's exported .desktop file")
+
 func Install(cellarBin string, p *store.Prefix, a *config.App) (string, error) {
+	if p.Packaged {
+		return "", ErrPackaged
+	}
 	path := filepath.Join(Dir(), FileName(p.Name, a.ID))
 	if err := os.MkdirAll(Dir(), 0o755); err != nil {
 		return "", err
