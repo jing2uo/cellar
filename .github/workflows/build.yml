@@ -45,7 +45,7 @@ jobs:
           go build -tags production -trimpath \
             -ldflags="-s -w -X main.version=$VERSION" -o dist/cellar .
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v5
         with:
           name: cellar-linux-x86_64
           path: |
