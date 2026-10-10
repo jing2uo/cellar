@@ -1,0 +1,54 @@
+# Builds the two binaries (see Makefile / docs/design.md):
+#   cellar      GUI (Wails v3, GTK 4 / WebKitGTK 6), built on debian:sid so it
+#               links nothing newer than org.gnome.Platform//51 provides
+#   cellar-cli  static nogui launcher, the one FlatPark wine packages ship
+name: build
+
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    container: docker.io/library/debian:sid
+    steps:
+      - name: Install build dependencies
+        run: |
+          apt-get update
+          apt-get install -y --no-install-recommends \
+            ca-certificates git make gcc libc6-dev pkg-config \
+            libgtk-4-dev libwebkitgtk-6.0-dev
+
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0  # git describe for the version string
+
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+
+      - name: Test
+        run: |
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
+          make test
+
+      - name: Build CLI
+        run: make cli
+
+      - name: Build GUI
+        run: |
+          VERSION=$(git describe --tags --always --dirty)
+          go build -tags production -trimpath \
+            -ldflags="-s -w -X main.version=$VERSION" -o dist/cellar .
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: cellar-linux-x86_64
+          path: |
+            dist/cellar
+            dist/cellar-cli
+          if-no-files-found: error
