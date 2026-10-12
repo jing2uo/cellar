@@ -374,27 +374,42 @@ func (s *Service) ImportBottle(dir string) (*importer.Result, error) {
 	return importer.Import(dir, "")
 }
 
-// ApplyTask runs apply in the background.
+// ApplyTask runs apply in the background. The plan is computed in the task
+// too: it runs wine and fc-list, and the page should not wait on them.
 func (s *Service) ApplyTask(name string) (string, error) {
 	if id := s.tasks.running(name); id != "" {
 		return id, nil
 	}
-	pl, err := s.Plan(name)
+	p, err := store.Open(name)
 	if err != nil {
 		return "", err
 	}
 	title := "应用配置"
-	for _, c := range pl.Changes {
-		if c.Op == "init" {
-			title = "初始化 prefix"
-		}
+	if !p.Initialized() {
+		title = "初始化 prefix"
 	}
 	return s.tasks.start(name, title, func(log func(string)) error {
+		pl, err := s.Plan(name)
+		if err != nil {
+			return err
+		}
 		for _, c := range pl.Changes {
 			log(c.String())
 		}
 		return pl.Apply(log)
 	}), nil
+}
+
+// Delete removes the prefix and everything in it.
+func (s *Service) Delete(name string) error {
+	if s.tasks.running(name) != "" {
+		return errors.New("这个 prefix 还有任务在跑，等它结束再删")
+	}
+	p, err := store.Open(name)
+	if err != nil {
+		return err
+	}
+	return appmgr.DeletePrefix(p)
 }
 
 func (s *Service) Task(id string) (Task, error) {

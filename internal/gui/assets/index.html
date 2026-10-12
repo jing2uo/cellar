@@ -223,7 +223,7 @@ async function renderMain() {
           <span>runner：${esc(p.runner)}</span><span>区域：${esc(localeName(p.locale))}</span>
           ${(p.font_sets || []).length ? `<span>字体：${esc(p.font_sets.map(fontSetName).join("、"))}</span>` : ""}</div></div>
       <div class="actions">
-        <button id="settings">设置</button><button id="install" class="primary">运行安装程序…</button></div>
+        <button id="delete">删除</button><button id="settings">设置</button><button id="install" class="primary">运行安装程序…</button></div>
     </div>
     ${noWine()}${p.error ? `<section><div class="err">${esc(p.error)}</div></section>` : ""}
     <div id="task"></div>
@@ -240,6 +240,10 @@ async function renderMain() {
     <section><h2>运行记录</h2><div id="runs" class="empty">读取中…</div></section>`;
   $("#apply").onclick = () => startTask(p.name, () => call("ApplyTask", p.name));
   $("#settings").onclick = () => settings(p.name);
+  $("#delete").onclick = async () => {
+    if (!await ask(`删除 prefix ${p.name}？会结束它里面的程序、移除菜单快捷方式，并删掉整个目录（包括装在里面的 Windows 程序和它们的数据），无法恢复。`)) return;
+    try { await call("Delete", p.name); sel = null; history.replaceState(null, "", "#"); toast(`已删除 ${p.name}`); await load(); } catch (e) { fail(e); }
+  };
   $("#install").onclick = () => install(p.name);
   $("#addapp").onclick = () => addApp(p.name);
   $("#edit").onclick = () => edit(p.name);
@@ -533,8 +537,10 @@ function newPrefix() {
     wireLocale(d);
     d.querySelector("#k").onclick = async () => {
       const n = d.querySelector("#n").value.trim();
+      const k = d.querySelector("#k");
+      k.disabled = true; k.textContent = "创建中…";
       try { const id = await call("Create", n, d.querySelector("#r").value, readLocale(d), readFonts(d)); sel = n; d.close(); await load(); if (id) watchTask(n, id); }
-      catch (e) { d.querySelector("#e").textContent = e.message || e; }
+      catch (e) { d.querySelector("#e").textContent = e.message || e; k.disabled = false; k.textContent = "创建"; }
     };
   });
 }

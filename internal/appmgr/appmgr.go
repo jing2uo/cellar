@@ -1,5 +1,6 @@
-// Package appmgr adds and removes a prefix's apps: the [[apps]] entry, its
-// icon and its menu launcher. The GUI and `cellar app` share it.
+// Package appmgr adds and removes a prefix's apps (the [[apps]] entry, its
+// icon and its menu launcher) and whole prefixes. The GUI and the CLI share
+// it.
 package appmgr
 
 import (
@@ -11,6 +12,7 @@ import (
 
 	"github.com/jing2uo/cellar/internal/config"
 	"github.com/jing2uo/cellar/internal/desktop"
+	"github.com/jing2uo/cellar/internal/runner"
 	"github.com/jing2uo/cellar/internal/store"
 	"github.com/jing2uo/cellar/internal/winapp"
 )
@@ -93,4 +95,22 @@ func Remove(p *store.Prefix, id string) error {
 		return fmt.Errorf("no app %q", id)
 	}
 	return e.Save()
+}
+
+// DeletePrefix removes a prefix: its processes, its apps' menu launchers
+// and its directory, the Windows programs installed in it included.
+func DeletePrefix(p *store.Prefix) error {
+	if p.Packaged {
+		return fmt.Errorf("packaged prefixes are removed with their package")
+	}
+	if c, err := p.Load(); err == nil {
+		if r, err := runner.Resolve(c.Runner); err == nil {
+			r.Server(p.Pfx, "-k") // fails when no server runs
+			r.Server(p.Pfx, "-w")
+		}
+		for _, a := range c.Apps {
+			desktop.Remove(p, a.ID)
+		}
+	}
+	return os.RemoveAll(p.Dir)
 }
