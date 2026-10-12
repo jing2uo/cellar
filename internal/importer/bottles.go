@@ -261,7 +261,6 @@ func render(bottleDir string, y *bottleYML, dst string, res *Result) (string, []
 		notes = append(notes, fmt.Sprintf("Bottles runner %q: install a matching runner (cellar runner available) and set runner", y.Runner))
 	}
 	fmt.Fprintf(&b, "runner = %s  # Bottles: %s\n", q(runner), y.Runner)
-	b.WriteString("profiles = []  # the prefix is already set up; add \"zh-cn\" only if fonts need it\n")
 	if y.Params.VirtualDesktop && y.Params.VirtualDesktopRes != "" {
 		fmt.Fprintf(&b, "virtual_desktop = %s\n", q(y.Params.VirtualDesktopRes))
 	}
@@ -289,7 +288,7 @@ func render(bottleDir string, y *bottleYML, dst string, res *Result) (string, []
 		}
 	}
 
-	// Keep Z: exactly as the bottle had it; cellar's base profile would
+	// Keep Z: exactly as the bottle had it; cellar's defaults would
 	// otherwise remove it.
 	if t, err := os.Readlink(filepath.Join(bottleDir, "dosdevices", "z:")); err == nil {
 		fmt.Fprintf(&b, "\n[drives]\nz = %s  # as in Bottles; \"\" hides the host filesystem from Windows programs\n", q(t))

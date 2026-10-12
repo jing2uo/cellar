@@ -3,7 +3,7 @@
 # runs it silently in the user's prefix, as a person would in Bottles, and
 # again whenever the package brings a newer installer.
 
-profiles = ["cjk"]  # CJK fonts; the UI language follows the user's own LANG
+font_sets = ["zh-hans"]  # CJK fonts; the UI language follows the user's own LANG
 
 [install]
 source = "foobar2000-setup.exe"   # the extra-data filename

@@ -12,7 +12,7 @@ Wine 应用管理器。能力对标 Bottles，但以**声明式配置**为唯一
 | 默认（`!nogui`） | GUI（Wails v3, GTK4/WebKitGTK 6）+ CLI | 管理器，FlatPark 发布为 flatpak |
 | `-tags nogui`, `CGO_ENABLED=0` | 纯静态 CLI | 打进每个 wine 应用包当启动器；本地脚本/AI 调用 |
 
-两种二进制共享：schema、配置集、调和引擎、运行与日志格式。发布出去的应用**不依赖 GUI**。
+两种二进制共享：schema、内置默认配置、调和引擎、运行与日志格式。发布出去的应用**不依赖 GUI**。
 
 ## 两种运行模式
 
@@ -65,18 +65,18 @@ GUI 既能宿主直接安装，也能作为 Flatpak 运行；同一份二进制�
     判断，包更新换了安装包就重跑。安装过程同样记录在 runs/。
 - 每次启动都 plan 一次（约 0.1s），有变更才 apply：新版 cellar 或包更新改变了期望状态、链接/字体/盘符漂移都会被修正。
 - desktop：由 Flatpak 在构建期导出（`Exec=cellar %f`，Flatpak 自动改写成 `flatpak run --command=cellar --file-forwarding`），
-  打包模式下 cellar 拒绝写 `~/.local/share/applications`；winemenubuilder 在 base 配置集里禁用。
+  打包模式下 cellar 拒绝写 `~/.local/share/applications`；winemenubuilder 在内置默认配置里禁用。
   `cellar [files...]`（非子命令）= 用这些文件运行默认应用；宿主路径经已有盘符（如 `H: = ~`）或 `Y:` 转成 Windows 路径。
-- 默认带 `cjk` 配置集（只管 CJK 字体，不设区域）：界面语言跟随用户自己的 LANG，`flatpak override --env=LANG=zh_CN.UTF-8 <id>` 切中文。
+- 示例包只设 `font_sets = ["zh-hans"]`（只管 CJK 字体，不设区域）：界面语言跟随用户自己的 LANG，`flatpak override --env=LANG=zh_CN.UTF-8 <id>` 切中文。
 - 本地测试：bundle 装不了 extra-data 应用（"Extra data missing in detached metadata"），要把构建出的 repo 加成
   `--no-gpg-verify` 的 user remote 再装。
 
 ## GUI 安装流程（对标 Bottles）
 
-1. **新建 prefix**：默认 runner、默认 `zh-cn` 配置集（中文区域 + Noto CJK 字体复制、登记、替换），创建后立即后台 apply。
-2. **设置**：Windows 版本、虚拟桌面、DPI、DLL 覆盖、依赖（winetricks verb，常用的有中文说明），
-   保存只改 `cellar.toml` 里对应的行（注释保留），然后后台 apply；进度和日志在任务面板。
-3. **运行安装程序**：系统文件选择框选 .exe / .msi（msi 走 `msiexec /i`）。
+1. **新建 prefix**：默认 runner，区域默认宿主的 locale，字体集按区域建议（Noto CJK 复制、登记、替换），创建后立即后台 apply。
+2. **设置**：区域、字体、Windows 版本、虚拟桌面、DPI；**依赖**单独一个对话框，列出 winetricks 的全部 verb（常用的有中文说明）。
+   保存只改 `cellar.toml` 里对应的行（注释保留），然后后台 apply；进度和日志在任务面板。DLL 覆盖交给 winecfg。
+3. **运行程序**：系统文件选择框选 .exe / .msi（msi 走 `msiexec /i`），安装程序和绿色版都走这里。
 4. **添加应用**：扫描开始菜单 `.lnk`（解析 MS-SHLLINK）和 drive_c 里的 exe（含 `C:\zd_xxx` 这种自定义目录；
    同层按体积排序，主程序通常最大），也可以在应用内浏览 drive_c 选择；添加时从 exe 提取图标（PNG 或 1–32 位 DIB），
    写入 `[[apps]]` 并生成菜单快捷方式。
@@ -89,7 +89,7 @@ GUI 既能宿主直接安装，也能作为 Flatpak 运行；同一份二进制�
 
 ## 配置合并
 
-`内置 base 配置集` → `profiles` 里列的配置集（按序）→ `cellar.toml` → `override.toml`。
+`内置默认配置（defaults.toml）` → `locale` / `font_sets` 推出的设置 → `cellar.toml` → `override.toml`。
 表做深合并，`apps` 按 `id` 合并，后者覆盖前者。`cellar inspect` 输出合并后的生效配置。
 
 ## 调和（plan / apply）

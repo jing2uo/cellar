@@ -1,32 +1,39 @@
 // Package config defines cellar.toml and how its layers merge.
 //
-// Layers, later wins: the built-in "base" profile, the profiles the file
-// lists (in order), what locale and font_sets imply, the file itself, then
-// an optional override file. Tables merge deeply; apps merge by id.
+// Layers, later wins: the built-in defaults, what locale and font_sets
+// imply, the file itself, then an optional override file. Tables merge
+// deeply; apps merge by id.
 package config
 
 import (
 	"crypto/sha256"
-	"embed"
+	_ "embed"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io/fs"
 	"os"
-	"sort"
 	"strings"
 
 	"github.com/pelletier/go-toml/v2"
 )
 
-//go:embed profiles/*.toml
-var profileFS embed.FS
+//go:embed defaults.toml
+var defaultsTOML []byte
+
+// defaults is the layer under every cellar.toml.
+func defaults() map[string]any {
+	m, err := parse(defaultsTOML, "defaults.toml")
+	if err != nil {
+		panic(err) // embedded, checked by the tests
+	}
+	return m
+}
 
 type Config struct {
-	Name     string   `toml:"name,omitempty" json:"name,omitempty"`
-	Runner   string   `toml:"runner,omitempty" json:"runner,omitempty"`
-	Profiles []string `toml:"profiles,omitempty" json:"profiles,omitempty"`
+	Name   string `toml:"name,omitempty" json:"name,omitempty"`
+	Runner string `toml:"runner,omitempty" json:"runner,omitempty"`
 	// Locale is the Windows region, a glibc-style name (zh_CN, ja_JP): UI
 	// language and ANSI code page. "" leaves the host's.
 	Locale string `toml:"locale,omitempty" json:"locale,omitempty"`
@@ -130,63 +137,6 @@ func (c *Config) Hash() string {
 	return hex.EncodeToString(sum[:8])
 }
 
-// Profiles lists the built-in profile names.
-func Profiles() []string {
-	ents, _ := fs.ReadDir(profileFS, "profiles")
-	var out []string
-	for _, e := range ents {
-		out = append(out, strings.TrimSuffix(e.Name(), ".toml"))
-	}
-	return out
-}
-
-func profile(name string) (map[string]any, error) {
-	b, err := profileFS.ReadFile("profiles/" + name + ".toml")
-	if err != nil {
-		return nil, fmt.Errorf("unknown profile %q (have: %s)", name, strings.Join(Profiles(), ", "))
-	}
-	return parse(b, "profile "+name)
-}
-
-// expand resolves profile includes (a profile's `include = [...]`), each
-// included profile placed before the one including it, once.
-func expand(names []string) ([]map[string]any, []string, error) {
-	var layers []map[string]any
-	var order []string
-	seen := map[string]bool{}
-	var visit func(n string, depth int) error
-	visit = func(n string, depth int) error {
-		if seen[n] {
-			return nil
-		}
-		if depth > 8 {
-			return fmt.Errorf("profile include loop at %q", n)
-		}
-		seen[n] = true
-		p, err := profile(n)
-		if err != nil {
-			return err
-		}
-		if inc, ok := p["include"].([]any); ok {
-			for _, i := range inc {
-				if err := visit(fmt.Sprint(i), depth+1); err != nil {
-					return err
-				}
-			}
-		}
-		delete(p, "include")
-		layers = append(layers, p)
-		order = append(order, n)
-		return nil
-	}
-	for _, n := range names {
-		if err := visit(n, 0); err != nil {
-			return nil, nil, err
-		}
-	}
-	return layers, order, nil
-}
-
 func parse(b []byte, what string) (map[string]any, error) {
 	m := map[string]any{}
 	if err := toml.Unmarshal(b, &m); err != nil {
@@ -218,24 +168,8 @@ func Load(path, override string) (*Config, error) {
 		}
 	}
 
-	names := []string{"base"}
-	for _, l := range []map[string]any{user, ov} {
-		if ps, ok := l["profiles"].([]any); ok {
-			names = names[:1]
-			for _, p := range ps {
-				names = append(names, fmt.Sprint(p))
-			}
-		}
-	}
-	merged := map[string]any{}
-	layers, _, err := expand(names)
-	if err != nil {
-		return nil, err
-	}
-	for _, p := range layers {
-		merge(merged, p)
-	}
-	locale, sets := localeOf(append(layers, user, ov))
+	merged := defaults()
+	locale, sets := localeOf([]map[string]any{user, ov})
 	merge(merged, localeLayer(locale, sets))
 	merge(merged, user)
 	if ov != nil {
@@ -252,7 +186,6 @@ func Load(path, override string) (*Config, error) {
 	if err := dec.Decode(&c); err != nil {
 		return nil, fmt.Errorf("%s: %w", path, err)
 	}
-	c.Profiles = names[1:]
 	c.Locale, c.FontSets = locale, sets
 	c.applyFontSets()
 	return &c, nil
@@ -333,14 +266,11 @@ func mergeApps(dst, src any) any {
 }
 
 // Template is what `cellar new` writes.
-func Template(name, runner string, profiles []string, locale string, fontSets []string) string {
-	list := func(xs []string, sorted bool) string {
+func Template(name, runner, locale string, fontSets []string) string {
+	list := func(xs []string) string {
 		q := make([]string, len(xs))
 		for i, x := range xs {
 			q[i] = fmt.Sprintf("%q", x)
-		}
-		if sorted {
-			sort.Strings(q)
 		}
 		return strings.Join(q, ", ")
 	}
@@ -349,11 +279,10 @@ func Template(name, runner string, profiles []string, locale string, fontSets []
 		extra += fmt.Sprintf("locale = %q\n", locale)
 	}
 	if fontSets != nil {
-		extra += fmt.Sprintf("font_sets = [%s]\n", list(fontSets, false))
+		extra += fmt.Sprintf("font_sets = [%s]\n", list(fontSets))
 	}
 	return fmt.Sprintf(`# cellar prefix %q. Edit, then `+"`cellar plan %s`"+` / `+"`cellar apply %s`"+`.
 runner = %q
-profiles = [%s]
 %s
 # [dll_overrides]
 # taisafe = "disabled"
@@ -365,5 +294,5 @@ profiles = [%s]
 # id = "app"
 # exe = 'C:\Program Files\App\app.exe'
 # desktop = true
-`, name, name, name, runner, list(profiles, true), extra)
+`, name, name, name, runner, extra)
 }

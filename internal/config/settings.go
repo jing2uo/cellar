@@ -7,17 +7,15 @@ import (
 )
 
 // Settings are the knobs the GUI's settings dialog edits. They are read
-// from the file alone (not merged with profiles), so writing them back
+// from the file alone (not merged with the defaults), so writing them back
 // records only what the user set.
 type Settings struct {
-	Runner   string   `json:"runner"`
-	Profiles []string `json:"profiles"`
-	// Locale and FontSets are the effective ones, profiles included.
-	Locale         string            `json:"locale"`
-	FontSets       []string          `json:"font_sets"`
-	WindowsVersion string            `json:"windows_version"`
-	VirtualDesktop string            `json:"virtual_desktop"`
-	DPI            int               `json:"dpi"`
+	Runner         string   `json:"runner"`
+	Locale         string   `json:"locale"`
+	FontSets       []string `json:"font_sets"`
+	WindowsVersion string   `json:"windows_version"`
+	VirtualDesktop string   `json:"virtual_desktop"`
+	DPI            int      `json:"dpi"`
 }
 
 func ReadSettings(path string) (Settings, error) {
@@ -29,22 +27,15 @@ func ReadSettings(path string) (Settings, error) {
 	if err := toml.Unmarshal(b, &c); err != nil {
 		return Settings{}, err
 	}
-	st := Settings{Runner: c.Runner, Profiles: c.Profiles, WindowsVersion: c.WindowsVersion,
+	st := Settings{Runner: c.Runner, WindowsVersion: c.WindowsVersion,
 		VirtualDesktop: c.VirtualDesktop, DPI: c.DPI}
 	file, err := parse(b, path)
 	if err != nil {
 		return Settings{}, err
 	}
-	layers, _, err := expand(c.Profiles)
-	if err != nil {
-		return Settings{}, err
-	}
-	st.Locale, st.FontSets = localeOf(append(layers, file))
+	st.Locale, st.FontSets = localeOf([]map[string]any{file})
 	if st.FontSets == nil {
 		st.FontSets = []string{}
-	}
-	if st.Profiles == nil {
-		st.Profiles = []string{}
 	}
 	return st, nil
 }
@@ -93,17 +84,6 @@ func WriteSettings(path string, st Settings) error {
 		}
 	}
 	opt("runner", st.Runner, st.Runner == "")
-	// zh-cn and cjk only carry a locale and font sets, now written out.
-	var profiles []string
-	for _, p := range st.Profiles {
-		if p != "zh-cn" && p != "cjk" {
-			profiles = append(profiles, p)
-		}
-	}
-	if profiles == nil {
-		profiles = []string{}
-	}
-	opt("profiles", profiles, false)
 	opt("locale", st.Locale, st.Locale == "")
 	opt("font_sets", st.FontSets, false)
 	opt("windows_version", st.WindowsVersion, st.WindowsVersion == "")

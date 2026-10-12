@@ -22,8 +22,8 @@ func load(t *testing.T, text string) *Config {
 const substKey = `HKLM\Software\Microsoft\Windows NT\CurrentVersion\FontSubstitutes`
 const linkKey = `HKLM\Software\Microsoft\Windows NT\CurrentVersion\FontLink\SystemLink`
 
-func TestZhCNProfileIsLocaleAndFontSet(t *testing.T) {
-	c := load(t, `profiles = ["zh-cn"]`)
+func TestLocaleAndFontSet(t *testing.T) {
+	c := load(t, "locale = \"zh_CN\"\nfont_sets = [\"zh-hans\"]\n")
 	if c.Locale != "zh_CN" || !slices.Equal(c.FontSets, []string{"zh-hans"}) {
 		t.Fatalf("locale %q sets %v", c.Locale, c.FontSets)
 	}
@@ -35,10 +35,9 @@ func TestZhCNProfileIsLocaleAndFontSet(t *testing.T) {
 	}
 }
 
-func TestFileOverridesProfile(t *testing.T) {
-	// The file's own locale and sets win, its env still wins over the locale's.
-	c := load(t, `profiles = ["zh-cn"]
-locale = "ja_JP"
+func TestFileOverridesLocaleEnv(t *testing.T) {
+	// The file's env wins over what its locale sets.
+	c := load(t, `locale = "ja_JP"
 font_sets = ["zh-hans", "ja", "core"]
 [env]
 LC_ALL = "C.UTF-8"
@@ -64,32 +63,20 @@ LC_ALL = "C.UTF-8"
 }
 
 func TestNoLocaleNoFonts(t *testing.T) {
-	c := load(t, `profiles = []`)
+	c := load(t, `runner = "system"`)
 	if c.Locale != "" || len(c.FontSets) != 0 || c.Env["LANG"] != "" || c.Registry[substKey] != nil {
 		t.Fatalf("got %+v", c)
 	}
 }
 
-func TestSettingsMigrateProfiles(t *testing.T) {
-	p := filepath.Join(t.TempDir(), "cellar.toml")
-	os.WriteFile(p, []byte(Template("x", "system", []string{"zh-cn"}, "", nil)), 0o644)
-	st, err := ReadSettings(p)
-	if err != nil {
-		t.Fatal(err)
+func TestExamplesLoad(t *testing.T) {
+	files, _ := filepath.Glob("../../packaging/examples/*/cellar.toml")
+	if len(files) == 0 {
+		t.Fatal("no examples")
 	}
-	if st.Locale != "zh_CN" || !slices.Equal(st.FontSets, []string{"zh-hans"}) {
-		t.Fatalf("read %q %v", st.Locale, st.FontSets)
-	}
-	// Turning the region back to the host's must not leave zh-cn behind.
-	st.Locale = ""
-	if err := WriteSettings(p, st); err != nil {
-		t.Fatal(err)
-	}
-	c, err := Load(p, "")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if c.Locale != "" || len(c.Profiles) != 0 || !slices.Equal(c.FontSets, []string{"zh-hans"}) {
-		t.Errorf("locale %q profiles %v sets %v", c.Locale, c.Profiles, c.FontSets)
+	for _, f := range files {
+		if _, err := Load(f, ""); err != nil {
+			t.Error(err)
+		}
 	}
 }

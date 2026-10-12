@@ -198,7 +198,7 @@ func HostLocale() string {
 var uiFonts = []string{"Tahoma", "Segoe UI", "Microsoft Sans Serif", "MS Shell Dlg", "MS Shell Dlg 2", "Arial"}
 
 // localeLayer is what locale and font_sets add, as a config layer placed
-// after the profiles and before the file, so the file can still override.
+// after the defaults and before the file, so the file can still override.
 func localeLayer(locale string, sets []string) map[string]any {
 	l := map[string]any{}
 	if locale != "" {

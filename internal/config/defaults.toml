@@ -1,4 +1,4 @@
-# Applied to every prefix before anything else.
+# Every prefix starts from these; its cellar.toml overrides them.
 
 windows_version = "win10"
 

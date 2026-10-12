@@ -1,4 +1,0 @@
-# CJK 字体：简体中文字体集（config/fontsets.go），宿主上的 Noto CJK 经 fc-list 找到后复制进
-# C:\windows\Fonts 并登记到 HKLM ...\Fonts，宋体、雅黑等替换到 Noto。不改区域设置，所以对任何
-# 语言的用户都安全：FlatPark 打包的 wine 应用默认带它，中文界面跟随用户自己的 LANG。
-font_sets = ["zh-hans"]

@@ -13,7 +13,7 @@ func TestEditorKeepsComments(t *testing.T) {
 	p := filepath.Join(dir, "cellar.toml")
 	os.WriteFile(p, []byte(`# my notes
 runner = "system"  # pinned
-profiles = ["zh-cn"]
+locale = "zh_CN"
 
 [dll_overrides]
 # TAisafe kills the process on start
@@ -68,7 +68,7 @@ exe = 'C:\a.exe'
 
 func TestSettingsRoundTrip(t *testing.T) {
 	p := filepath.Join(t.TempDir(), "cellar.toml")
-	os.WriteFile(p, []byte(Template("x", "system", []string{"zh-cn"}, "", nil)+"\n[dll_overrides]\ntaisafe = \"disabled\"\n"), 0o644)
+	os.WriteFile(p, []byte(Template("x", "system", "zh_CN", []string{"zh-hans"})+"\n[dll_overrides]\ntaisafe = \"disabled\"\n"), 0o644)
 	st, err := ReadSettings(p)
 	if err != nil {
 		t.Fatal(err)
@@ -85,11 +85,11 @@ func TestSettingsRoundTrip(t *testing.T) {
 		t.Fatal(err)
 	}
 	if c.VirtualDesktop != "1920x1080" || c.DPI != 144 || c.WindowsVersion != "win7" ||
-		len(c.Dependencies) != 2 || len(c.Profiles) != 0 || c.Locale != "zh_CN" {
+		len(c.Dependencies) != 2 || c.Locale != "zh_CN" {
 		t.Fatalf("not applied: %+v", c)
 	}
-	// DLL overrides are not a setting: the file's own and the base
-	// profile's stay as they were.
+	// DLL overrides are not a setting: the file's own and the defaults'
+	// stay as they were.
 	if c.DllOverrides["taisafe"] != "disabled" || c.DllOverrides["winemenubuilder.exe"] != "disabled" {
 		t.Fatalf("dll overrides %v", c.DllOverrides)
 	}
@@ -100,12 +100,11 @@ func TestSettingsRoundTrip(t *testing.T) {
 	// Clearing.
 	st, _ = ReadSettings(p)
 	st.VirtualDesktop, st.DPI, st.WindowsVersion = "", 0, ""
-	st.Profiles = []string{}
 	if err := WriteSettings(p, st); err != nil {
 		t.Fatal(err)
 	}
 	c, _ = Load(p, "")
-	if c.VirtualDesktop != "" || c.DPI != 0 || c.WindowsVersion != "win10" || len(c.Profiles) != 0 {
+	if c.VirtualDesktop != "" || c.DPI != 0 || c.WindowsVersion != "win10" {
 		t.Fatalf("not cleared: %+v", c)
 	}
 }
@@ -150,7 +149,7 @@ func TestRenameApp(t *testing.T) {
 
 func TestDependencies(t *testing.T) {
 	p := filepath.Join(t.TempDir(), "cellar.toml")
-	os.WriteFile(p, []byte(Template("x", "system", nil, "", nil)), 0o644)
+	os.WriteFile(p, []byte(Template("x", "system", "", nil)), 0o644)
 	if d, err := ReadDependencies(p); err != nil || len(d) != 0 {
 		t.Fatal(d, err)
 	}

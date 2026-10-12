@@ -3,7 +3,7 @@
 # next to the .exe selects portable mode), each user gets a writable copy
 # in their prefix, refreshed on updates with their settings carried over.
 
-profiles = ["cjk"]  # CJK fonts; the UI language follows the user's own LANG
+font_sets = ["zh-hans"]  # CJK fonts; the UI language follows the user's own LANG
 
 [install]
 source = "notepad3.zip"   # the extra-data filename

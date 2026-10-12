@@ -30,11 +30,11 @@ var version = "dev"
 
 const usage = `cellar - Wine prefixes from cellar.toml
 
-  cellar new <prefix> [--runner R] [--locale zh_CN] [--fonts zh-hans,...] [--profile P,...]
+  cellar new <prefix> [--runner R] [--locale zh_CN] [--fonts zh-hans,...]
                                      (alias: create; font sets: zh-hans zh-hant ja ko core)
   cellar list
   cellar rm <prefix> [--yes]         delete it and everything installed in it
-  cellar inspect <prefix>            effective config after profiles merge
+  cellar inspect <prefix>            effective config, defaults merged in
   cellar plan <prefix> [--force]     what apply would change
   cellar apply <prefix> [--force]
   cellar run <prefix>[/<app>] [--exe X] [--trace +chan] [-- args]
@@ -48,7 +48,6 @@ const usage = `cellar - Wine prefixes from cellar.toml
   cellar runner list | available [--n 3] | install <source[@ver]|url> | rm <name>
   cellar icon <program.exe> <out.png>   extract a program's icon (packaging)
   cellar extract                     a package's apply_extra: unpack its installer
-  cellar profiles
   cellar gui [runners|<prefix>]
 
 Global: --json. Data: $CELLAR_HOME (default $XDG_DATA_HOME/cellar).
@@ -68,7 +67,7 @@ func main() {
 	cmds := map[string]func([]string) error{
 		"new": cmdNew, "create": cmdNew, "rm": cmdRm, "list": cmdList, "inspect": cmdInspect, "plan": cmdPlan,
 		"apply": cmdApply, "run": cmdRun, "logs": cmdLogs, "kill": cmdKill,
-		"desktop": cmdDesktop, "import": cmdImport, "app": cmdApp, "runner": cmdRunner, "profiles": cmdProfiles,
+		"desktop": cmdDesktop, "import": cmdImport, "app": cmdApp, "runner": cmdRunner,
 		"gui": func(a []string) error {
 			view := ""
 			if len(a) > 0 {
@@ -181,7 +180,6 @@ func open(pos []string) (*store.Prefix, *config.Config, string, error) {
 func cmdNew(args []string) error {
 	fs := flag.NewFlagSet("new", flag.ContinueOnError)
 	rn := fs.String("runner", "", "runner (default: system Wine, else newest download)")
-	prof := fs.String("profile", "", "comma-separated profiles")
 	loc := fs.String("locale", "", "Windows region (zh_CN, ja_JP...; default: the host's)")
 	fonts := fs.String("fonts", "", "comma-separated font sets (default: the locale's)")
 	pos, _, err := parse(fs, args)
@@ -196,25 +194,17 @@ func cmdNew(args []string) error {
 			return err
 		}
 	}
-	var profiles []string
-	if *prof != "" {
-		profiles = strings.Split(*prof, ",")
-	}
-	// Without --locale/--fonts a --profile decides them; otherwise the host's
-	// locale and its font sets.
+	// Unset, the region is the host's and the fonts are its suggested sets.
 	locale, sets := *loc, []string(nil)
+	if locale == "" {
+		locale = config.HostLocale()
+	}
 	if *fonts != "" {
 		sets = strings.Split(*fonts, ",")
+	} else {
+		sets = config.SuggestedFontSets(locale)
 	}
-	if *prof == "" {
-		if locale == "" {
-			locale = config.HostLocale()
-		}
-		if sets == nil {
-			sets = config.SuggestedFontSets(locale)
-		}
-	}
-	p, err := store.Create(pos[0], *rn, profiles, locale, sets)
+	p, err := store.Create(pos[0], *rn, locale, sets)
 	if err != nil {
 		return err
 	}
@@ -817,16 +807,4 @@ func cmdIcon(args []string) error {
 		return errors.New("usage: cellar icon <program.exe> <out.png>")
 	}
 	return winapp.ExtractIcon(pos[0], pos[1])
-}
-
-func cmdProfiles(args []string) error {
-	if _, _, err := parse(flag.NewFlagSet("profiles", flag.ContinueOnError), args); err != nil {
-		return err
-	}
-	if jsonOut {
-		emit(config.Profiles())
-	} else {
-		fmt.Println(strings.Join(config.Profiles(), "\n"))
-	}
-	return nil
 }

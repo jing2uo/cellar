@@ -1,3 +1,0 @@
-# 中文环境：中文区域设置，加上简体中文字体集。
-locale = "zh_CN"
-font_sets = ["zh-hans"]

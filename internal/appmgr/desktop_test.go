@@ -15,7 +15,7 @@ func TestRefreshDesktop(t *testing.T) {
 	t.Setenv("CELLAR_HOME", t.TempDir())
 	t.Setenv("XDG_DATA_HOME", t.TempDir())
 	t.Setenv("FLATPAK_ID", "")
-	p, err := store.Create("p", "system", nil, "", nil)
+	p, err := store.Create("p", "system", "", nil)
 	if err != nil {
 		t.Fatal(err)
 	}
