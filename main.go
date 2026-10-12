@@ -31,8 +31,9 @@ var version = "dev"
 const usage = `cellar - Wine prefixes from cellar.toml
 
   cellar new <prefix> [--runner R] [--locale zh_CN] [--fonts zh-hans,...] [--profile P,...]
-                                     (font sets: zh-hans zh-hant ja ko core)
+                                     (alias: create; font sets: zh-hans zh-hant ja ko core)
   cellar list
+  cellar rm <prefix> [--yes]         delete it and everything installed in it
   cellar inspect <prefix>            effective config after profiles merge
   cellar plan <prefix> [--force]     what apply would change
   cellar apply <prefix> [--force]
@@ -65,7 +66,7 @@ func main() {
 		os.Exit(2)
 	}
 	cmds := map[string]func([]string) error{
-		"new": cmdNew, "list": cmdList, "inspect": cmdInspect, "plan": cmdPlan,
+		"new": cmdNew, "create": cmdNew, "rm": cmdRm, "list": cmdList, "inspect": cmdInspect, "plan": cmdPlan,
 		"apply": cmdApply, "run": cmdRun, "logs": cmdLogs, "kill": cmdKill,
 		"desktop": cmdDesktop, "import": cmdImport, "app": cmdApp, "runner": cmdRunner, "profiles": cmdProfiles,
 		"gui": func(a []string) error {
@@ -225,6 +226,37 @@ func cmdNew(args []string) error {
 		emit(p)
 	} else {
 		fmt.Println(p.Config)
+	}
+	return nil
+}
+
+func cmdRm(args []string) error {
+	fs := flag.NewFlagSet("rm", flag.ContinueOnError)
+	yes := fs.Bool("yes", false, "do not ask")
+	pos, _, err := parse(fs, args)
+	if err != nil {
+		return err
+	}
+	if len(pos) != 1 {
+		return errors.New("usage: cellar rm <prefix> [--yes]")
+	}
+	p, err := store.Open(pos[0])
+	if err != nil {
+		return err
+	}
+	if !*yes {
+		fmt.Printf("Delete prefix %q and everything installed in it (%s)? [y/N] ", p.Name, p.Dir)
+		var answer string
+		fmt.Scanln(&answer)
+		if a := strings.ToLower(strings.TrimSpace(answer)); a != "y" && a != "yes" {
+			return errors.New("aborted (--yes skips the question)")
+		}
+	}
+	if err := appmgr.DeletePrefix(p); err != nil {
+		return err
+	}
+	if !jsonOut {
+		fmt.Println("removed", p.Dir)
 	}
 	return nil
 }
