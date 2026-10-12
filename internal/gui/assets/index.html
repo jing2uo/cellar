@@ -532,9 +532,15 @@ async function edit(name) {
   });
 }
 
+// showLog shows a run's Wine output. A clean run often has none: Wine
+// prints only errors and warnings, and the noisiest are switched off.
 async function showLog(name, id) {
-  const text = await call("Log", name, id);
-  dialog(`<b>运行 ${esc(id)}</b><pre class="log">${esc(text)}</pre><div class="row"><button id="c">关闭</button></div>`,
+  const [text, runs] = await Promise.all([call("Log", name, id), call("Runs", name)]);
+  const r = runs.find((x) => x.id === id);
+  const head = r ? `<div class="meta">${esc(r.argv.slice(1).join(" "))}<br>退出码 ${r.exit_code} · ${r.seconds.toFixed(1)}s</div>` : "";
+  const body = text.trim() ? `<pre class="log">${esc(text)}</pre>`
+    : `<div class="empty" style="padding:14px 0">这次运行 Wine 没有输出。程序正常时通常就是这样：Wine 只记录错误和警告。</div>`;
+  dialog(`<b>运行 ${esc(id)}</b>${head}${body}<div class="row"><button id="c">关闭</button></div>`,
     (d) => d.querySelector("#c").onclick = () => d.close());
 }
 
