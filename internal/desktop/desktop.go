@@ -95,6 +95,32 @@ func Install(cellarBin string, p *store.Prefix, a *config.App) (string, error) {
 	return path, os.WriteFile(path, []byte(Entry(cellarBin, p, a)), 0o644)
 }
 
+// Installed lists the app ids that have a launcher for this prefix, read
+// from the files' X-Cellar keys (a name with dashes makes the file name
+// ambiguous).
+func Installed(p *store.Prefix) []string {
+	files, _ := filepath.Glob(filepath.Join(Dir(), "cellar-*.desktop"))
+	var out []string
+	for _, f := range files {
+		b, err := os.ReadFile(f)
+		if err != nil {
+			continue
+		}
+		var pfx, app string
+		for _, l := range strings.Split(string(b), "\n") {
+			if v, ok := strings.CutPrefix(l, "X-Cellar-Prefix="); ok {
+				pfx = v
+			} else if v, ok := strings.CutPrefix(l, "X-Cellar-App="); ok {
+				app = v
+			}
+		}
+		if pfx == p.Name && app != "" && filepath.Base(f) == FileName(p.Name, app) {
+			out = append(out, app)
+		}
+	}
+	return out
+}
+
 func Remove(p *store.Prefix, app string) (string, error) {
 	path := filepath.Join(Dir(), FileName(p.Name, app))
 	return path, os.Remove(path)

@@ -84,6 +84,37 @@ func Add(p *store.Prefix, c *config.Config, prog winapp.Program, cellarBin strin
 	return &a, nil
 }
 
+// RefreshDesktop rewrites the prefix's menu launchers after cellar.toml
+// changed: the ones there get the apps' current name, icon and command, and
+// the ones whose app is gone are removed. It adds none; that stays the
+// user's choice.
+func RefreshDesktop(cellarBin string, p *store.Prefix) error {
+	if p.Packaged {
+		return nil
+	}
+	c, err := p.Load()
+	if err != nil {
+		return err
+	}
+	have := map[string]bool{}
+	for i := range c.Apps {
+		a := &c.Apps[i]
+		have[a.ID] = true
+		if _, err := os.Stat(filepath.Join(desktop.Dir(), desktop.FileName(p.Name, a.ID))); err != nil {
+			continue
+		}
+		if _, err := desktop.Install(cellarBin, p, a); err != nil {
+			return err
+		}
+	}
+	for _, id := range desktop.Installed(p) {
+		if !have[id] {
+			desktop.Remove(p, id)
+		}
+	}
+	return nil
+}
+
 // Remove drops the app and its launcher; program files stay.
 func Remove(p *store.Prefix, id string) error {
 	desktop.Remove(p, id)

@@ -297,7 +297,10 @@ func (s *Service) SaveConfig(name, text string) error {
 		os.Remove(tmp)
 		return err
 	}
-	return os.Rename(tmp, p.Config)
+	if err := os.Rename(tmp, p.Config); err != nil {
+		return err
+	}
+	return appmgr.RefreshDesktop(s.self, p)
 }
 
 // Launch starts `cellar run` detached and returns at once; the run shows up
