@@ -12,7 +12,7 @@ func load(t *testing.T, text string) *Config {
 	t.Helper()
 	p := filepath.Join(t.TempDir(), "cellar.toml")
 	os.WriteFile(p, []byte(text), 0o644)
-	c, err := Load(p, "")
+	c, err := Load(p)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -75,7 +75,7 @@ func TestExamplesLoad(t *testing.T) {
 		t.Fatal("no examples")
 	}
 	for _, f := range files {
-		if _, err := Load(f, ""); err != nil {
+		if _, err := Load(f); err != nil {
 			t.Error(err)
 		}
 	}

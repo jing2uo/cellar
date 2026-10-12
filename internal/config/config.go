@@ -1,8 +1,8 @@
 // Package config defines cellar.toml and how its layers merge.
 //
 // Layers, later wins: the built-in defaults, what locale and font_sets
-// imply, the file itself, then an optional override file. Tables merge
-// deeply; apps merge by id.
+// imply, then the file itself, the whole of a prefix's own settings. Tables
+// merge deeply; apps merge by id.
 package config
 
 import (
@@ -10,9 +10,7 @@ import (
 	_ "embed"
 	"encoding/hex"
 	"encoding/json"
-	"errors"
 	"fmt"
-	"io/fs"
 	"os"
 	"strings"
 
@@ -153,28 +151,16 @@ func readLayer(path string) (map[string]any, error) {
 	return parse(b, path)
 }
 
-// Load merges the layers into the effective config. override may be "" or
-// missing.
-func Load(path, override string) (*Config, error) {
+// Load merges the layers into the effective config.
+func Load(path string) (*Config, error) {
 	user, err := readLayer(path)
 	if err != nil {
 		return nil, err
 	}
-	var ov map[string]any
-	if override != "" {
-		ov, err = readLayer(override)
-		if err != nil && !errors.Is(err, fs.ErrNotExist) {
-			return nil, err
-		}
-	}
-
 	merged := defaults()
-	locale, sets := localeOf([]map[string]any{user, ov})
+	locale, sets := localeOf([]map[string]any{user})
 	merge(merged, localeLayer(locale, sets))
 	merge(merged, user)
-	if ov != nil {
-		merge(merged, ov)
-	}
 
 	b, err := toml.Marshal(merged)
 	if err != nil {

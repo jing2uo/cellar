@@ -19,7 +19,7 @@ import (
 
 // PackagedConfig is where a Flatpak wine app ships its cellar.toml. Its
 // presence switches cellar into packaged mode.
-const PackagedConfig = "/app/share/cellar/cellar.toml"
+var PackagedConfig = "/app/share/cellar/cellar.toml" // a var for the tests
 
 func Packaged() bool {
 	_, err := os.Stat(PackagedConfig)
@@ -49,9 +49,11 @@ type Prefix struct {
 	Name     string `json:"name"`
 	Dir      string `json:"dir"`
 	Config   string `json:"config"`
-	Override string `json:"override,omitempty"`
 	Pfx      string `json:"wineprefix"`
 	Packaged bool   `json:"packaged"`
+	// Notes are what opening it did worth telling: a package update merged
+	// into the user's cellar.toml, keys the user's changes kept.
+	Notes []string `json:"notes,omitempty"`
 }
 
 var validName = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._-]*$`)
@@ -61,14 +63,9 @@ var validName = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._-]*$`)
 func Open(name string) (*Prefix, error) {
 	if Packaged() {
 		dir := Home()
-		return &Prefix{
-			Name:     os.Getenv("FLATPAK_ID"),
-			Dir:      dir,
-			Config:   PackagedConfig,
-			Override: filepath.Join(xdg("XDG_CONFIG_HOME", ".config"), "cellar", "override.toml"),
-			Pfx:      filepath.Join(dir, "pfx"),
-			Packaged: true,
-		}, nil
+		p := &Prefix{Name: os.Getenv("FLATPAK_ID"), Dir: dir, Config: filepath.Join(dir, "cellar.toml"),
+			Pfx: filepath.Join(dir, "pfx"), Packaged: true}
+		return p, p.syncPackage()
 	}
 	if !validName.MatchString(name) {
 		return nil, fmt.Errorf("bad prefix name %q", name)
@@ -114,7 +111,7 @@ func List() ([]string, error) {
 }
 
 func (p *Prefix) Load() (*config.Config, error) {
-	c, err := config.Load(p.Config, p.Override)
+	c, err := config.Load(p.Config)
 	if err != nil {
 		return nil, err
 	}
@@ -122,6 +119,45 @@ func (p *Prefix) Load() (*config.Config, error) {
 		c.Name = p.Name
 	}
 	return c, nil
+}
+
+// packageBase is the package's cellar.toml the user's copy last took in.
+func (p *Prefix) packageBase() string { return filepath.Join(p.Dir, "package.toml") }
+
+// syncPackage keeps a package's prefix defined by one cellar.toml, the
+// user's: the first launch copies the package's in; a package update is
+// merged into it key by key (config.MergeUpstream), the user's changes
+// winning.
+func (p *Prefix) syncPackage() error {
+	next, err := os.ReadFile(PackagedConfig)
+	if err != nil {
+		return err
+	}
+	if _, err := os.Stat(p.Config); err != nil {
+		if err := os.MkdirAll(p.Dir, 0o755); err != nil {
+			return err
+		}
+		if err := os.WriteFile(p.Config, next, 0o644); err != nil {
+			return err
+		}
+		return os.WriteFile(p.packageBase(), next, 0o644)
+	}
+	base, err := os.ReadFile(p.packageBase())
+	if err != nil {
+		base, _ = os.ReadFile(p.Config)
+	}
+	if bytes.Equal(base, next) {
+		return nil
+	}
+	conflicts, err := config.MergeUpstream(p.Config, base, next)
+	if err != nil {
+		p.Notes = append(p.Notes, "package update not merged into "+p.Config+": "+err.Error())
+		return nil
+	}
+	for _, k := range conflicts {
+		p.Notes = append(p.Notes, fmt.Sprintf("package update changed %s; your own setting of it stays", k))
+	}
+	return os.WriteFile(p.packageBase(), next, 0o644)
 }
 
 func (p *Prefix) RunsDir() string { return filepath.Join(p.Dir, "runs") }

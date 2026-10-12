@@ -30,7 +30,7 @@ func loadSets(t *testing.T, sets string) *config.Config {
 	t.Helper()
 	p := filepath.Join(t.TempDir(), "cellar.toml")
 	os.WriteFile(p, []byte("font_sets = ["+sets+"]\n"), 0o644)
-	c, err := config.Load(p, "")
+	c, err := config.Load(p)
 	if err != nil {
 		t.Fatal(err)
 	}

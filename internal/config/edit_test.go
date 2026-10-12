@@ -43,7 +43,7 @@ exe = 'C:\a.exe'
 			t.Errorf("missing %q in:\n%s", want, s)
 		}
 	}
-	c, err := Load(p, "")
+	c, err := Load(p)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -60,7 +60,7 @@ exe = 'C:\a.exe'
 	if err := e.Save(); err != nil {
 		t.Fatal(err)
 	}
-	c, _ = Load(p, "")
+	c, _ = Load(p)
 	if c.VirtualDesktop != "" || len(c.Apps) != 1 || c.Apps[0].ID != "b" || c.DllOverrides["taisafe"] != "" {
 		t.Errorf("bad reload after removal: %+v", c)
 	}
@@ -80,7 +80,7 @@ func TestSettingsRoundTrip(t *testing.T) {
 	if err := WriteSettings(p, st); err != nil {
 		t.Fatal(err)
 	}
-	c, err := Load(p, "")
+	c, err := Load(p)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -103,7 +103,7 @@ func TestSettingsRoundTrip(t *testing.T) {
 	if err := WriteSettings(p, st); err != nil {
 		t.Fatal(err)
 	}
-	c, _ = Load(p, "")
+	c, _ = Load(p)
 	if c.VirtualDesktop != "" || c.DPI != 0 || c.WindowsVersion != "win10" {
 		t.Fatalf("not cleared: %+v", c)
 	}
@@ -120,7 +120,7 @@ func TestAddAppControlChars(t *testing.T) {
 	if err := e.Save(); err != nil {
 		t.Fatal(err)
 	}
-	c, err := Load(p, "")
+	c, err := Load(p)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -141,7 +141,7 @@ func TestRenameApp(t *testing.T) {
 	if err := e.Save(); err != nil {
 		t.Fatal(err)
 	}
-	c, _ := Load(p, "")
+	c, _ := Load(p)
 	if c.Apps[0].Name != "Alpha \"1\"" || c.Apps[0].ID != "a" || c.Apps[1].Name != "Beta" {
 		t.Errorf("%+v", c.Apps)
 	}

@@ -295,7 +295,7 @@ func (s *Service) SaveConfig(name, text string) error {
 	if err := os.WriteFile(tmp, []byte(text), 0o644); err != nil {
 		return err
 	}
-	if _, err := config.Load(tmp, ""); err != nil {
+	if _, err := config.Load(tmp); err != nil {
 		os.Remove(tmp)
 		return err
 	}

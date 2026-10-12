@@ -103,6 +103,66 @@ func (e *Editor) Set(key, literal string) {
 	e.lines = append(e.lines[:at], append([]string{line}, e.lines[at:]...)...)
 }
 
+// SetIn sets key in a flat [table] to a TOML literal, or removes it when
+// literal is ""; the table is added (before the [[apps]]) when missing.
+func (e *Editor) SetIn(table, key, literal string) {
+	start, end := e.section(table)
+	line := tomlKey(key) + " = " + literal
+	if start < 0 {
+		if literal == "" {
+			return
+		}
+		at := len(e.lines)
+		for i, l := range e.lines {
+			if strings.HasPrefix(strings.TrimSpace(l), "[[") {
+				at = i
+				break
+			}
+		}
+		block := []string{"", "[" + tomlKey(table) + "]", line}
+		e.lines = append(e.lines[:at], append(block, e.lines[at:]...)...)
+		return
+	}
+	if i := e.findKey(start, end, key); i >= 0 {
+		if literal == "" {
+			e.lines = append(e.lines[:i], e.lines[i+1:]...)
+			e.dropEmpty(table)
+			return
+		}
+		if c := trailingComment(e.lines[i]); c != "" {
+			line += "  " + c
+		}
+		e.lines[i] = line
+		return
+	}
+	if literal == "" {
+		return
+	}
+	at := end
+	for at > start && strings.TrimSpace(e.lines[at-1]) == "" {
+		at--
+	}
+	e.lines = append(e.lines[:at], append([]string{line}, e.lines[at:]...)...)
+}
+
+// dropEmpty removes a table left with no keys (comments count as content).
+func (e *Editor) dropEmpty(table string) {
+	start, end := e.section(table)
+	if start < 0 {
+		return
+	}
+	for i := start; i < end; i++ {
+		if strings.TrimSpace(e.lines[i]) != "" {
+			return
+		}
+	}
+	h := start - 1
+	if h > 0 && strings.TrimSpace(e.lines[h-1]) == "" {
+		h--
+	}
+	e.lines = append(e.lines[:h], e.lines[end:]...)
+}
+
 // SetTable replaces a flat table's entries with values (string values),
 // keeping comment lines inside it; an empty map removes the table.
 func (e *Editor) SetTable(name string, values map[string]string) {
@@ -240,7 +300,7 @@ func (e *Editor) Save() error {
 	if err := os.WriteFile(tmp, []byte(strings.Join(e.lines, "\n")+"\n"), 0o644); err != nil {
 		return err
 	}
-	if _, err := Load(tmp, ""); err != nil {
+	if _, err := Load(tmp); err != nil {
 		b, _ := os.ReadFile(tmp)
 		os.Remove(tmp)
 		return fmt.Errorf("edit would break cellar.toml: %w\n%s", err, b)

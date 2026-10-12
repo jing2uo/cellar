@@ -174,6 +174,9 @@ func open(pos []string) (*store.Prefix, *config.Config, string, error) {
 	if err != nil {
 		return nil, nil, "", err
 	}
+	for _, n := range p.Notes {
+		fmt.Fprintln(os.Stderr, "cellar:", n)
+	}
 	c, err := p.Load()
 	return p, c, app, err
 }
@@ -794,11 +797,8 @@ func cmdExtract(args []string) error {
 	if !store.Packaged() && os.Getenv("CELLAR_EXTRA") == "" {
 		return errors.New("extract runs inside a package (apply_extra)")
 	}
-	p, err := store.Open("")
-	if err != nil {
-		return err
-	}
-	c, err := config.Load(p.Config, "")
+	// At install time: the package's own config (there is no user yet).
+	c, err := config.Load(store.PackagedConfig)
 	if err != nil {
 		return err
 	}

@@ -19,7 +19,7 @@ Wine 应用管理器。能力对标 Bottles，但以**声明式配置**为唯一
 | | 本地模式 | 打包模式 |
 |---|---|---|
 | 判定 | 默认 | 存在 `/app/share/cellar/cellar.toml` |
-| 配置 | `<data>/prefixes/<name>/cellar.toml`（可写） | `/app/share/cellar/cellar.toml`（只读）+ `$XDG_CONFIG_HOME/cellar/override.toml` |
+| 配置 | `<data>/prefixes/<name>/cellar.toml`（可写） | `<data>/cellar.toml`（可写），首次启动从 `/app/share/cellar/cellar.toml` 复制，包更新时三方合并进来 |
 | prefix | `<data>/prefixes/<name>/pfx` | `$XDG_DATA_HOME/cellar/pfx` |
 | runner | `<data>/runners/<name>/` 或 `system` | `system`（base app 的 wine） |
 
@@ -56,7 +56,9 @@ GUI 既能宿主直接安装，也能作为 Flatpak 运行；同一份二进制�
 ## FlatPark wine 包（原型：packaging/examples/7zip）
 
 - runtime `org.freedesktop.Platform//26.08` + base `org.winehq.Wine//stable-26.08`，启动器是 nogui 静态 cellar
-  （`command: cellar`），配置在 `/app/share/cellar/cellar.toml`（只读），用户覆盖在 `~/.var/app/<id>/config/cellar/override.toml`。
+  （`command: cellar`）。包里的 `/app/share/cellar/cellar.toml` 只读，首次启动复制成用户自己的 `~/.var/app/<id>/data/cellar/cellar.toml`，
+  之后**只有这一份定义 prefix**，改设置就改它（`cellar config` / `cellar deps`）。包更新换了配置时按键三方合并
+  （上次同步的包配置存为 `package.toml`）：用户没动过的键跟着包走，动过的保留用户的，两边都改的保留用户的并提示。
 - 厂商安装包原样作为 extra-data，`[install]` 声明预制安装动作：
   - `extract`：`apply_extra` 执行 `cellar extract`，用 base 自带的 7z 离线解到 `/app/extra/cellar-install`，删掉原文件；
     运行时每个用户的 prefix 把 `target`（如 `C:\Program Files\7-Zip`）软链过去。程序文件只读、共享，包更新原地替换，链接不变。
@@ -89,7 +91,7 @@ GUI 既能宿主直接安装，也能作为 Flatpak 运行；同一份二进制�
 
 ## 配置合并
 
-`内置默认配置（defaults.toml）` → `locale` / `font_sets` 推出的设置 → `cellar.toml` → `override.toml`。
+`内置默认配置（defaults.toml）` → `locale` / `font_sets` 推出的设置 → `cellar.toml`。
 表做深合并，`apps` 按 `id` 合并，后者覆盖前者。`cellar inspect` 输出合并后的生效配置。
 
 ## 调和（plan / apply）
