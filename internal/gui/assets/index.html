@@ -307,7 +307,7 @@ function prefixMenu(name) {
   const tool = (x) => async () => { try { await call("Launch", name, "", x); } catch (e) { fail(e); } refreshRuns(name, 3000); };
   return [
     ["设置", () => settings(name)], ["编辑 cellar.toml", () => edit(name)], ["依赖", () => deps(name)], null,
-    ["Wine 设置", tool("winecfg")], ["注册表", tool("regedit")], ["文件管理器", tool("explorer")],
+    ["Wine 设置", tool("winecfg")], ["控制面板", tool("control")], ["注册表", tool("regedit")], ["文件管理器", tool("explorer")],
     ["命令行", tool("wineconsole")], ["任务管理器", tool("taskmgr")], ["运行其他程序", () => runExe(name)], null,
     ["结束所有进程", async () => { await call("Kill", name); refreshRuns(name, 1500); }],
     ["删除 prefix", async () => {
