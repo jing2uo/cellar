@@ -111,6 +111,8 @@ select { font: inherit; padding: 6px 10px; border: 1px solid var(--line); border
 .form { display: grid; grid-template-columns: 120px 1fr; gap: 10px 14px; align-items: center; margin: 12px 0; }
 .form label { color: var(--mute); }
 .form input, .form select { margin: 0; }
+.tools { display: flex; gap: 6px; flex-wrap: wrap; margin: 10px 0; }
+.tools button { font-size: 12.5px; padding: 3px 10px; }
 .inline { display: flex; gap: 8px; align-items: center; }
 .inline input[type=checkbox] { width: auto; margin: 0; }
 .combo .cq { margin: 0; }
@@ -308,7 +310,7 @@ function prefixMenu(name) {
   return [
     ["设置", () => settings(name)], ["编辑 cellar.toml", () => edit(name)], ["依赖", () => deps(name)], null,
     ["Wine 设置", tool("winecfg")], ["控制面板", tool("control")], ["注册表", tool("regedit")], ["文件管理器", tool("explorer")],
-    ["命令行", tool("wineconsole")], ["任务管理器", tool("taskmgr")], ["运行其他程序", () => runExe(name)], null,
+    ["命令行", tool("wineconsole")], ["任务管理器", tool("taskmgr")], ["内置程序", () => runExe(name)], null,
     ["结束所有进程", async () => { await call("Kill", name); refreshRuns(name, 1500); }],
     ["删除 prefix", async () => {
       if (!await ask(`删除 prefix ${name}？会结束它里面的程序、移除菜单快捷方式，并删掉整个目录（包括装在里面的 Windows 程序和它们的数据），无法恢复。`)) return;
@@ -544,11 +546,31 @@ async function showLog(name, id) {
     (d) => d.querySelector("#c").onclick = () => d.close());
 }
 
+// Wine's own programs not already in the prefix menu.
+const BUILTINS = [["notepad", "记事本"], ["write", "写字板"], ["iexplore", "IE 浏览器"], ["msinfo32", "系统信息"],
+  ["oleview", "OLE/COM 查看器"], ["winemine", "扫雷"], ["clock", "时钟"]];
+
+// runExe runs a built-in program, a typed command, or an exe picked from C:.
 function runExe(name) {
-  dialog(`<b>在 ${esc(name)} 里运行</b><div class="meta">Windows 路径、宿主路径，或 winecfg / regedit 这类内置程序</div>
-    <input id="x" value="winecfg"><div class="row"><button id="c">取消</button><button id="r" class="primary">运行</button></div>`, (d) => {
+  const run = async (d, exe) => {
+    try { await call("Launch", name, "", exe); } catch (e) { fail(e); return; }
+    d.close(); setTimeout(() => showRuns(name), 3000);
+  };
+  dialog(`<b>在 ${esc(name)} 里运行</b>
+    <div class="tools">${BUILTINS.map(([x, t]) => `<button data-b="${x}" title="${x}">${t}</button>`).join("")}</div>
+    <div class="meta">或者输入 Windows 路径、宿主路径或内置程序名</div>
+    <div class="inline"><input id="x" placeholder="例如 C:\\Program Files\\App\\app.exe，或 regedit"><button id="r" class="primary">运行</button></div>
+    <div class="plist" id="pl" hidden></div>
+    <div class="row"><button id="br">浏览 C 盘</button><span style="flex:1"></span><button id="c">关闭</button></div>`, (d) => {
     d.querySelector("#c").onclick = () => d.close();
-    d.querySelector("#r").onclick = async () => { await call("Launch", name, "", d.querySelector("#x").value); d.close(); setTimeout(() => showRuns(name), 3000); };
+    d.querySelectorAll("[data-b]").forEach((b) => b.onclick = () => run(d, b.dataset.b));
+    const x = d.querySelector("#x");
+    d.querySelector("#r").onclick = () => { if (x.value.trim()) run(d, x.value.trim()); };
+    x.onkeydown = (ev) => { if (ev.key === "Enter") d.querySelector("#r").click(); };
+    d.querySelector("#br").onclick = () => {
+      d.querySelector("#pl").hidden = false;
+      browse(d, name, "C:\\", { label: "运行", fn: (e) => run(d, e.path) });
+    };
   });
 }
 
@@ -770,17 +792,18 @@ async function doAdd(d, name, prog) {
   catch (e) { fail(e); }
 }
 
-async function browse(d, name, path) {
+// browse lists a drive_c folder in the dialog; act is what a program's
+// button does (adding it as an app, unless told otherwise).
+async function browse(d, name, path, act = { label: "添加", fn: (e) => doAdd(d, name, { name: e.name.replace(/\.exe$/i, ""), exe: e.path, from: "manual" }) }) {
   let ents;
   try { ents = await call("Browse", name, path); } catch (e) { fail(e); return; }
   const up = path.replace(/\\[^\\]+\\?$/, "") || "C:";
   d.querySelector("#pl").innerHTML = `<div class="crumb">${esc(path)}</div>` +
     (path.length > 3 ? `<div class="prow" data-up="1"><span class="ph"></span><div class="grow">..</div></div>` : "") +
-    ents.map((e, i) => `<div class="prow" data-j="${i}"><span class="ph">${e.dir ? "📁" : "⚙"}</span><div class="grow">${esc(e.name)}</div>${e.dir ? "" : `<button data-k="${i}">添加</button>`}</div>`).join("");
-  const upRow = d.querySelector("[data-up]"); if (upRow) upRow.onclick = () => browse(d, name, up.length <= 2 ? "C:\\" : up);
-  d.querySelectorAll("[data-j]").forEach((r) => { const e = ents[+r.dataset.j]; if (e.dir) r.onclick = () => browse(d, name, e.path); });
-  d.querySelectorAll("[data-k]").forEach((b) => b.onclick = (ev) => { ev.stopPropagation(); const e = ents[+b.dataset.k];
-    doAdd(d, name, { name: e.name.replace(/\.exe$/i, ""), exe: e.path, from: "manual" }); });
+    ents.map((e, i) => `<div class="prow" data-j="${i}"><span class="ph">${e.dir ? "📁" : "⚙"}</span><div class="grow">${esc(e.name)}</div>${e.dir ? "" : `<button data-k="${i}">${act.label}</button>`}</div>`).join("");
+  const upRow = d.querySelector("[data-up]"); if (upRow) upRow.onclick = () => browse(d, name, up.length <= 2 ? "C:\\" : up, act);
+  d.querySelectorAll("[data-j]").forEach((r) => { const e = ents[+r.dataset.j]; if (e.dir) r.onclick = () => browse(d, name, e.path, act); });
+  d.querySelectorAll("[data-k]").forEach((b) => b.onclick = (ev) => { ev.stopPropagation(); act.fn(ents[+b.dataset.k]); });
 }
 
 function newPrefix() {
