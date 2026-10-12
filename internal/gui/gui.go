@@ -381,7 +381,7 @@ func (s *Service) Bottles() []BottleRow {
 	}
 	rows := []BottleRow{}
 	for _, b := range importer.Find() {
-		rows = append(rows, BottleRow{Bottle: b, Imported: have[b.Name]})
+		rows = append(rows, BottleRow{Bottle: b, Imported: have[b.Prefix]})
 	}
 	return rows
 }

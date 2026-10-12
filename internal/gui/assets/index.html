@@ -206,7 +206,7 @@ function renderList() {
     (local.map((p) => `<div class="item ${p.name === sel ? "sel" : ""}" data-n="${esc(p.name)}">
       <span>${esc(p.name)}</span><span class="end"><button class="dots" title="更多操作（也可右键）">⋯</button><small class="s-${p.state}">●</small></span></div>`).join("") || `<div class="empty item">还没有 prefix</div>`) +
     `<div class="item" id="new"><small>＋ 新建 prefix</small></div>` +
-    (bottles.some((b) => !b.imported) ? `<div class="item ${sel === IMPORT ? "sel" : ""}" id="imp"><small>⇣ 从 Bottles 导入（${bottles.filter((b) => !b.imported).length}）</small></div>` : "") +
+    (bottles.length ? `<div class="item ${sel === IMPORT ? "sel" : ""}" id="imp"><small>⇣ 从 Bottles 导入${bottles.some((b) => !b.imported) ? `（${bottles.filter((b) => !b.imported).length}）` : ""}</small></div>` : "") +
     `<div class="group">Wine</div><div class="item ${sel === RUNNERS ? "sel" : ""}" id="runners"><span>Runner</span><small>${env.runners.length}</small></div>`;
   document.querySelectorAll(".item[data-n]").forEach((el) => {
     el.onclick = () => { sel = el.dataset.n; renderList(); renderMain(); };
@@ -359,6 +359,32 @@ async function watchTask(name, id) {
   }
 }
 const kindText = { wow64: "WoW64", legacy: "传统 32 位" };
+
+function renderImport() {
+  $("#main").innerHTML = `<div class="head"><div><h1>从 Bottles 导入</h1><div class="meta">
+      把 Bottles 的 bottle 复制成 cellar 的 prefix（在 btrfs 上是 reflink，几秒钟、不多占空间），原 bottle 不动。
+      程序、runner 和环境变量会写进新 prefix 的 cellar.toml。</div></div></div>
+    <section><div class="rlist">${bottles.map((b) => `
+      <div class="rrow"><div class="grow"><b>${esc(b.name)}</b>
+        ${b.imported ? `<span class="tag">已导入为 ${esc(b.prefix)}</span>` : ""} ${b.runner ? `<span class="tag">${esc(b.runner)}</span>` : ""}
+        <div class="sub">${(b.apps || []).length ? esc(b.apps.join("、")) : "没有登记的程序"} · ${esc(b.dir)}</div>
+        ${b.error ? `<div class="warn">⚠ ${esc(b.error)}</div>` : ""}</div>
+        ${b.imported ? `<button data-open="${esc(b.prefix)}">查看</button>`
+          : `<button data-bdir="${esc(b.dir)}" class="primary" ${b.error ? "disabled" : ""}>导入</button>`}</div>`).join("")
+      || `<div class="empty">没找到 Bottles 的 bottle</div>`}</div></section>`;
+  document.querySelectorAll("[data-open]").forEach((b) => b.onclick = () => { sel = b.dataset.open; renderList(); renderMain(); });
+  document.querySelectorAll("[data-bdir]").forEach((b) => b.onclick = async () => {
+    document.querySelectorAll("[data-bdir]").forEach((x) => x.disabled = true);
+    b.textContent = "导入中…";
+    let res;
+    try { res = await call("ImportBottle", b.dataset.bdir); } catch (e) { fail(e); await load(); return; }
+    sel = res.prefix; await load();
+    if ((res.notes || []).length) {
+      dialog(`<b>已导入 ${esc(res.prefix)}，有几点要看一下</b><ul>${res.notes.map((n) => `<li>${esc(n)}</li>`).join("")}</ul>
+        <div class="row"><button id="c" class="primary">知道了</button></div>`, (d) => d.querySelector("#c").onclick = () => d.close());
+    } else toast(`已导入 ${res.prefix}`);
+  });
+}
 
 // runnerUsers are the prefixes set to this runner; "" means the default one.
 const runnerUsers = (r) => prefixes.filter((p) => p.source === "local" && (p.runner === r.name || !p.runner && r.default)).map((p) => p.name);

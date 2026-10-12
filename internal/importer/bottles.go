@@ -58,6 +58,7 @@ type bottleYML struct {
 
 type Bottle struct {
 	Name   string   `json:"name"`
+	Prefix string   `json:"prefix"` // what Import names it
 	Dir    string   `json:"dir"`
 	Runner string   `json:"runner"`
 	Apps   []string `json:"apps"`
@@ -72,7 +73,7 @@ func Find() []Bottle {
 		ents, _ := os.ReadDir(root)
 		for _, e := range ents {
 			dir := filepath.Join(root, e.Name())
-			b := Bottle{Name: e.Name(), Dir: dir}
+			b := Bottle{Name: e.Name(), Prefix: slug(e.Name()), Dir: dir}
 			y, err := read(dir)
 			if err != nil {
 				if errors.Is(err, os.ErrNotExist) {
