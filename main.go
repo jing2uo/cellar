@@ -30,8 +30,8 @@ var version = "dev"
 
 const usage = `cellar - Wine prefixes from cellar.toml
 
-  cellar new <prefix> [--runner R] [--locale zh_CN] [--fonts zh-hans,...]
-                                     (alias: create; font sets: zh-hans zh-hant ja ko core)
+  cellar new <prefix> [--runner R] [--locale zh_CN] [--fonts core,cjk|all|none]
+                                     (alias: create; fonts default: core, plus cjk for a CJK region)
   cellar list
   cellar rm <prefix> [--yes]         delete it and everything installed in it
   cellar inspect <prefix>            effective config, defaults merged in
@@ -185,7 +185,7 @@ func cmdNew(args []string) error {
 	fs := flag.NewFlagSet("new", flag.ContinueOnError)
 	rn := fs.String("runner", "", "runner (default: system Wine, else newest download)")
 	loc := fs.String("locale", "", "Windows region (zh_CN, ja_JP...; default: the host's)")
-	fonts := fs.String("fonts", "", "comma-separated font sets (default: the locale's)")
+	fonts := fs.String("fonts", "", "font sets: core, cjk, all, comma-separated, or none (default: core, and cjk for a CJK region)")
 	pos, _, err := parse(fs, args)
 	if err != nil {
 		return err
@@ -198,15 +198,17 @@ func cmdNew(args []string) error {
 			return err
 		}
 	}
-	// Unset, the region is the host's and the fonts are its suggested sets.
-	locale, sets := *loc, []string(nil)
+	// Unset, the region is the host's, and the fonts English plus CJK for
+	// a CJK region.
+	locale := *loc
 	if locale == "" {
 		locale = config.HostLocale()
 	}
-	if *fonts != "" {
+	sets := config.DefaultFontSets(locale)
+	if *fonts == "none" {
+		sets = []string{}
+	} else if *fonts != "" {
 		sets = strings.Split(*fonts, ",")
-	} else {
-		sets = config.SuggestedFontSets(locale)
 	}
 	p, err := store.Create(pos[0], *rn, locale, sets)
 	if err != nil {

@@ -69,7 +69,7 @@ GUI 既能宿主直接安装，也能作为 Flatpak 运行；同一份二进制�
 - desktop：由 Flatpak 在构建期导出（`Exec=cellar %f`，Flatpak 自动改写成 `flatpak run --command=cellar --file-forwarding`），
   打包模式下 cellar 拒绝写 `~/.local/share/applications`；winemenubuilder 在内置默认配置里禁用。
   `cellar [files...]`（非子命令）= 用这些文件运行默认应用；宿主路径经已有盘符（如 `H: = ~`）或 `Y:` 转成 Windows 路径。
-- 示例包只设 `font_sets = ["zh-hans"]`（只管 CJK 字体，不设区域）：界面语言跟随用户自己的 LANG，`flatpak override --env=LANG=zh_CN.UTF-8 <id>` 切中文。
+- 示例包只设 `font_sets = ["cjk"]`（只管 CJK 字体，不设区域）：界面语言跟随用户自己的 LANG，`flatpak override --env=LANG=zh_CN.UTF-8 <id>` 切中文。
 - 本地测试：bundle 装不了 extra-data 应用（"Extra data missing in detached metadata"），要把构建出的 repo 加成
   `--no-gpg-verify` 的 user remote 再装。
 

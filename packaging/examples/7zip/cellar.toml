@@ -2,7 +2,7 @@
 # apply_extra (`cellar extract`) unpacks it with 7z once at install time;
 # every user's prefix links C:\Program Files\7-Zip to that read-only copy.
 
-font_sets = ["zh-hans"]  # CJK fonts; the UI language follows the user's own LANG
+font_sets = ["cjk"]  # CJK fonts; the UI language follows the user's own LANG
 
 [install]
 source = "7zip-setup.exe"   # the extra-data filename

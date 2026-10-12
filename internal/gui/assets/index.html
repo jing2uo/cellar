@@ -127,6 +127,10 @@ select { font: inherit; padding: 6px 10px; border: 1px solid var(--line); border
 .fsets input { width: auto; margin: 3px 0 0; }
 .fsets small { color: var(--mute); display: block; }
 .fsets small.warn { color: var(--err); }
+.radios { display: flex; flex-direction: column; gap: 8px; margin: 6px 0; }
+.radios label { display: flex; gap: 8px; align-items: flex-start; }
+.radios input { width: auto; margin: 3px 0 0; }
+.radios small { color: var(--mute); display: block; }
 .vlist { max-height: 52vh; overflow: auto; border: 1px solid var(--line); border-radius: 8px; margin: 8px 0; }
 .vlist summary { position: sticky; top: 0; z-index: 1; padding: 6px 10px; font-size: 12px; font-weight: 600; color: var(--mute);
   background: var(--panel); border-bottom: 1px solid var(--line); cursor: default; user-select: none; }
@@ -170,7 +174,7 @@ const esc = (s) => String(s ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<
 const stateText = { applied: "已就绪", changed: "配置已改", new: "待应用", error: "错误" };
 
 let env, prefixes = [], sel = null;
-const RUNNERS = "\u0000runners", IMPORT = "\u0000import";
+const RUNNERS = "\u0000runners", IMPORT = "\u0000import", SETTINGS = "\u0000settings";
 let bottles = [];
 
 // load refreshes the data; it re-renders only when something changed and no
@@ -219,7 +223,8 @@ function renderList() {
       <span>${esc(p.name)}</span><span class="end"><button class="dots" title="更多操作（也可右键）">⋯</button><small class="s-${p.state}">●</small></span></div>`).join("") || `<div class="empty item">还没有 prefix</div>`) +
     `<div class="item" id="new"><small>＋ 新建 prefix</small></div>` +
     (`<div class="item ${sel === IMPORT ? "sel" : ""}" id="imp"><small>⇣ 从 Bottles 导入${bottles.some((b) => !b.imported) ? `（${bottles.filter((b) => !b.imported).length}）` : ""}</small></div>`) +
-    `<div class="group">Wine</div><div class="item ${sel === RUNNERS ? "sel" : ""}" id="runners"><span>Runner</span><small>${env.runners.length}</small></div>`;
+    `<div class="group">Wine</div><div class="item ${sel === RUNNERS ? "sel" : ""}" id="runners"><span>Runner</span><small>${env.runners.length}</small></div>` +
+    `<div class="group">Cellar</div><div class="item ${sel === SETTINGS ? "sel" : ""}" id="settingsitem"><span>设置</span></div>`;
   document.querySelectorAll(".item[data-n]").forEach((el) => {
     el.onclick = () => { sel = el.dataset.n; renderList(); renderMain(); };
     el.oncontextmenu = (e) => { e.preventDefault(); openMenu(prefixMenu(el.dataset.n), e.clientX, e.clientY); };
@@ -231,6 +236,7 @@ function renderList() {
   });
   $("#new").onclick = newPrefix;
   $("#runners").onclick = () => { sel = RUNNERS; renderList(); renderMain(); };
+  $("#settingsitem").onclick = () => { sel = SETTINGS; renderList(); renderMain(); };
   if ($("#imp")) $("#imp").onclick = () => { sel = IMPORT; renderList(); renderMain(); };
 }
 
@@ -251,6 +257,7 @@ function wireNoWine() {
 
 async function renderMain() {
   if (sel === RUNNERS) return renderRunners();
+  if (sel === SETTINGS) return renderSettings();
   if (sel === IMPORT) return renderImport();
   const p = prefixes.find((x) => x.name === sel);
   if (!p) { $("#main").innerHTML = noWine() + `<div class="welcome">新建一个 prefix 开始</div>`; wireNoWine(); return; }
@@ -421,6 +428,72 @@ function renderImport() {
         <div class="row"><button id="c" class="primary">知道了</button></div>`, (d) => d.querySelector("#c").onclick = () => d.close());
     } else toast(`已导入 ${res.prefix}`);
   });
+}
+
+// ── settings page: cellar's own settings, starting with fonts ─────────────
+const FONT_SOURCES = [
+  ["host-first", "本机优先", "用本机装好的字体，本机没有的用下面已下载的；不会自动下载。"],
+  ["auto", "本机优先，缺了自动下载", "同上，另外应用配置时自动下载缺的 CJK 字体。"],
+  ["library-only", "只用 Cellar 下载的", "不用本机字体，只用下面下载的字体包：每台机器效果一样。"],
+];
+
+async function renderSettings() {
+  const [pr, packs, running] = await Promise.all([call("Prefs"), call("FontPacks"), call("FontTask")]);
+  if (sel !== SETTINGS) return;
+  const packState = (p) => {
+    if (p.have === p.files) return `<span class="tag rec">已下载</span>`;
+    if (p.host === p.files && pr.fonts.source !== "library-only") return `<span class="tag rec">本机已有</span>`;
+    const parts = [];
+    if (p.have) parts.push(`已下载 ${p.have}/${p.files}`);
+    if (p.host) parts.push(p.host === p.files ? "本机已有" : `本机已有 ${p.host}/${p.files}`);
+    return parts.length ? parts.map((x) => `<span class="tag">${x}</span>`).join(" ") : `<span class="tag">未下载</span>`;
+  };
+  $("#main").innerHTML = `<div class="head"><div><h1>设置</h1><div class="meta">Cellar 自己的设置，对所有 prefix 生效。</div></div></div>
+    <section><h2>字体</h2>
+      <div class="meta">字体来源</div>
+      <div class="radios">${FONT_SOURCES.map(([v, t, n]) => `<label><input type="radio" name="src" value="${v}" ${pr.fonts.source === v ? "checked" : ""}>
+        <span>${t}<small>${n}</small></span></label>`).join("")}</div>
+      <div class="meta" style="margin-top:14px">字体包（下载到 Cellar 的字体库，所有 prefix 共用）</div>
+      <div class="rlist">${packs.map((p) => `<div class="rrow"><div class="grow"><b>${esc(p.name)}</b> ${packState(p)}
+          <div class="sub" title="${esc(p.note)}">${esc(p.note)} · ${mb(p.size)}</div></div>
+        ${p.missing ? `<button data-get="${p.id}" title="约 ${mb(p.missing_size)}">${p.missing === p.files ? "下载" : `下载缺的 ${p.missing} 个`}</button>` : ""}
+        ${p.have ? `<button data-rmp="${p.id}">删除</button>` : ""}</div>`).join("")}</div>
+      <div id="fonttask" class="meta"></div>
+      <div class="row" style="justify-content:flex-start"><button id="fontdir">打开字体目录</button>
+        <span class="meta">下载不下来时，可以自己下好放进这个目录。下载或删除后，各 prefix 会提示有更改未生效，应用后生效。</span></div>
+    </section>`;
+  document.querySelectorAll('input[name="src"]').forEach((r) => r.onchange = async () => {
+    try { await call("SavePrefs", { ...pr, fonts: { ...pr.fonts, source: r.value } }); toast("已保存"); } catch (e) { fail(e); }
+    renderSettings();
+  });
+  document.querySelectorAll("[data-get]").forEach((b) => b.onclick = async () => {
+    try { watchFontTask(await call("GetFontPack", b.dataset.get)); } catch (e) { fail(e); }
+  });
+  document.querySelectorAll("[data-rmp]").forEach((b) => b.onclick = async () => {
+    if (!await ask("删除这个字体包？已经用上它的 prefix 里有自己的副本，不受影响；应用配置时才会去掉。")) return;
+    try { await call("RemoveFontPack", b.dataset.rmp); } catch (e) { fail(e); }
+    renderSettings();
+  });
+  $("#fontdir").onclick = () => call("OpenFontDir").catch(fail);
+  if (running) watchFontTask(running);
+}
+
+// watchFontTask shows a library download's progress on the settings page.
+async function watchFontTask(id) {
+  document.querySelectorAll("[data-get],[data-rmp]").forEach((b) => b.disabled = true);
+  for (;;) {
+    let t;
+    try { t = await call("Task", id); } catch { return; }
+    const el = $("#fonttask");
+    if (!el || sel !== SETTINGS) return;
+    el.innerHTML = `${t.done ? "" : `<span class="spin"></span>`}${esc(t.title)}：${esc(t.lines.at(-1) || "开始…")}`;
+    if (t.done) {
+      if (t.error) { el.innerHTML = `<span class="err">${esc(t.error)}</span>`; toast("下载失败", true); }
+      else toast("完成：" + t.title);
+      return setTimeout(renderSettings, t.error ? 3000 : 0);
+    }
+    await new Promise((r) => setTimeout(r, 600));
+  }
 }
 
 // runnerUsers are the prefixes set to this runner; "" means the default one.
@@ -604,31 +677,52 @@ function localeLabel(id) {
   const l = env.locales.find((l) => l.id === id);
   return `${l ? l.name + " " : ""}${id}${id === env.host_locale ? "（系统）" : ""}`;
 }
-// fontField lists the sets with what each would use here: the host font
-// found, the winetricks verb installed instead, or nothing.
+// fontField lists the sets with what each would use here: the font found
+// (host, runtime or library), the winetricks verb installed instead, or a
+// pointer to the settings page to download it.
 const fontField = (sets) => `<div class="fsets">${env.font_sets.map((f) =>
-  `<label><input type="checkbox" value="${f.id}" ${sets.includes(f.id) ? "checked" : ""}><span>${esc(f.name)}<small data-fs="${f.id}">查找字体…</small></span></label>`).join("")}</div>`;
+  `<label><input type="checkbox" value="${f.id}" ${sets.includes(f.id) ? "checked" : ""}><span>${esc(f.name)}<small>${esc(f.note)}</small><small data-fs="${f.id}">查找字体…</small></span></label>`).join("")}</div>`;
+const mb = (n) => `${Math.max(1, Math.round(n / 1048576))} MB`;
+// wireFonts makes "all" carry the sets it includes: ticked, it ticks and
+// locks them.
+function wireFonts(d) {
+  const all = env.font_sets.find((f) => f.includes);
+  const boxes = (ids) => ids.map((id) => d.querySelector(`.fsets input[value="${id}"]`)).filter(Boolean);
+  const sync = () => {
+    const on = d.querySelector(`.fsets input[value="${all.id}"]`).checked;
+    boxes(all.includes).forEach((b) => { if (on) b.checked = true; b.disabled = on; });
+  };
+  d.querySelector(`.fsets input[value="${all.id}"]`).addEventListener("change", sync);
+  sync();
+}
 async function showFontStatus(d) {
   let st;
   try { st = await call("FontStatus"); } catch { return; }
   for (const s of st) {
     const el = d.querySelector(`[data-fs="${s.id}"]`);
     if (!el) continue;
-    const where = { host: "（本机）", runtime: "（Cellar 自带）", cache: "（已下载）" }[s.source];
-    if (s.source === "download") { el.textContent = `${s.family}：未安装，应用时下载（约 ${Math.max(1, Math.round(s.size / 1048576))} MB）`; }
-    else if (s.family) { el.textContent = `→ ${s.family}${where || ""}`; }
-    else if (s.deps && s.deps.length) { el.textContent = `本机没有，改用 winetricks ${s.deps.join(" ")}`; }
-    else { el.textContent = "⚠ 没有可用字体"; el.classList.add("warn"); }
+    const where = { host: "（本机）", runtime: "（Cellar 自带）", library: "（已下载）" }[s.source];
+    if (s.source === "scripts") {
+      el.textContent = `${s.total} 种文字里 ${s.have} 种有字体` + (s.have === s.total ? "" : s.size ? `，其余应用时自动下载（约 ${mb(s.size)}）` : "，其余可在 设置 → 字体 下载");
+      continue;
+    }
+    if (s.source === "download") el.textContent = `→ ${s.family}：还没下载，应用时自动下载（约 ${mb(s.size)}）`;
+    else if (s.family) el.textContent = `→ ${s.family}${where || ""}`;
+    else if (s.deps && s.deps.length) el.textContent = `本机没有，改用 winetricks ${s.deps.join(" ")}`;
+    else {
+      el.innerHTML = `⚠ 没有可用字体，<a href="#" data-goset>去 设置 → 字体 下载</a>`;
+      el.classList.add("warn");
+      el.querySelector("[data-goset]").onclick = (ev) => { ev.preventDefault(); d.close(); sel = SETTINGS; renderList(); renderMain(); };
+    }
   }
 }
-// wireLocale runs the picker; picking a locale ticks the font set it needs.
-function wireLocale(d) {
+// wireLocale runs the picker; onPick gets the locale picked.
+function wireLocale(d, onPick) {
   const box = d.querySelector("#loc"), q = box.querySelector(".cq"), list = box.querySelector(".clist");
   let shown = [], at = -1;
   const pick = (id) => {
     box.dataset.value = id; q.value = localeLabel(id); list.hidden = true;
-    const l = env.locales.find((l) => l.id === id);
-    if (l && l.font_set) { const c = d.querySelector(`.fsets input[value="${l.font_set}"]`); if (c) c.checked = true; }
+    if (onPick) onPick(env.locales.find((l) => l.id === id));
   };
   const render = () => {
     const f = q.value.trim().toLowerCase();
@@ -674,9 +768,14 @@ function wireLocale(d) {
   list.onmouseup = () => { if (!list.hidden) q.focus(); };
 }
 const readLocale = (d) => d.querySelector("#loc").dataset.value;
-const readFonts = (d) => [...d.querySelectorAll(".fsets input:checked")].map((i) => i.value);
+// readFonts is what the boxes say: "all" alone stands for what it includes.
+const readFonts = (d) => {
+  const on = [...d.querySelectorAll(".fsets input:checked")].map((i) => i.value);
+  const all = env.font_sets.find((f) => f.includes);
+  return on.includes(all.id) ? [all.id] : on;
+};
 const LOCALE_NOTE = "Windows 界面语言与编码（老软件乱码多半是它）";
-const FONTS_NOTE = "程序点名要的字体（宋体、MS Gothic、Gulim、Arial…）统一换成 Noto CJK / Liberation，本机没有的在应用时下载";
+const FONTS_NOTE = "界面里缺的字（泰文、阿拉伯文、印度文字…）会用本机或已下载的 Noto 字体补上，字体来源和下载在 设置 → 字体";
 const WINVER = [["win11", "Windows 11"], ["win10", "Windows 10"], ["win81", "Windows 8.1"], ["win7", "Windows 7"], ["winxp", "Windows XP"]];
 const DPIS = [[0, "自动（跟随系统 Xft.dpi）"], [96, "100%"], [120, "125%"], [144, "150%"], [168, "175%"], [192, "200%"]];
 
@@ -695,6 +794,7 @@ async function settings(name) {
     <div id="e" class="err"></div>
     <div class="row"><button id="c">取消</button><button id="s" class="primary">保存并应用</button></div>`, (d) => {
     wireLocale(d);
+    wireFonts(d);
     showFontStatus(d);
     d.querySelector("#c").onclick = () => d.close();
     d.querySelector("#s").onclick = async () => {
@@ -823,10 +923,17 @@ function newPrefix() {
   dialog(`<b>新建 prefix</b><div class="meta">名称</div><input id="n" placeholder="例如 wechat">
     <div class="meta">runner</div><select id="r">${env.runners.map((r) => `<option value="${esc(r.name)}" ${r.default ? "selected" : ""}>${esc(r.name)} — ${esc(r.version)}${r.problems && r.problems.length ? "（⚠ 缺 32 位支持）" : ""}</option>`).join("")}</select>
     <div class="meta">区域 · ${LOCALE_NOTE}</div>${localeField(env.host_locale)}
-    <div class="meta">字体</div>${fontField(env.host_fonts || [])}
+    <div class="meta">字体</div>${fontField(env.default_font_sets)}
     <div id="e" class="err"></div><div class="row"><button id="c">取消</button><button id="k" class="primary">创建</button></div>`, (d) => {
     d.querySelector("#c").onclick = () => d.close();
-    wireLocale(d);
+    // The region decides CJK until the boxes are touched.
+    let touched = false;
+    d.querySelectorAll(".fsets input").forEach((b) => b.addEventListener("change", () => { touched = true; }));
+    wireLocale(d, (l) => {
+      const cjk = d.querySelector('.fsets input[value="cjk"]');
+      if (!touched && l && !cjk.disabled) cjk.checked = !!l.cjk;
+    });
+    wireFonts(d);
     showFontStatus(d);
     d.querySelector("#k").onclick = async () => {
       const n = d.querySelector("#n").value.trim();

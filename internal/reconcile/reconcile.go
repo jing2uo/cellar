@@ -263,11 +263,11 @@ func want(c *config.Config) (*desired, []string, error) {
 	var warns []string
 
 	// resolve finds a family's file, or what a font role reference
-	// (@zh-hans.sans) stands for. A role with no font gives errUnresolved and
-	// one warning for its set, which then installs its Deps instead.
+	// (@cjk.SC) stands for. A role with no font gives errUnresolved: what
+	// uses it drops out quietly. Only a chosen set's Primary is warned about
+	// (below), and brings in its Deps.
 	resolved := map[string]fonts.Face{}
 	failed := map[string]error{}
-	missingSet := map[string]bool{}
 	resolve := func(name string) (fonts.Face, error) {
 		if f, ok := resolved[name]; ok {
 			return f, nil
@@ -280,11 +280,6 @@ func want(c *config.Config) (*desired, []string, error) {
 		if ref, ok := strings.CutPrefix(name, "@"); ok {
 			f, err = fonts.Resolve(ref)
 			if errors.Is(err, fonts.ErrMissing) {
-				set, _, _ := strings.Cut(ref, ".")
-				if fs := config.FontSetByID(set); fs != nil && !missingSet[set] {
-					missingSet[set] = true
-					warns = append(warns, fmt.Sprintf("font set %s: %v", fs.Name, err))
-				}
 				err = errUnresolved
 			}
 		} else {
@@ -317,11 +312,23 @@ func want(c *config.Config) (*desired, []string, error) {
 		}
 		put(d.reg, normKey(`HKLM\Software\Microsoft\Windows NT\CurrentVersion\Fonts`), f.Family+" (TrueType)", value("sz:"+file))
 	}
-	for _, id := range c.FontSets {
-		if fs := config.FontSetByID(id); fs != nil && len(fs.Deps) > 0 {
-			if _, err := resolve(config.RoleRef(id, fs.Primary)); err != nil {
-				d.deps = append(d.deps, fs.Deps...)
-			}
+	eff, _ := config.EffectiveFontSets(c.FontSets)
+	for _, id := range eff {
+		fs := config.FontSetByID(id)
+		if fs == nil {
+			warns = append(warns, fmt.Sprintf("unknown font set %q (have core, cjk, all)", id))
+			continue
+		}
+		if _, err := resolve(config.RoleRef(id, fs.Primary)); err == nil {
+			continue
+		}
+		switch pack := fs.Roles[fs.Primary].Pack; {
+		case len(fs.Deps) > 0:
+			d.deps = append(d.deps, fs.Deps...)
+		case pack != "":
+			warns = append(warns, fmt.Sprintf("font set %s: its fonts are not here; download them in Settings > Fonts or with `cellar fonts get %s`", fs.Name, pack))
+		default:
+			warns = append(warns, fmt.Sprintf("font set %s: its fonts are not here", fs.Name))
 		}
 	}
 
@@ -329,7 +336,14 @@ func want(c *config.Config) (*desired, []string, error) {
 		var ferr error
 		out := fontTmpl.ReplaceAllStringFunc(s, func(m string) string {
 			sub := fontTmpl.FindStringSubmatch(m)
-			f, err := resolve(sub[2])
+			// A|B: the first that resolves.
+			var f fonts.Face
+			var err error
+			for _, alt := range strings.Split(sub[2], "|") {
+				if f, err = resolve(alt); err == nil {
+					break
+				}
+			}
 			if err != nil {
 				if ferr == nil {
 					ferr = err

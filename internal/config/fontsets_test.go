@@ -4,7 +4,6 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
-	"strings"
 	"testing"
 )
 
@@ -23,42 +22,79 @@ const substKey = `HKLM\Software\Microsoft\Windows NT\CurrentVersion\FontSubstitu
 const linkKey = `HKLM\Software\Microsoft\Windows NT\CurrentVersion\FontLink\SystemLink`
 
 func TestLocaleAndFontSet(t *testing.T) {
-	c := load(t, "locale = \"zh_CN\"\nfont_sets = [\"zh-hans\"]\n")
-	if c.Locale != "zh_CN" || !slices.Equal(c.FontSets, []string{"zh-hans"}) {
-		t.Fatalf("locale %q sets %v", c.Locale, c.FontSets)
+	c := load(t, "locale = \"zh_CN\"\nfont_sets = [\"cjk\"]\n")
+	if c.Locale != "zh_CN" || !slices.Equal(c.FontSets, []string{"cjk"}) || c.Env["LC_ALL"] != "zh_CN.UTF-8" {
+		t.Fatalf("locale %q sets %v env %v", c.Locale, c.FontSets, c.Env)
 	}
-	if c.Env["LC_ALL"] != "zh_CN.UTF-8" {
-		t.Errorf("env %v", c.Env)
+	// Each region's Windows names go to that region of the one collection.
+	sub := c.Registry[substKey]
+	if sub["SimSun"] != "{family:@cjk.SC}" || sub["MS Gothic"] != "{family:@cjk.JP}" || sub["Gulim"] != "{family:@cjk.KR}" ||
+		sub["KaiTi"] != "{family:@cjk.serif-SC|@cjk.SC}" {
+		t.Errorf("subst %v", sub)
 	}
-	if c.Registry[substKey]["SimSun"] != "{family:@zh-hans.sans}" || !slices.Contains(c.Fonts.Link, "@zh-hans.serif") {
-		t.Errorf("fonts %v subst %v", c.Fonts.Link, c.Registry[substKey])
+	// cjk alone: no English substitution, no scripts.
+	if !slices.Contains(c.Fonts.Link, "@cjk.serif-SC") || slices.Contains(c.Fonts.Link, "@scripts.NotoSansThai") || sub["Arial"] != nil {
+		t.Errorf("fonts %v", c.Fonts.Link)
+	}
+}
+
+func TestFallbackFollowsLocale(t *testing.T) {
+	first := func(text string) string {
+		c := load(t, text)
+		return c.Registry[linkKey]["Tahoma"].(map[string]any)["value"].([]any)[0].(string)
+	}
+	for locale, region := range map[string]string{"zh_CN": "SC", "zh_TW": "TC", "zh_HK": "HK", "ja_JP": "JP", "ko_KR": "KR", "en_US": "SC"} {
+		if got := first("locale = \"" + locale + "\"\nfont_sets = [\"core\", \"cjk\"]\n"); got != "{font:@cjk."+region+"},{family:@cjk."+region+"}" {
+			t.Errorf("%s: %s", locale, got)
+		}
+	}
+	// English alone writes no fallback chain.
+	if c := load(t, "font_sets = [\"core\"]\n"); c.Registry[linkKey] != nil {
+		t.Errorf("core only: %v", c.Registry[linkKey])
+	}
+}
+
+func TestAllIncludesTheOthers(t *testing.T) {
+	c := load(t, "locale = \"ja_JP\"\nfont_sets = [\"all\"]\n")
+	link := c.Registry[linkKey]["Tahoma"].(map[string]any)["value"].([]any)
+	// The locale's CJK region, the other regions, then the scripts.
+	if link[0] != "{font:@cjk.JP},{family:@cjk.JP}" || link[5] != "{font:@scripts.NotoSans},{family:@scripts.NotoSans}" {
+		t.Errorf("SystemLink %v", link[:6])
+	}
+	if c.Registry[substKey]["Arial"] != "{family:@core.sans}" || c.Registry[substKey]["MS Gothic"] != "{family:@cjk.JP}" {
+		t.Errorf("subst %v", c.Registry[substKey])
+	}
+	if !slices.Equal(DefaultFontSets("zh_TW"), []string{"core", "cjk"}) || !slices.Equal(DefaultFontSets("de_DE"), []string{"core"}) {
+		t.Error("defaults")
 	}
 }
 
 func TestFileOverridesLocaleEnv(t *testing.T) {
 	// The file's env wins over what its locale sets.
 	c := load(t, `locale = "ja_JP"
-font_sets = ["zh-hans", "ja", "core"]
+font_sets = ["core", "cjk"]
 [env]
 LC_ALL = "C.UTF-8"
 `)
 	if c.Locale != "ja_JP" || c.Env["LANG"] != "ja_JP.UTF-8" || c.Env["LC_ALL"] != "C.UTF-8" {
 		t.Fatalf("locale %q env %v", c.Locale, c.Env)
 	}
-	// The locale's set leads the UI fallbacks.
-	if !slices.Equal(c.FontSets, []string{"ja", "zh-hans", "core"}) {
-		t.Errorf("sets %v", c.FontSets)
-	}
-	tahoma := c.Registry[linkKey]["Tahoma"].(map[string]any)["value"].([]any)
-	if !strings.Contains(tahoma[0].(string), "@ja.sans") || len(tahoma) != 2 {
-		t.Errorf("SystemLink Tahoma %v", tahoma)
-	}
-	if c.Registry[substKey]["MS Gothic"] != "{family:@ja.sans}" || c.Registry[substKey]["Arial"] != "{family:@core.sans}" {
+	if c.Registry[substKey]["Arial"] != "{family:@core.sans}" {
 		t.Errorf("subst %v", c.Registry[substKey])
 	}
 	// corefonts is reconcile's call: only when no Liberation is installed.
 	if slices.Contains(c.Dependencies, "corefonts") || !slices.Contains(c.Fonts.Link, "@core.mono") {
 		t.Errorf("deps %v fonts %v", c.Dependencies, c.Fonts.Link)
+	}
+}
+
+func TestPacks(t *testing.T) {
+	// The four regions share one file: the pack is that file once.
+	if f := PackFaces("cjk"); len(f) != 1 || f[0].File != "NotoSansCJK-Regular.ttc" {
+		t.Errorf("cjk %v", f)
+	}
+	if f := PackFaces("scripts"); len(f) < 100 || f[0].Family != "Noto Sans" {
+		t.Errorf("scripts %d first %v", len(f), f[0])
 	}
 }
 

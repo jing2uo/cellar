@@ -2,89 +2,113 @@ package config
 
 import (
 	"os"
+	"slices"
 	"sort"
 	"strings"
 )
 
-// A FontSet makes the fonts one script's Windows programs ask for resolve
-// to one fixed font per role: Noto CJK for the CJK sets (consistent glyph
-// coverage and metrics on every machine), Liberation for the Latin core
-// fonts. The Windows names are substituted to a role (the lists follow
-// winetricks' fake* verbs), the font is copied in and registered, and the
-// UI fonts fall back to Fallback for missing glyphs. Deps are winetricks
-// verbs installed when Primary is neither installed nor downloadable.
+// A FontSet makes the fonts Windows programs ask for by name resolve to
+// fonts that are here. Three can be chosen, each touching only its own:
+// core (Arial, Times New Roman, Courier New to the metric-compatible
+// Liberation fonts), cjk (every region's Windows CJK fonts to that region's
+// Noto Sans CJK, all in one collection file, and the CJK UI fallback), and
+// all: core and cjk, plus every script's Noto Sans in the UI fallback (the
+// hidden scripts set). Deps are winetricks verbs installed when Primary has
+// no font.
 type FontSet struct {
-	ID       string            `json:"id"`
-	Name     string            `json:"name"`
-	Primary  string            `json:"-"`
-	Roles    map[string]Face   `json:"-"`
-	Subst    map[string]string `json:"-"` // Windows family -> role
-	Fallback string            `json:"-"` // role the UI fonts fall back to
-	Deps     []string          `json:"-"`
+	ID       string   `json:"id"`
+	Name     string   `json:"name"`
+	Note     string   `json:"note"`
+	Includes []string `json:"includes,omitempty"` // sets it brings along
+	Primary  string   `json:"-"`
+	Roles   map[string]Face   `json:"-"`
+	Subst   map[string]string `json:"-"` // Windows family -> role; "a|b": the first there is
+	Deps    []string          `json:"-"`
 }
 
 // Face is a role's font: the host's copy (any of Host, by family name),
-// else the one cellar downloads from URL into its font cache as File,
-// whose family is Family.
+// else the one in cellar's font library, File, whose family is Family.
+// Pack is the library download that brings it.
 type Face struct {
 	Host   []string
 	Family string
 	File   string
 	URL    string
-	Size   int64 // bytes, for the GUI
+	Size   int64
+	Pack   string
+}
+
+// A Pack is a download into the font library, done in the settings (or
+// with cellar fonts get), not when a prefix is created.
+// Auto packs are the ones the auto policy downloads when a chosen set
+// needs them; the others only when asked for.
+type Pack struct {
+	ID   string `json:"id"`
+	Name string `json:"name"`
+	Note string `json:"note"`
+	Auto bool   `json:"auto,omitempty"`
+}
+
+var Packs = []Pack{
+	{"cjk", "CJK", "Noto Sans CJK：简体、繁体、日文、韩文都在这一个文件里", true},
+	{"cjk-serif", "CJK 衬线", "Noto Serif CJK：给点名要仿宋、楷体这类衬线字体的程序；没有它就用 CJK 的无衬线字体", false},
+	{"scripts", "全语种", "150 种文字的 Noto Sans，补齐阿拉伯文、希伯来文、泰文、印度各文字等界面里缺的字（字体选“全部”时用）", true},
+}
+
+// PackByID returns the pack, or nil.
+func PackByID(id string) *Pack {
+	for i := range Packs {
+		if Packs[i].ID == id {
+			return &Packs[i]
+		}
+	}
+	return nil
 }
 
 const notoCJK = "https://github.com/notofonts/noto-cjk/raw/main/"
 
-// notoFace is a Noto CJK region: the host's OTC family, else the region's
-// subset OTF (only that region's glyphs, a fraction of the size).
-func notoFace(style, region, cjkRegion string, size int64) Face {
-	return Face{
-		Host:   []string{"Noto " + style + " CJK " + cjkRegion, "Noto " + style + " " + region},
-		Family: "Noto " + style + " " + region,
-		File:   "Noto" + style + region + "-Regular.otf",
-		URL:    notoCJK + style + "/SubsetOTF/" + region + "/Noto" + style + region + "-Regular.otf",
-		Size:   size,
+// cjkFace is one region of a Noto CJK collection (Sans or Serif).
+func cjkFace(style, region string) Face {
+	f := Face{Host: []string{"Noto " + style + " CJK " + region}, Family: "Noto " + style + " CJK " + region,
+		File: "Noto" + style + "CJK-Regular.ttc", URL: notoCJK + style + "/OTC/Noto" + style + "CJK-Regular.ttc"}
+	if style == "Sans" {
+		f.Size, f.Pack = 19484784, "cjk"
+	} else {
+		f.Size, f.Pack = 26411360, "cjk-serif"
 	}
+	return f
 }
 
+// cjkRegions are the Noto CJK regions; cjkRegion picks the one a locale
+// reads, the one its UI fallback starts with.
+var cjkRegions = []string{"SC", "TC", "HK", "JP", "KR"}
+
+func cjkRegion(locale string) string {
+	switch lang, country, _ := strings.Cut(locale, "_"); {
+	case lang == "zh" && country == "TW":
+		return "TC"
+	case lang == "zh" && (country == "HK" || country == "MO"):
+		return "HK"
+	case lang == "ja":
+		return "JP"
+	case lang == "ko":
+		return "KR"
+	}
+	return "SC"
+}
+
+const scriptsRepo = "https://raw.githubusercontent.com/notofonts/notofonts.github.io/main/fonts/"
+
+type scriptFace struct {
+	dir, family string
+	size        int64
+}
+
+//go:generate go run ./genscripts
+
 var FontSets = []FontSet{
-	{ID: "zh-hans", Name: "简体中文", Primary: "sans", Fallback: "sans",
-		Roles: map[string]Face{
-			"sans":  notoFace("Sans", "SC", "SC", 8331336),
-			"serif": notoFace("Serif", "SC", "SC", 11625800),
-		},
-		Subst: map[string]string{
-			"SimSun": "sans", "NSimSun": "sans", "SimSun-ExtB": "sans", "宋体": "sans", "新宋体": "sans",
-			"SimHei": "sans", "黑体": "sans", "Microsoft YaHei": "sans", "Microsoft YaHei UI": "sans", "微软雅黑": "sans",
-			"DengXian": "sans", "等线": "sans",
-			"FangSong": "serif", "仿宋": "serif", "KaiTi": "serif", "SimKai": "serif", "楷体": "serif",
-		}},
-	{ID: "zh-hant", Name: "繁體中文", Primary: "sans", Fallback: "sans",
-		Roles: map[string]Face{"sans": notoFace("Sans", "TC", "TC", 5683368)},
-		Subst: map[string]string{
-			"MingLiU": "sans", "PMingLiU": "sans", "MingLiU-ExtB": "sans", "PMingLiU-ExtB": "sans", "細明體": "sans", "新細明體": "sans",
-			"Microsoft JhengHei": "sans", "Microsoft JhengHei UI": "sans", "微軟正黑體": "sans",
-			"DFKai-SB": "sans", "標楷體": "sans",
-		}},
-	{ID: "ja", Name: "日本語", Primary: "sans", Fallback: "sans",
-		Roles: map[string]Face{"sans": notoFace("Sans", "JP", "JP", 4533028)},
-		Subst: map[string]string{
-			"MS Gothic": "sans", "MS PGothic": "sans", "MS UI Gothic": "sans", "MS Mincho": "sans", "MS PMincho": "sans",
-			"Meiryo": "sans", "Meiryo UI": "sans", "Yu Gothic": "sans", "Yu Gothic UI": "sans", "Yu Mincho": "sans",
-			"メイリオ": "sans", "ＭＳ ゴシック": "sans", "ＭＳ Ｐゴシック": "sans", "ＭＳ 明朝": "sans", "ＭＳ Ｐ明朝": "sans",
-		}},
-	{ID: "ko", Name: "한국어", Primary: "sans", Fallback: "sans",
-		Roles: map[string]Face{"sans": notoFace("Sans", "KR", "KR", 4644748)},
-		Subst: map[string]string{
-			"Gulim": "sans", "GulimChe": "sans", "Dotum": "sans", "DotumChe": "sans", "Batang": "sans", "BatangChe": "sans",
-			"Gungsuh": "sans", "GungsuhChe": "sans", "Malgun Gothic": "sans",
-			"굴림": "sans", "굴림체": "sans", "돋움": "sans", "돋움체": "sans", "바탕": "sans", "바탕체": "sans", "맑은 고딕": "sans",
-		}},
-	// Arial, Times New Roman, Courier New: the metric-compatible Liberation
-	// fonts (the Flatpak runtime ships them), else Microsoft's own through
-	// winetricks.
-	{ID: "core", Name: "西文核心字体", Primary: "sans", Deps: []string{"corefonts"},
+	{ID: "core", Name: "英文", Primary: "sans", Deps: []string{"corefonts"},
+		Note: "Arial、Times New Roman、Courier New 换成度量兼容的 Liberation；没有就装微软的 corefonts",
 		Roles: map[string]Face{
 			"sans":  {Host: []string{"Liberation Sans"}},
 			"serif": {Host: []string{"Liberation Serif"}},
@@ -92,10 +116,114 @@ var FontSets = []FontSet{
 		},
 		Subst: map[string]string{"Arial": "sans", "Times New Roman": "serif", "Courier New": "mono"},
 	},
+	{ID: "cjk", Name: "CJK", Primary: "SC",
+		Note: "宋体、细明体、MS Gothic、Gulim 这些简繁日韩字体名换成对应地区的 Noto Sans CJK，界面缺的中日韩字也用它补",
+		Roles: func() map[string]Face {
+			m := map[string]Face{}
+			for _, r := range cjkRegions {
+				m[r] = cjkFace("Sans", r)
+			}
+			for _, r := range []string{"SC", "TC", "JP", "KR"} {
+				m["serif-"+r] = cjkFace("Serif", r)
+			}
+			return m
+		}(),
+		Subst: map[string]string{
+			"SimSun": "SC", "NSimSun": "SC", "SimSun-ExtB": "SC", "宋体": "SC", "新宋体": "SC",
+			"SimHei": "SC", "黑体": "SC", "Microsoft YaHei": "SC", "Microsoft YaHei UI": "SC", "微软雅黑": "SC",
+			"DengXian": "SC", "等线": "SC",
+			"FangSong": "serif-SC|SC", "仿宋": "serif-SC|SC", "KaiTi": "serif-SC|SC", "SimKai": "serif-SC|SC", "楷体": "serif-SC|SC",
+			"MingLiU": "TC", "PMingLiU": "TC", "MingLiU-ExtB": "TC", "PMingLiU-ExtB": "TC", "細明體": "TC", "新細明體": "TC",
+			"MingLiU_HKSCS": "HK", "MingLiU_HKSCS-ExtB": "HK",
+			"Microsoft JhengHei": "TC", "Microsoft JhengHei UI": "TC", "微軟正黑體": "TC",
+			"DFKai-SB": "serif-TC|TC", "標楷體": "serif-TC|TC",
+			"MS Gothic": "JP", "MS PGothic": "JP", "MS UI Gothic": "JP", "Meiryo": "JP", "Meiryo UI": "JP",
+			"Yu Gothic": "JP", "Yu Gothic UI": "JP", "メイリオ": "JP", "ＭＳ ゴシック": "JP", "ＭＳ Ｐゴシック": "JP",
+			"MS Mincho": "serif-JP|JP", "MS PMincho": "serif-JP|JP", "Yu Mincho": "serif-JP|JP", "ＭＳ 明朝": "serif-JP|JP", "ＭＳ Ｐ明朝": "serif-JP|JP",
+			"Gulim": "KR", "GulimChe": "KR", "Dotum": "KR", "DotumChe": "KR", "Malgun Gothic": "KR",
+			"굴림": "KR", "굴림체": "KR", "돋움": "KR", "돋움체": "KR", "맑은 고딕": "KR",
+			"Batang": "serif-KR|KR", "BatangChe": "serif-KR|KR", "Gungsuh": "serif-KR|KR", "GungsuhChe": "serif-KR|KR",
+			"바탕": "serif-KR|KR", "바탕체": "serif-KR|KR",
+		}},
+	{ID: "all", Name: "全部", Includes: []string{"core", "cjk"},
+		Note: "英文和 CJK，再用 150 种文字的 Noto Sans 补齐界面里缺的字（泰文、阿拉伯文、印度文字…）"},
+}
+
+// EffectiveFontSets expands all into the sets it includes; scripts tells
+// whether the scripts' fallback is on (all is chosen).
+func EffectiveFontSets(sets []string) (out []string, scripts bool) {
+	for _, id := range sets {
+		fs := FontSetByID(id)
+		if fs == nil {
+			out = appendNew(out, id) // reconcile says it is unknown
+			continue
+		}
+		if fs.Includes != nil {
+			scripts = true
+			for _, inc := range fs.Includes {
+				out = appendNew(out, inc)
+			}
+			continue
+		}
+		out = appendNew(out, id)
+	}
+	return out, scripts
+}
+
+// scripts is the hidden set behind the fallback chain: one role per Noto
+// Sans script family, its name.
+var scripts = func() FontSet {
+	fs := FontSet{ID: "scripts", Name: "全语种", Roles: map[string]Face{}}
+	for _, f := range scriptFaces {
+		fs.Roles[f.dir] = Face{Host: []string{f.family}, Family: f.family, File: f.dir + "-Regular.ttf",
+			URL: scriptsRepo + f.dir + "/hinted/ttf/" + f.dir + "-Regular.ttf", Size: f.size, Pack: "scripts"}
+	}
+	return fs
+}()
+
+// FileFamilies are the families each pack file holds (a CJK collection
+// holds a region each): having any of them means having the file.
+func FileFamilies() map[string][]string {
+	out := map[string][]string{}
+	for _, fs := range append(slices.Clone(FontSets), scripts) {
+		for _, r := range sortedKeys(roleSet(fs.Roles)) {
+			if f := fs.Roles[r]; f.File != "" {
+				out[f.File] = appendNew(out[f.File], f.Family)
+			}
+		}
+	}
+	return out
+}
+
+// PackFaces are the files a pack downloads, one face per file.
+func PackFaces(pack string) []Face {
+	var out []Face
+	seen := map[string]bool{}
+	for _, fs := range append(slices.Clone(FontSets), scripts) {
+		for _, r := range sortedKeys(roleSet(fs.Roles)) {
+			f := fs.Roles[r]
+			if f.Pack == pack && !seen[f.File] {
+				seen[f.File] = true
+				out = append(out, f)
+			}
+		}
+	}
+	return out
+}
+
+func roleSet(m map[string]Face) map[string]bool {
+	out := map[string]bool{}
+	for k := range m {
+		out[k] = true
+	}
+	return out
 }
 
 // FontSetByID returns the set, or nil.
 func FontSetByID(id string) *FontSet {
+	if id == scripts.ID {
+		return &scripts
+	}
 	for i := range FontSets {
 		if FontSets[i].ID == id {
 			return &FontSets[i]
@@ -104,7 +232,7 @@ func FontSetByID(id string) *FontSet {
 	return nil
 }
 
-// A font role reference, "@zh-hans.sans": in fonts.link it stands for the
+// A font role reference, "@cjk.SC": in fonts.link it stands for the
 // resolved family, in registry strings {family:REF} and {font:REF} for its
 // family name and file name. reconcile resolves them.
 func RoleRef(set, role string) string { return "@" + set + "." + role }
@@ -114,10 +242,10 @@ func RoleRef(set, role string) string { return "@" + set + "." + role }
 // Locale is a Windows region: Wine reads it from LANG/LC_ALL itself (UI
 // language, ANSI code page), whether or not the host has the glibc locale.
 type Locale struct {
-	ID      string `json:"id"` // zh_CN
-	Name    string `json:"name"`
-	FontSet string `json:"font_set,omitempty"` // suggested with it
-	Common  bool   `json:"common,omitempty"`
+	ID     string `json:"id"` // zh_CN
+	Name   string `json:"name"`
+	Common bool   `json:"common,omitempty"`
+	CJK    bool   `json:"cjk,omitempty"` // a new prefix in it gets the cjk set
 }
 
 // common are listed first, with names of our own where glibc's are long.
@@ -154,30 +282,24 @@ var Locales = func() []Locale {
 		}
 	}
 	for i := range out {
-		out[i].FontSet = suggestedSet(out[i].ID)
+		out[i].CJK = IsCJK(out[i].ID)
 	}
 	return out
 }()
 
-// suggestedSet is the font set a locale's script needs.
-func suggestedSet(locale string) string {
-	switch lang, country, _ := strings.Cut(locale, "_"); {
-	case lang == "zh" && (country == "TW" || country == "HK" || country == "MO"):
-		return "zh-hant"
-	case lang == "zh":
-		return "zh-hans"
-	case lang == "ja", lang == "ko":
-		return lang
+// DefaultFontSets are what a new prefix starts with: English, and CJK for
+// a Chinese, Japanese or Korean region. "all" is the user's to choose.
+func DefaultFontSets(locale string) []string {
+	if IsCJK(locale) {
+		return []string{"core", "cjk"}
 	}
-	return ""
+	return []string{"core"}
 }
 
-// SuggestedFontSets are the sets a new prefix in locale starts with.
-func SuggestedFontSets(locale string) []string {
-	if s := suggestedSet(locale); s != "" {
-		return []string{s}
-	}
-	return []string{}
+// IsCJK reports whether a region reads Chinese, Japanese or Korean.
+func IsCJK(locale string) bool {
+	lang, _, _ := strings.Cut(locale, "_")
+	return lang == "zh" || lang == "ja" || lang == "ko"
 }
 
 // HostLocale is the host's locale (zh_CN), the default for new prefixes.
@@ -193,9 +315,40 @@ func HostLocale() string {
 	return ""
 }
 
-// The fonts Windows UI text is drawn with; each falls back to the selected
-// sets' fonts for glyphs it lacks.
+// The fonts Windows UI text is drawn with. Each falls back, for glyphs it
+// lacks, to the CJK region the locale reads and the other regions (cjk),
+// then every script's Noto Sans (all): whichever of these are here.
 var uiFonts = []string{"Tahoma", "Segoe UI", "Microsoft Sans Serif", "MS Shell Dlg", "MS Shell Dlg 2", "Arial"}
+
+// subst renders a Subst role spec ("serif-SC|SC") of a set as a template.
+func subst(set, spec string) string {
+	var refs []string
+	for _, r := range strings.Split(spec, "|") {
+		refs = append(refs, RoleRef(set, r))
+	}
+	return "{family:" + strings.Join(refs, "|") + "}"
+}
+
+// fallback lists the role references of the fallback chain.
+func fallback(locale string, sets []string) []string {
+	sets, all := EffectiveFontSets(sets)
+	var refs []string
+	if slices.Contains(sets, "cjk") {
+		first := cjkRegion(locale)
+		refs = append(refs, RoleRef("cjk", first))
+		for _, r := range cjkRegions {
+			if r != first {
+				refs = append(refs, RoleRef("cjk", r))
+			}
+		}
+	}
+	if all {
+		for _, f := range scriptFaces {
+			refs = append(refs, RoleRef(scripts.ID, f.dir))
+		}
+	}
+	return refs
+}
 
 // localeLayer is what locale and font_sets add, as a config layer placed
 // after the defaults and before the file, so the file can still override.
@@ -206,25 +359,25 @@ func localeLayer(locale string, sets []string) map[string]any {
 		l["env"] = map[string]any{"LANG": lang, "LC_ALL": lang}
 	}
 	reg := map[string]any{}
-	subst := map[string]any{}
-	var link []any
-	for _, id := range sets {
+	subs := map[string]any{}
+	eff, _ := EffectiveFontSets(sets)
+	for _, id := range eff {
 		fs := FontSetByID(id)
 		if fs == nil {
 			continue
 		}
-		for win, role := range fs.Subst {
-			subst[win] = "{family:" + RoleRef(id, role) + "}"
+		for win, spec := range fs.Subst {
+			subs[win] = subst(id, spec)
 		}
-		if fs.Fallback != "" {
-			ref := RoleRef(id, fs.Fallback)
+	}
+	if len(subs) > 0 {
+		reg[`HKLM\Software\Microsoft\Windows NT\CurrentVersion\FontSubstitutes`] = subs
+	}
+	if refs := fallback(locale, sets); len(refs) > 0 {
+		var link []any
+		for _, ref := range refs {
 			link = append(link, "{font:"+ref+"},{family:"+ref+"}")
 		}
-	}
-	if len(subst) > 0 {
-		reg[`HKLM\Software\Microsoft\Windows NT\CurrentVersion\FontSubstitutes`] = subst
-	}
-	if len(link) > 0 {
 		sl := map[string]any{}
 		for _, f := range uiFonts {
 			sl[f] = map[string]any{"type": "multi_sz", "value": link}
@@ -240,25 +393,28 @@ func localeLayer(locale string, sets []string) map[string]any {
 	return l
 }
 
-// applyFontSets adds the role references the sets use to fonts.link;
-// reconcile copies in what they resolve to. A set's Deps are added by
-// reconcile, which knows whether its fonts are installed.
+// applyFontSets adds what the sets and the fallback chain use to
+// fonts.link; reconcile copies in whatever of it is here. A set's Deps are
+// added by reconcile, which knows whether its Primary is.
 func (c *Config) applyFontSets() {
-	for _, id := range c.FontSets {
+	eff, _ := EffectiveFontSets(c.FontSets)
+	for _, id := range eff {
 		fs := FontSetByID(id)
 		if fs == nil {
 			continue
 		}
-		roles := map[string]bool{}
-		for _, r := range fs.Subst {
-			roles[r] = true
-		}
-		if fs.Fallback != "" {
-			roles[fs.Fallback] = true
+		roles := map[string]bool{fs.Primary: true}
+		for _, spec := range fs.Subst {
+			for _, r := range strings.Split(spec, "|") {
+				roles[r] = true
+			}
 		}
 		for _, r := range sortedKeys(roles) {
 			c.Fonts.Link = appendNew(c.Fonts.Link, RoleRef(id, r))
 		}
+	}
+	for _, ref := range fallback(c.Locale, c.FontSets) {
+		c.Fonts.Link = appendNew(c.Fonts.Link, ref)
 	}
 }
 

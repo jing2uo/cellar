@@ -35,7 +35,7 @@ type Config struct {
 	// Locale is the Windows region, a glibc-style name (zh_CN, ja_JP): UI
 	// language and ANSI code page. "" leaves the host's.
 	Locale string `toml:"locale,omitempty" json:"locale,omitempty"`
-	// FontSets name the FontSets to apply (zh-hans, ja, core...).
+	// FontSets name the FontSets to apply: core, cjk.
 	FontSets       []string                  `toml:"font_sets,omitempty" json:"font_sets,omitempty"`
 	WindowsVersion string                    `toml:"windows_version,omitempty" json:"windows_version,omitempty"`
 	Env            map[string]string         `toml:"env,omitempty" json:"env,omitempty"`
@@ -178,7 +178,6 @@ func Load(path string) (*Config, error) {
 }
 
 // localeOf finds locale and font_sets, the last layer setting each winning.
-// The set the locale suggests goes first: its fonts lead the UI fallbacks.
 func localeOf(layers []map[string]any) (string, []string) {
 	var locale string
 	var sets []string
@@ -190,14 +189,6 @@ func localeOf(layers []map[string]any) (string, []string) {
 			sets = []string{}
 			for _, x := range v {
 				sets = append(sets, fmt.Sprint(x))
-			}
-		}
-	}
-	if first := suggestedSet(locale); first != "" {
-		for i, s := range sets {
-			if s == first {
-				sets = append([]string{s}, append(sets[:i:i], sets[i+1:]...)...)
-				break
 			}
 		}
 	}

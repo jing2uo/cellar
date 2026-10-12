@@ -27,6 +27,7 @@ import (
 	"github.com/jing2uo/cellar/internal/fonts"
 	"github.com/jing2uo/cellar/internal/importer"
 	"github.com/jing2uo/cellar/internal/launch"
+	"github.com/jing2uo/cellar/internal/prefs"
 	"github.com/jing2uo/cellar/internal/reconcile"
 	"github.com/jing2uo/cellar/internal/runner"
 	"github.com/jing2uo/cellar/internal/store"
@@ -94,9 +95,9 @@ type Env struct {
 	Default  string           `json:"default_runner"`
 	Locales  []config.Locale  `json:"locales"`
 	FontSets []config.FontSet `json:"font_sets"`
-	// HostLocale and its font sets are what a new prefix starts with.
-	HostLocale string   `json:"host_locale"`
-	HostFonts  []string `json:"host_fonts"`
+	// HostLocale and DefaultFontSets are what a new prefix starts with.
+	HostLocale      string   `json:"host_locale"`
+	DefaultFontSets []string `json:"default_font_sets"`
 }
 
 func (s *Service) Env() Env {
@@ -109,7 +110,7 @@ func (s *Service) Env() Env {
 		Version: s.version, Home: store.Home(), Packaged: store.Packaged(), Flatpak: runner.InFlatpak(),
 		Runners: infos, Default: def,
 		Locales: config.Locales, FontSets: config.FontSets,
-		HostLocale: config.HostLocale(), HostFonts: config.SuggestedFontSets(config.HostLocale()),
+		HostLocale: config.HostLocale(), DefaultFontSets: config.DefaultFontSets(config.HostLocale()),
 	}
 }
 
@@ -132,6 +133,51 @@ func (s *Service) Available() (Catalog, error) {
 // FontStatus tells what each font set would use on this machine (it runs
 // fc-list, so the dialogs ask for it, not every refresh).
 func (s *Service) FontStatus() []fonts.Status { return fonts.Statuses() }
+
+// Prefs and SavePrefs are cellar's own settings (the settings page).
+func (s *Service) Prefs() prefs.Prefs { return prefs.Load() }
+
+func (s *Service) SavePrefs(p prefs.Prefs) error { return prefs.Save(p) }
+
+// FontPacks lists the font library's packs.
+func (s *Service) FontPacks() []fonts.PackStatus {
+	fonts.Rescan()
+	return fonts.Packs()
+}
+
+// fontTask names the library's download task: not a prefix name, which
+// cannot start with @.
+const fontTask = "@fonts"
+
+// GetFontPack downloads a pack in the background; the page polls Task.
+func (s *Service) GetFontPack(id string) (string, error) {
+	if t := s.tasks.running(fontTask); t != "" {
+		return t, nil
+	}
+	pk := config.PackByID(id)
+	if pk == nil {
+		return "", fmt.Errorf("no font pack %q", id)
+	}
+	return s.tasks.start(fontTask, "下载 "+pk.Name, func(log func(string)) error {
+		return fonts.GetPack(id, func(done, total int, file string) {
+			log(fmt.Sprintf("%d/%d %s", done, total, file))
+		})
+	}), nil
+}
+
+// FontTask is the library download running now, if any.
+func (s *Service) FontTask() string { return s.tasks.running(fontTask) }
+
+func (s *Service) RemoveFontPack(id string) error { return fonts.RemovePack(id) }
+
+// OpenFontDir shows the font library in the file manager, to put fonts in
+// by hand when a download cannot get through.
+func (s *Service) OpenFontDir() error {
+	if err := os.MkdirAll(fonts.LibraryDir(), 0o755); err != nil {
+		return err
+	}
+	return s.app.Browser.OpenURL("file://" + fonts.LibraryDir())
+}
 
 // RemoveRunner deletes a downloaded runner that no prefix uses.
 func (s *Service) RemoveRunner(name string) error { return appmgr.RemoveRunner(name) }
