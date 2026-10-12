@@ -3,6 +3,7 @@
 package store
 
 import (
+	"bytes"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -124,6 +125,33 @@ func (p *Prefix) Load() (*config.Config, error) {
 }
 
 func (p *Prefix) RunsDir() string { return filepath.Join(p.Dir, "runs") }
+
+// AppliedConfig is cellar.toml as of the last apply.
+func (p *Prefix) AppliedConfig() string { return filepath.Join(p.Dir, "applied.toml") }
+
+// ConfigEdited reports whether cellar.toml differs from the applied copy:
+// whether there are edits RevertConfig can undo.
+func (p *Prefix) ConfigEdited() bool {
+	a, err := os.ReadFile(p.AppliedConfig())
+	if err != nil {
+		return false
+	}
+	b, err := os.ReadFile(p.Config)
+	return err == nil && !bytes.Equal(a, b)
+}
+
+// RevertConfig puts cellar.toml back as it was at the last apply.
+func (p *Prefix) RevertConfig() error {
+	b, err := os.ReadFile(p.AppliedConfig())
+	if err != nil {
+		return fmt.Errorf("no applied copy of %s to go back to", p.Config)
+	}
+	tmp := p.Config + ".revert"
+	if err := os.WriteFile(tmp, b, 0o644); err != nil {
+		return err
+	}
+	return os.Rename(tmp, p.Config)
+}
 
 // State is what the last successful apply did. Registry holds only values
 // cellar itself wrote, so a later apply knows what it may delete.

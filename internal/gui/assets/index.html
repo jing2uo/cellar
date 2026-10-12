@@ -480,12 +480,24 @@ async function showPlan(name) {
   if (!n) return;
   const apply = () => applyNow(name);
   $("#apply").onclick = apply;
-  $("#planview").onclick = () => dialog(`<b>${esc(name)}：未生效的更改</b><ul class="changes">${pl.changes.map((c) =>
-      `<li><span class="op op-${c.op}">${c.op}</span>${esc(fmt(c))}</li>`).join("")}</ul>
-    <div class="row"><button id="c">关闭</button><button id="a" class="primary">应用</button></div>`, (d) => {
-    d.querySelector("#c").onclick = () => d.close();
-    d.querySelector("#a").onclick = () => { d.close(); apply(); };
-  });
+  // Edits to cellar.toml can be undone; changes a new Cellar or Wine brings
+  // to the same file can only be applied.
+  $("#planview").onclick = async () => {
+    const edited = await call("ConfigEdited", name);
+    dialog(`<b>${esc(name)}：未生效的更改</b><ul class="changes">${pl.changes.map((c) =>
+        `<li><span class="op op-${c.op}">${c.op}</span>${esc(fmt(c))}</li>`).join("")}</ul>
+      ${edited ? "" : `<div class="meta">配置文件没改过：这些更改来自 Cellar 或 Wine 的更新，只能应用。</div>`}
+      <div class="row">${edited ? `<button id="u">撤销修改</button>` : ""}<span style="flex:1"></span>
+        <button id="c">关闭</button><button id="a" class="primary">应用</button></div>`, (d) => {
+      d.querySelector("#c").onclick = () => d.close();
+      d.querySelector("#a").onclick = () => { d.close(); apply(); };
+      if (edited) d.querySelector("#u").onclick = async () => {
+        if (!await ask("撤销修改？cellar.toml 会恢复成上次应用时的内容，之后改的都会丢掉。")) return;
+        try { await call("RevertConfig", name); d.close(); toast("已撤销"); } catch (e) { fail(e); }
+        await load();
+      };
+    });
+  };
 }
 
 function fmt(c) {

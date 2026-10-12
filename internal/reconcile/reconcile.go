@@ -84,6 +84,7 @@ type Plan struct {
 	drives  map[string]string // letter -> host path, "" removes
 	deps    []string          // winetricks verbs to install
 	install *Change           // vendor installer step
+	file    []byte            // cellar.toml as planned, kept once applied
 
 	// RunProgram runs a Windows program in the prefix and waits; set by the
 	// caller (it lives in package launch, which records the run).
@@ -115,6 +116,7 @@ func Compute(p *store.Prefix, c *config.Config, force bool) (*Plan, error) {
 		return nil, err
 	}
 	pl := &Plan{Prefix: p.Name, Hash: c.Hash(), Runner: r.Name, Wine: r.Version(), p: p, c: c, r: r, st: st}
+	pl.file, _ = os.ReadFile(p.Config)
 	pl.want, pl.Warnings, err = want(c)
 	if err != nil {
 		return nil, err
@@ -537,6 +539,10 @@ func (pl *Plan) Apply(log func(string)) error {
 	}
 	if err := pl.p.SaveState(st); err != nil {
 		return err
+	}
+	if pl.file != nil && !pl.p.Packaged {
+		// What was applied, so pending edits can be undone (RevertConfig).
+		os.WriteFile(pl.p.AppliedConfig(), pl.file, 0o644)
 	}
 	if len(failed) > 0 {
 		return fmt.Errorf("failed: %s (the rest was applied)\n%s",

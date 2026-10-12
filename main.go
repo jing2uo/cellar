@@ -37,6 +37,7 @@ const usage = `cellar - Wine prefixes from cellar.toml
   cellar inspect <prefix>            effective config, defaults merged in
   cellar plan <prefix> [--force]     what apply would change
   cellar apply <prefix> [--force]
+  cellar revert <prefix>             undo cellar.toml edits made since the last apply
   cellar run <prefix>[/<app>] [--exe X] [--trace +chan] [-- args]
   cellar logs <prefix> [--run ID] [--tail N]
   cellar kill <prefix>
@@ -66,7 +67,7 @@ func main() {
 	}
 	cmds := map[string]func([]string) error{
 		"new": cmdNew, "create": cmdNew, "rm": cmdRm, "list": cmdList, "inspect": cmdInspect, "plan": cmdPlan,
-		"apply": cmdApply, "run": cmdRun, "logs": cmdLogs, "kill": cmdKill,
+		"apply": cmdApply, "revert": cmdRevert, "run": cmdRun, "logs": cmdLogs, "kill": cmdKill,
 		"desktop": cmdDesktop, "import": cmdImport, "app": cmdApp, "runner": cmdRunner,
 		"gui": func(a []string) error {
 			view := ""
@@ -364,6 +365,29 @@ func cmdPlan(args []string) error {
 		printPlan(pl)
 	}
 	return nil
+}
+
+func cmdRevert(args []string) error {
+	pos, _, err := parse(flag.NewFlagSet("revert", flag.ContinueOnError), args)
+	if err != nil {
+		return err
+	}
+	if len(pos) != 1 {
+		return errors.New("usage: cellar revert <prefix>")
+	}
+	p, err := store.Open(pos[0])
+	if err != nil {
+		return err
+	}
+	if !p.ConfigEdited() {
+		return fmt.Errorf("%s: no edits since the last apply", p.Name)
+	}
+	if err := p.RevertConfig(); err != nil {
+		return err
+	}
+	self, _ := os.Executable()
+	self, _ = filepath.EvalSymlinks(self)
+	return appmgr.RefreshDesktop(self, p)
 }
 
 func cmdApply(args []string) error {

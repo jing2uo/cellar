@@ -464,6 +464,25 @@ func (s *Service) ApplyTask(name string) (string, error) {
 	}), nil
 }
 
+// ConfigEdited reports whether cellar.toml has edits since the last apply,
+// which RevertConfig can undo.
+func (s *Service) ConfigEdited(name string) bool {
+	p, err := store.Open(name)
+	return err == nil && p.ConfigEdited()
+}
+
+// RevertConfig undoes the edits to cellar.toml since the last apply.
+func (s *Service) RevertConfig(name string) error {
+	p, err := store.Open(name)
+	if err != nil {
+		return err
+	}
+	if err := p.RevertConfig(); err != nil {
+		return err
+	}
+	return appmgr.RefreshDesktop(s.self, p)
+}
+
 // Delete removes the prefix and everything in it.
 func (s *Service) Delete(name string) error {
 	if s.tasks.running(name) != "" {
