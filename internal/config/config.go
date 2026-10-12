@@ -274,13 +274,11 @@ func localeOf(layers []map[string]any) (string, []string) {
 			}
 		}
 	}
-	for _, loc := range Locales {
-		if loc.ID == locale && loc.FontSet != "" {
-			for i, s := range sets {
-				if s == loc.FontSet {
-					sets = append([]string{s}, append(sets[:i:i], sets[i+1:]...)...)
-					break
-				}
+	if first := suggestedSet(locale); first != "" {
+		for i, s := range sets {
+			if s == first {
+				sets = append([]string{s}, append(sets[:i:i], sets[i+1:]...)...)
+				break
 			}
 		}
 	}

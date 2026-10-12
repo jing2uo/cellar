@@ -109,48 +109,73 @@ func FontSetByID(id string) *FontSet {
 // family name and file name. reconcile resolves them.
 func RoleRef(set, role string) string { return "@" + set + "." + role }
 
+//go:generate go run ./genlocales
+
 // Locale is a Windows region: Wine reads it from LANG/LC_ALL itself (UI
 // language, ANSI code page), whether or not the host has the glibc locale.
 type Locale struct {
 	ID      string `json:"id"` // zh_CN
 	Name    string `json:"name"`
 	FontSet string `json:"font_set,omitempty"` // suggested with it
+	Common  bool   `json:"common,omitempty"`
 }
 
-var Locales = []Locale{
-	{"zh_CN", "简体中文（中国）", "zh-hans"},
-	{"zh_SG", "简体中文（新加坡）", "zh-hans"},
-	{"zh_TW", "繁體中文（台灣）", "zh-hant"},
-	{"zh_HK", "繁體中文（香港）", "zh-hant"},
-	{"ja_JP", "日本語（日本）", "ja"},
-	{"ko_KR", "한국어（대한민국）", "ko"},
-	{"en_US", "English (United States)", ""},
-	{"en_GB", "English (United Kingdom)", ""},
-	{"de_DE", "Deutsch (Deutschland)", ""},
-	{"fr_FR", "Français (France)", ""},
-	{"es_ES", "Español (España)", ""},
-	{"es_MX", "Español (México)", ""},
-	{"pt_BR", "Português (Brasil)", ""},
-	{"pt_PT", "Português (Portugal)", ""},
-	{"it_IT", "Italiano (Italia)", ""},
-	{"nl_NL", "Nederlands (Nederland)", ""},
-	{"pl_PL", "Polski (Polska)", ""},
-	{"ru_RU", "Русский (Россия)", ""},
-	{"uk_UA", "Українська (Україна)", ""},
-	{"tr_TR", "Türkçe (Türkiye)", ""},
-	{"vi_VN", "Tiếng Việt (Việt Nam)", ""},
-	{"th_TH", "ไทย (ไทย)", ""},
-	{"id_ID", "Bahasa Indonesia (Indonesia)", ""},
-	{"ar_SA", "العربية (السعودية)", ""},
-	{"he_IL", "עברית (ישראל)", ""},
+// common are listed first, with names of our own where glibc's are long.
+var common = []Locale{
+	{ID: "zh_CN", Name: "简体中文（中国）"},
+	{ID: "zh_SG", Name: "简体中文（新加坡）"},
+	{ID: "zh_TW", Name: "繁體中文（台灣）"},
+	{ID: "zh_HK", Name: "繁體中文（香港）"},
+	{ID: "ja_JP"}, {ID: "ko_KR"}, {ID: "en_US"}, {ID: "en_GB"}, {ID: "de_DE"}, {ID: "fr_FR"},
+	{ID: "es_ES"}, {ID: "es_MX"}, {ID: "pt_BR"}, {ID: "pt_PT"}, {ID: "it_IT"}, {ID: "nl_NL"},
+	{ID: "pl_PL"}, {ID: "ru_RU"}, {ID: "uk_UA"}, {ID: "tr_TR"}, {ID: "vi_VN"}, {ID: "th_TH"},
+	{ID: "id_ID"}, {ID: "ar_SA"}, {ID: "he_IL"},
+}
+
+// Locales is the region list: the common ones, then all of glibc's.
+var Locales = func() []Locale {
+	names := map[string]string{}
+	for _, l := range allLocales {
+		names[l.ID] = l.Name
+	}
+	var out []Locale
+	seen := map[string]bool{}
+	for _, l := range common {
+		if l.Name == "" {
+			l.Name = names[l.ID]
+		}
+		l.Common = true
+		out = append(out, l)
+		seen[l.ID] = true
+	}
+	for _, l := range allLocales {
+		if !seen[l.ID] {
+			out = append(out, l)
+		}
+	}
+	for i := range out {
+		out[i].FontSet = suggestedSet(out[i].ID)
+	}
+	return out
+}()
+
+// suggestedSet is the font set a locale's script needs.
+func suggestedSet(locale string) string {
+	switch lang, country, _ := strings.Cut(locale, "_"); {
+	case lang == "zh" && (country == "TW" || country == "HK" || country == "MO"):
+		return "zh-hant"
+	case lang == "zh":
+		return "zh-hans"
+	case lang == "ja", lang == "ko":
+		return lang
+	}
+	return ""
 }
 
 // SuggestedFontSets are the sets a new prefix in locale starts with.
 func SuggestedFontSets(locale string) []string {
-	for _, l := range Locales {
-		if l.ID == locale && l.FontSet != "" {
-			return []string{l.FontSet}
-		}
+	if s := suggestedSet(locale); s != "" {
+		return []string{s}
 	}
 	return []string{}
 }
