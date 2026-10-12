@@ -126,6 +126,9 @@ func (s *Service) Available() (Catalog, error) {
 // fc-list, so the dialogs ask for it, not every refresh).
 func (s *Service) FontStatus() []fonts.Status { return fonts.Statuses() }
 
+// RemoveRunner deletes a downloaded runner that no prefix uses.
+func (s *Service) RemoveRunner(name string) error { return appmgr.RemoveRunner(name) }
+
 // InstallRunner downloads "<source>[@<version>]" and returns its name.
 func (s *Service) InstallRunner(id string) (string, error) {
 	return runner.InstallID(id, nil)

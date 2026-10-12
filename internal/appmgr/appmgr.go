@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"strings"
 
 	"github.com/jing2uo/cellar/internal/config"
@@ -99,6 +100,39 @@ func Remove(p *store.Prefix, id string) error {
 
 // DeletePrefix removes a prefix: its processes, its apps' menu launchers
 // and its directory, the Windows programs installed in it included.
+// RunnerUsers lists the prefixes whose cellar.toml names this runner.
+func RunnerUsers(name string) []string {
+	names, _ := store.List()
+	def, _ := runner.Default()
+	var out []string
+	for _, n := range names {
+		p, err := store.Open(n)
+		if err != nil {
+			continue
+		}
+		c, err := p.Load()
+		if err != nil {
+			continue
+		}
+		if c.Runner == name || c.Runner == "" && def == name {
+			out = append(out, n)
+		}
+	}
+	return out
+}
+
+// RemoveRunner deletes a downloaded runner no prefix uses. The system Wine
+// is not cellar's to remove.
+func RemoveRunner(name string) error {
+	if !slices.Contains(runner.List(), name) {
+		return fmt.Errorf("runner %q: not a downloaded runner", name)
+	}
+	if users := RunnerUsers(name); len(users) > 0 {
+		return fmt.Errorf("runner %s is used by %s; switch them to another runner first", name, strings.Join(users, ", "))
+	}
+	return os.RemoveAll(filepath.Join(store.RunnersDir(), name))
+}
+
 func DeletePrefix(p *store.Prefix) error {
 	if p.Packaged {
 		return fmt.Errorf("packaged prefixes are removed with their package")

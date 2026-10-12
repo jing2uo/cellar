@@ -45,7 +45,7 @@ const usage = `cellar - Wine prefixes from cellar.toml
   cellar app add <prefix> <C:\path.exe> [--name N] [--args "..."] [--no-desktop]
   cellar app rm <prefix> <id>
   cellar import bottles [--list] [<bottle>...] [--as NAME]
-  cellar runner list | available [--n 3] | install <source[@ver]|url>
+  cellar runner list | available [--n 3] | install <source[@ver]|url> | rm <name>
   cellar icon <program.exe> <out.png>   extract a program's icon (packaging)
   cellar extract                     a package's apply_extra: unpack its installer
   cellar profiles
@@ -644,8 +644,13 @@ func cmdRunner(args []string) error {
 		} else {
 			fmt.Println(name)
 		}
+	case "rm":
+		if len(pos) != 1 {
+			return errors.New("usage: cellar runner rm <name>")
+		}
+		return appmgr.RemoveRunner(pos[0])
 	default:
-		return fmt.Errorf("unknown runner command %q (list, available, install)", args[0])
+		return fmt.Errorf("unknown runner command %q (list, available, install, rm)", args[0])
 	}
 	return nil
 }

@@ -360,6 +360,9 @@ async function watchTask(name, id) {
 }
 const kindText = { wow64: "WoW64", legacy: "传统 32 位" };
 
+// runnerUsers are the prefixes set to this runner; "" means the default one.
+const runnerUsers = (r) => prefixes.filter((p) => p.source === "local" && (p.runner === r.name || !p.runner && r.default)).map((p) => p.name);
+
 async function renderRunners() {
   $("#main").innerHTML = `<div class="head"><div><h1>Runner</h1><div class="meta">${env.flatpak
       ? "“system” 是本应用自带的 Wine（org.winehq.Wine），始终可用。" : "“system” 是系统里安装的 Wine。"}
@@ -369,9 +372,17 @@ async function renderRunners() {
       <div class="rrow"><div class="grow"><b>${esc(r.name)}</b> ${r.default ? `<span class="tag rec">默认</span>` : ""}
         <span class="tag">${r.source === "system" ? "系统" : "已下载"}</span> <span class="tag">${kindText[r.kind]}</span>
         <div class="sub">${esc(r.version)} · ${esc(r.dir)}</div>
-        ${(r.problems || []).map((x) => `<div class="warn">⚠ ${esc(x)}</div>`).join("")}</div></div>`).join("") || `<div class="empty">还没有</div>`}</div></section>
+        ${(r.problems || []).map((x) => `<div class="warn">⚠ ${esc(x)}</div>`).join("")}</div>
+        ${r.source === "system" ? "" : runnerUsers(r).length
+          ? `<button disabled title="${esc(runnerUsers(r).join("、"))} 在用，先给它们换一个 runner">删除</button>`
+          : `<button data-rrm="${esc(r.name)}">删除</button>`}</div>`).join("") || `<div class="empty">还没有</div>`}</div></section>
     <section><h2>可下载</h2><div id="avail" class="empty">正在查询 GitHub…</div></section>`;
   wireNoWine();
+  document.querySelectorAll("[data-rrm]").forEach((b) => b.onclick = async () => {
+    if (!await ask(`删除 runner ${b.dataset.rrm}？会删掉 ${env.home}/runners/${b.dataset.rrm}，之后可以重新下载。`)) return;
+    try { await call("RemoveRunner", b.dataset.rrm); toast(`已删除 ${b.dataset.rrm}`); } catch (e) { fail(e); }
+    await load();
+  });
   try {
     const cat = await call("Available");
     $("#avail").outerHTML = `<div id="avail" class="rlist">${(cat.warnings || []).map((w) => `<div class="warn">⚠ ${esc(w)}</div>`).join("")}
