@@ -536,7 +536,7 @@ func (s *Service) PickInstaller() (string, error) {
 		dir = strings.TrimSpace(string(out))
 	}
 	return s.app.Dialog.OpenFile().
-		SetTitle("选择安装程序").
+		SetTitle("选择要运行的程序（安装程序或绿色版）").
 		SetDirectory(dir).
 		AddFilter("Windows 程序 (*.exe, *.msi)", "*.exe;*.msi;*.EXE;*.MSI").
 		AddFilter("所有文件", "*").
