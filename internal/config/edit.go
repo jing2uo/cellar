@@ -114,7 +114,7 @@ func (e *Editor) SetTable(name string, values map[string]string) {
 	sort.Strings(keys)
 	var body []string
 	for _, k := range keys {
-		body = append(body, tomlKey(k)+" = "+strconv.Quote(values[k]))
+		body = append(body, tomlKey(k)+" = "+quote(values[k]))
 	}
 	if start < 0 {
 		if len(values) == 0 {
@@ -159,15 +159,15 @@ func (e *Editor) SetTable(name string, values map[string]string) {
 
 // AddApp appends an [[apps]] block.
 func (e *Editor) AddApp(a App) {
-	b := []string{"", "[[apps]]", "id = " + strconv.Quote(a.ID)}
+	b := []string{"", "[[apps]]", "id = " + quote(a.ID)}
 	if a.Name != "" {
-		b = append(b, "name = "+strconv.Quote(a.Name))
+		b = append(b, "name = "+quote(a.Name))
 	}
 	b = append(b, "exe = "+literal(a.Exe))
 	if len(a.Args) > 0 {
 		parts := make([]string, len(a.Args))
 		for i, x := range a.Args {
-			parts[i] = strconv.Quote(x)
+			parts[i] = quote(x)
 		}
 		b = append(b, "args = ["+strings.Join(parts, ", ")+"]")
 	}
@@ -175,7 +175,7 @@ func (e *Editor) AddApp(a App) {
 		b = append(b, "workdir = "+literal(a.Workdir))
 	}
 	if a.Icon != "" {
-		b = append(b, "icon = "+strconv.Quote(a.Icon))
+		b = append(b, "icon = "+quote(a.Icon))
 	}
 	if a.Desktop {
 		b = append(b, "desktop = true")
@@ -196,7 +196,7 @@ func (e *Editor) RemoveApp(id string) bool {
 				break
 			}
 		}
-		if k := e.findKey(i+1, end, "id"); k >= 0 && strings.Contains(e.lines[k], strconv.Quote(id)) {
+		if k := e.findKey(i+1, end, "id"); k >= 0 && strings.Contains(e.lines[k], quote(id)) {
 			from := i
 			if from > 0 && strings.TrimSpace(e.lines[from-1]) == "" {
 				from--
@@ -226,14 +226,38 @@ func tomlKey(k string) string {
 	if regexp.MustCompile(`^[A-Za-z0-9_-]+$`).MatchString(k) {
 		return k
 	}
-	return strconv.Quote(k)
+	return quote(k)
+}
+
+// quote renders a TOML basic string. strconv.Quote is close but not it:
+// TOML has no \x or \a escapes.
+func quote(s string) string {
+	var b strings.Builder
+	b.WriteByte('"')
+	for _, r := range s {
+		switch {
+		case r == '"' || r == '\\':
+			b.WriteByte('\\')
+			b.WriteRune(r)
+		case r == '\n':
+			b.WriteString(`\n`)
+		case r == '\t':
+			b.WriteString(`\t`)
+		case r < 0x20 || r == 0x7f:
+			fmt.Fprintf(&b, `\u%04X`, r)
+		default:
+			b.WriteRune(r)
+		}
+	}
+	b.WriteByte('"')
+	return b.String()
 }
 
 // literal prefers a TOML literal string, which needs no escaping for
 // Windows paths.
 func literal(s string) string {
-	if strings.ContainsAny(s, "'\n") {
-		return strconv.Quote(s)
+	if strings.ContainsFunc(s, func(r rune) bool { return r == '\'' || r < 0x20 || r == 0x7f }) {
+		return quote(s)
 	}
 	return "'" + s + "'"
 }
@@ -242,7 +266,7 @@ func literal(s string) string {
 func Literal(v any) string {
 	switch x := v.(type) {
 	case string:
-		return strconv.Quote(x)
+		return quote(x)
 	case int:
 		return strconv.Itoa(x)
 	case bool:
@@ -250,7 +274,7 @@ func Literal(v any) string {
 	case []string:
 		parts := make([]string, len(x))
 		for i, s := range x {
-			parts[i] = strconv.Quote(s)
+			parts[i] = quote(s)
 		}
 		return "[" + strings.Join(parts, ", ") + "]"
 	}

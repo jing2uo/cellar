@@ -107,3 +107,23 @@ func TestSettingsRoundTrip(t *testing.T) {
 		t.Fatalf("not cleared: %+v", c)
 	}
 }
+
+func TestAddAppControlChars(t *testing.T) {
+	p := filepath.Join(t.TempDir(), "cellar.toml")
+	os.WriteFile(p, []byte("runner = \"system\"\n"), 0o644)
+	e, err := Edit(p)
+	if err != nil {
+		t.Fatal(err)
+	}
+	e.AddApp(App{ID: "x", Exe: `C:\x.exe`, Args: []string{"a\x00\"b\\"}, Workdir: "C:\\dir\x00"})
+	if err := e.Save(); err != nil {
+		t.Fatal(err)
+	}
+	c, err := Load(p, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if a := c.Apps[0]; a.Args[0] != "a\x00\"b\\" || a.Workdir != "C:\\dir\x00" {
+		t.Errorf("%q %q", a.Args, a.Workdir)
+	}
+}
