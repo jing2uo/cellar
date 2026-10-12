@@ -59,7 +59,7 @@ section h2 { font-size: 13px; font-weight: 600; color: var(--mute); margin: 0 0 
 .changes { font-family: var(--mono); font-size: 12px; margin: 0; padding: 0; list-style: none; max-height: 260px; overflow: auto; }
 .changes li { padding: 3px 0; border-bottom: 1px dashed var(--line); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .op { display: inline-block; width: 56px; font-weight: 600; }
-.op-set, .op-link, .op-map, .op-init { color: var(--ok); } .op-delete, .op-unlink, .op-unmap { color: var(--err); } .op-update { color: var(--warn); }
+.op-set, .op-link, .op-map, .op-init, .op-download { color: var(--ok); } .op-delete, .op-unlink, .op-unmap { color: var(--err); } .op-update { color: var(--warn); }
 table { width: 100%; border-collapse: collapse; font-size: 13px; }
 td { white-space: nowrap; padding: 6px 4px; border-bottom: 1px solid var(--line); }
 tr.run:hover { background: color-mix(in srgb, var(--text) 4%, transparent); }
@@ -100,9 +100,11 @@ select { font: inherit; padding: 6px 10px; border: 1px solid var(--line); border
 .form input, .form select { margin: 0; }
 .inline { display: flex; gap: 8px; align-items: center; }
 .inline input[type=checkbox] { width: auto; margin: 0; }
-.fsets { flex-wrap: wrap; gap: 4px 14px; color: var(--text); }
-.fsets label { gap: 5px; color: var(--text); }
-.fsets input { width: auto; margin: 0; }
+.fsets { display: grid; grid-template-columns: 1fr 1fr; gap: 4px 14px; }
+.fsets label { display: flex; gap: 6px; align-items: flex-start; color: var(--text); font-size: 13px; }
+.fsets input { width: auto; margin: 3px 0 0; }
+.fsets small { color: var(--mute); display: block; }
+.fsets small.warn { color: var(--err); }
 .deps { display: grid; grid-template-columns: 1fr 1fr; gap: 4px 14px; max-height: 210px; overflow: auto; }
 .deps label { display: flex; gap: 6px; align-items: flex-start; color: var(--text); font-size: 13px; }
 .deps input { width: auto; margin: 3px 0 0; }
@@ -357,6 +359,7 @@ function fmt(c) {
   if (c.op === "set") return `${c.key}\\${c.name} = ${c.value}`;
   if (c.op === "delete") return `${c.key}\\${c.name}`;
   if (c.op === "link" || c.op === "unlink") return `${c.name} → ${c.value}`;
+  if (c.op === "download") return `${c.name} ← ${c.value}`;
   if (c.op === "install") return c.value ? `${c.name} ${c.value}` : `winetricks ${c.name}`;
   return `${c.name}: → ${c.value}`;
 }
@@ -417,8 +420,23 @@ function localeField(value) {
     <option value="${OTHER}" ${known ? "" : "selected"}>其他…</option></select>
     <input id="locx" placeholder="如 sv_SE" value="${known ? "" : esc(value)}" style="width:110px" ${known ? "hidden" : ""}></div>`;
 }
-const fontField = (sets) => `<div class="inline fsets">${env.font_sets.map((f) =>
-  `<label class="inline"><input type="checkbox" value="${f.id}" ${sets.includes(f.id) ? "checked" : ""}>${esc(f.name)}</label>`).join("")}</div>`;
+// fontField lists the sets with what each would use here: the host font
+// found, the winetricks verb installed instead, or nothing.
+const fontField = (sets) => `<div class="fsets">${env.font_sets.map((f) =>
+  `<label><input type="checkbox" value="${f.id}" ${sets.includes(f.id) ? "checked" : ""}><span>${esc(f.name)}<small data-fs="${f.id}">查找字体…</small></span></label>`).join("")}</div>`;
+async function showFontStatus(d) {
+  let st;
+  try { st = await call("FontStatus"); } catch { return; }
+  for (const s of st) {
+    const el = d.querySelector(`[data-fs="${s.id}"]`);
+    if (!el) continue;
+    const where = { host: "（本机）", runtime: "（Cellar 自带）", cache: "（已下载）" }[s.source];
+    if (s.source === "download") { el.textContent = `${s.family}：未安装，应用时下载（约 ${Math.max(1, Math.round(s.size / 1048576))} MB）`; }
+    else if (s.family) { el.textContent = `→ ${s.family}${where || ""}`; }
+    else if (s.deps && s.deps.length) { el.textContent = `本机没有，改用 winetricks ${s.deps.join(" ")}`; }
+    else { el.textContent = "⚠ 没有可用字体"; el.classList.add("warn"); }
+  }
+}
 // wireLocale shows the free-form box for "其他…"; picking a locale ticks
 // its font set.
 function wireLocale(d) {
@@ -432,7 +450,7 @@ function wireLocale(d) {
 const readLocale = (d) => { const v = d.querySelector("#loc").value; return v === OTHER ? d.querySelector("#locx").value.trim() : v; };
 const readFonts = (d) => [...d.querySelectorAll(".fsets input:checked")].map((i) => i.value);
 const LOCALE_NOTE = "Windows 界面语言与编码（老软件乱码多半是它）";
-const FONTS_NOTE = "把程序点名要的字体（宋体、MS Gothic、Gulim…）换成本机 Noto CJK；西文核心字体用 winetricks 装微软原版";
+const FONTS_NOTE = "程序点名要的字体（宋体、MS Gothic、Gulim、Arial…）统一换成 Noto CJK / Liberation，本机没有的在应用时下载";
 const WINVER = [["win11", "Windows 11"], ["win10", "Windows 10"], ["win81", "Windows 8.1"], ["win7", "Windows 7"], ["winxp", "Windows XP"]];
 const DLLMODE = [["native,builtin", "原生优先"], ["builtin,native", "内置优先"], ["native", "仅原生"], ["builtin", "仅内置"], ["disabled", "禁用"]];
 const DPIS = [[0, "自动（跟随系统 Xft.dpi）"], [96, "100%"], [120, "125%"], [144, "150%"], [168, "175%"], [192, "200%"]];
@@ -465,6 +483,7 @@ async function settings(name) {
     const wireX = () => d.querySelectorAll(".dx").forEach((b) => b.onclick = () => b.parentElement.remove());
     wireX();
     wireLocale(d);
+    showFontStatus(d);
     d.querySelector("#adddll").onclick = () => { d.querySelector("#dlls").insertAdjacentHTML("beforeend", dllRow()); wireX(); };
     d.querySelector("#c").onclick = () => d.close();
     d.querySelector("#s").onclick = async () => {
@@ -535,6 +554,7 @@ function newPrefix() {
     <div id="e" class="err"></div><div class="row"><button id="c">取消</button><button id="k" class="primary">创建</button></div>`, (d) => {
     d.querySelector("#c").onclick = () => d.close();
     wireLocale(d);
+    showFontStatus(d);
     d.querySelector("#k").onclick = async () => {
       const n = d.querySelector("#n").value.trim();
       const k = d.querySelector("#k");

@@ -20,6 +20,7 @@ import (
 	"time"
 
 	"github.com/jing2uo/cellar/internal/config"
+	"github.com/jing2uo/cellar/internal/fonts"
 	"github.com/jing2uo/cellar/internal/launch"
 	"github.com/jing2uo/cellar/internal/runner"
 	"github.com/jing2uo/cellar/internal/store"
@@ -47,6 +48,8 @@ func (c Change) String() string {
 		return fmt.Sprintf("delete %s\\%s  (was %s)", c.Key, c.Name, c.Old)
 	case "link", "unlink":
 		return fmt.Sprintf("%-6s font    %s <- %s", c.Op, c.Name, c.Value)
+	case "download":
+		return fmt.Sprintf("download font %s <- %s", c.Name, c.Value)
 	case "map", "unmap":
 		return fmt.Sprintf("%-6s drive   %s: -> %s", c.Op, c.Name, c.Value)
 	case "install":
@@ -91,7 +94,14 @@ type desired struct {
 	reg    map[string]map[string]value
 	fonts  map[string]string // file name -> host path
 	drives map[string]string
+	deps   []string // font sets' winetricks verbs, when their fonts are missing
+	// downloads are the fonts to fetch into the cache before copying.
+	downloads map[string]fonts.Face // path -> face
 }
+
+// errUnresolved marks a font role reference nothing installed fills: the
+// value using it is left out, with one warning per font set.
+var errUnresolved = errors.New("font role unresolved")
 
 // Compute builds the plan. force re-writes every managed registry value even
 // if state.json says it is already there.
@@ -171,6 +181,9 @@ func (pl *Plan) diff(force bool) {
 	}
 
 	fontsDir := filepath.Join(pl.p.Pfx, "drive_c", "windows", "Fonts")
+	for _, path := range slices.Sorted(maps.Keys(pl.want.downloads)) {
+		pl.Changes = append(pl.Changes, Change{Op: "download", Name: filepath.Base(path), Value: pl.want.downloads[path].URL})
+	}
 	pl.links, pl.unlink = map[string]string{}, nil
 	for f, src := range pl.want.fonts {
 		if !sameFile(filepath.Join(fontsDir, f), src) {
@@ -201,8 +214,8 @@ func (pl *Plan) diff(force bool) {
 	}
 	pl.deps = nil
 	done := winetricksDone(pl.p.Pfx)
-	for _, v := range pl.c.Dependencies {
-		if !done[v] {
+	for _, v := range append(slices.Clone(pl.c.Dependencies), pl.want.deps...) {
+		if !done[v] && !slices.Contains(pl.deps, v) {
 			pl.deps = append(pl.deps, v)
 			pl.Changes = append(pl.Changes, Change{Op: "install", Name: v})
 		}
@@ -241,56 +254,101 @@ func put(m map[string]map[string]value, key, name string, v value) {
 	m[key][name] = v
 }
 
-var fontTmpl = regexp.MustCompile(`\{font:([^}]+)\}`)
+var fontTmpl = regexp.MustCompile(`\{(font|family):([^}]+)\}`)
 
 func want(c *config.Config) (*desired, []string, error) {
 	d := &desired{reg: map[string]map[string]value{}, fonts: map[string]string{}, drives: map[string]string{}}
 	var warns []string
 
-	resolved := map[string]string{} // family -> host path
-	resolve := func(family string) (string, bool) {
-		if f, ok := resolved[family]; ok {
-			return f, f != ""
+	// resolve finds a family's file, or what a font role reference
+	// (@zh-hans.sans) stands for. A role with no font gives errUnresolved and
+	// one warning for its set, which then installs its Deps instead.
+	resolved := map[string]fonts.Face{}
+	failed := map[string]error{}
+	missingSet := map[string]bool{}
+	resolve := func(name string) (fonts.Face, error) {
+		if f, ok := resolved[name]; ok {
+			return f, nil
 		}
-		f, err := fcMatch(family)
+		if err, ok := failed[name]; ok {
+			return fonts.Face{}, err
+		}
+		var f fonts.Face
+		var err error
+		if ref, ok := strings.CutPrefix(name, "@"); ok {
+			f, err = fonts.Resolve(ref)
+			if errors.Is(err, fonts.ErrMissing) {
+				set, _, _ := strings.Cut(ref, ".")
+				if fs := config.FontSetByID(set); fs != nil && !missingSet[set] {
+					missingSet[set] = true
+					warns = append(warns, fmt.Sprintf("font set %s: %v", fs.Name, err))
+				}
+				err = errUnresolved
+			}
+		} else {
+			f.Family = name
+			f.Path, err = fonts.File(name)
+			if err != nil {
+				warns = append(warns, err.Error())
+			}
+		}
 		if err != nil {
-			warns = append(warns, err.Error())
+			failed[name] = err
+			return f, err
 		}
-		resolved[family] = f
-		return f, f != ""
+		resolved[name] = f
+		return f, nil
 	}
 
-	for _, fam := range c.Fonts.Link {
-		path, ok := resolve(fam)
-		if !ok {
+	for _, name := range c.Fonts.Link {
+		f, err := resolve(name)
+		if err != nil {
 			continue
 		}
-		name := filepath.Base(path)
-		d.fonts[name] = path
-		put(d.reg, normKey(`HKLM\Software\Microsoft\Windows NT\CurrentVersion\Fonts`), fam+" (TrueType)", value("sz:"+name))
+		file := filepath.Base(f.Path)
+		d.fonts[file] = f.Path
+		if f.URL != "" {
+			if d.downloads == nil {
+				d.downloads = map[string]fonts.Face{}
+			}
+			d.downloads[f.Path] = f
+		}
+		put(d.reg, normKey(`HKLM\Software\Microsoft\Windows NT\CurrentVersion\Fonts`), f.Family+" (TrueType)", value("sz:"+file))
+	}
+	for _, id := range c.FontSets {
+		if fs := config.FontSetByID(id); fs != nil && len(fs.Deps) > 0 {
+			if _, err := resolve(config.RoleRef(id, fs.Primary)); err != nil {
+				d.deps = append(d.deps, fs.Deps...)
+			}
+		}
 	}
 
 	expand := func(s string) (string, error) {
-		var missing string
+		var ferr error
 		out := fontTmpl.ReplaceAllStringFunc(s, func(m string) string {
-			fam := fontTmpl.FindStringSubmatch(m)[1]
-			path, ok := resolve(fam)
-			if !ok {
-				missing = fam
+			sub := fontTmpl.FindStringSubmatch(m)
+			f, err := resolve(sub[2])
+			if err != nil {
+				if ferr == nil {
+					ferr = err
+				}
 				return m
 			}
-			return filepath.Base(path)
+			if sub[1] == "family" {
+				return f.Family
+			}
+			return filepath.Base(f.Path)
 		})
-		if missing != "" {
-			return "", fmt.Errorf("font %q not found", missing)
-		}
-		return out, nil
+		return out, ferr
 	}
 
 	for key, vals := range c.Registry {
 		nk := normKey(key)
 		for n, raw := range vals {
 			v, err := parseValue(raw, expand)
+			if errors.Is(err, errUnresolved) {
+				continue
+			}
 			if err != nil {
 				warns = append(warns, fmt.Sprintf("skip %s\\%s: %v", key, n, err))
 				continue
@@ -331,24 +389,6 @@ func want(c *config.Config) (*desired, []string, error) {
 		d.drives[letter] = path
 	}
 	return d, warns, nil
-}
-
-// fcMatch finds the file of an installed family. fc-list, not fc-match:
-// host rules may alias a family to another (Debian's do, "Noto Sans CJK SC"
-// -> "Noto Sans"), and fc-match follows them; fc-list matches the name.
-func fcMatch(family string) (string, error) {
-	for _, pat := range []string{family + ":style=Regular", family} {
-		out, err := exec.Command("fc-list", "-f", "%{file}\n", pat).Output()
-		if err != nil {
-			return "", fmt.Errorf("fc-list %q: %v", family, err)
-		}
-		files := strings.Fields(string(out))
-		if len(files) > 0 {
-			sort.Strings(files)
-			return files[0], nil
-		}
-	}
-	return "", fmt.Errorf("font %q not installed", family)
 }
 
 // hostPath expands ~, $VARS and xdg:NAME (a user-dirs.dirs entry such as
@@ -403,6 +443,22 @@ func (pl *Plan) Apply(log func(string)) error {
 		}
 	}
 
+	// Failures that do not stop the rest (a font or winetricks download,
+	// often): the others still go in and the state is still recorded, marked
+	// partial, so the failed steps stay in the next plan.
+	var failed []string
+	var details []string
+	for _, path := range slices.Sorted(maps.Keys(pl.want.downloads)) {
+		if err := fonts.Download(pl.want.downloads[path], log); err != nil {
+			name := filepath.Base(path)
+			log("  ✗ " + name + " failed, skipped")
+			failed = append(failed, name)
+			details = append(details, err.Error())
+			delete(pl.links, name)
+			delete(pl.want.fonts, name)
+		}
+	}
+
 	fontsDir := filepath.Join(pl.p.Pfx, "drive_c", "windows", "Fonts")
 	for _, f := range pl.unlink {
 		dst := filepath.Join(fontsDir, f)
@@ -430,14 +486,13 @@ func (pl *Plan) Apply(log func(string)) error {
 		log(fmt.Sprintf("drive %s: -> %s", letter, orNone(target)))
 	}
 
-	// A verb that fails (often a download) does not stop the rest: the
-	// others still install and the state is still recorded. winetricks.log
-	// decides what is pending, so the failed ones stay in the next plan.
-	var failed []string
-	var details []string
+	// winetricks.log decides which verbs are pending, so a failed one stays
+	// in the next plan.
+	depsFailed := false
 	for _, v := range pl.deps {
 		log("winetricks " + v)
 		if err := pl.winetricks(v, log); err != nil {
+			depsFailed = true
 			log("  ✗ " + v + " failed, skipped")
 			failed = append(failed, v)
 			details = append(details, err.Error())
@@ -445,7 +500,7 @@ func (pl *Plan) Apply(log func(string)) error {
 	}
 
 	installFP := pl.st.Install
-	if pl.install != nil && len(failed) > 0 {
+	if pl.install != nil && depsFailed {
 		// The installer may need what failed; it runs on the next apply.
 		log("install skipped: dependencies failed")
 	} else if pl.install != nil {
@@ -484,7 +539,7 @@ func (pl *Plan) Apply(log func(string)) error {
 		return err
 	}
 	if len(failed) > 0 {
-		return fmt.Errorf("winetricks failed: %s (the rest was applied)\n%s",
+		return fmt.Errorf("failed: %s (the rest was applied)\n%s",
 			strings.Join(failed, " "), strings.Join(details, "\n"))
 	}
 	return nil

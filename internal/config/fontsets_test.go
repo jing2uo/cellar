@@ -30,7 +30,7 @@ func TestZhCNProfileIsLocaleAndFontSet(t *testing.T) {
 	if c.Env["LC_ALL"] != "zh_CN.UTF-8" {
 		t.Errorf("env %v", c.Env)
 	}
-	if c.Registry[substKey]["SimSun"] != "Noto Sans CJK SC" || !slices.Contains(c.Fonts.Link, "Noto Serif CJK SC") {
+	if c.Registry[substKey]["SimSun"] != "{family:@zh-hans.sans}" || !slices.Contains(c.Fonts.Link, "@zh-hans.serif") {
 		t.Errorf("fonts %v subst %v", c.Fonts.Link, c.Registry[substKey])
 	}
 }
@@ -51,14 +51,15 @@ LC_ALL = "C.UTF-8"
 		t.Errorf("sets %v", c.FontSets)
 	}
 	tahoma := c.Registry[linkKey]["Tahoma"].(map[string]any)["value"].([]any)
-	if !strings.Contains(tahoma[0].(string), "JP") || len(tahoma) != 2 {
+	if !strings.Contains(tahoma[0].(string), "@ja.sans") || len(tahoma) != 2 {
 		t.Errorf("SystemLink Tahoma %v", tahoma)
 	}
-	if c.Registry[substKey]["MS Gothic"] != "Noto Sans CJK JP" || c.Registry[substKey]["SimHei"] != "Noto Sans CJK SC" {
+	if c.Registry[substKey]["MS Gothic"] != "{family:@ja.sans}" || c.Registry[substKey]["Arial"] != "{family:@core.sans}" {
 		t.Errorf("subst %v", c.Registry[substKey])
 	}
-	if !slices.Contains(c.Dependencies, "corefonts") {
-		t.Errorf("deps %v", c.Dependencies)
+	// corefonts is reconcile's call: only when no Liberation is installed.
+	if slices.Contains(c.Dependencies, "corefonts") || !slices.Contains(c.Fonts.Link, "@core.mono") {
+		t.Errorf("deps %v fonts %v", c.Dependencies, c.Fonts.Link)
 	}
 }
 

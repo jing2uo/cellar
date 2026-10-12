@@ -22,6 +22,7 @@ import (
 	"github.com/jing2uo/cellar/internal/appmgr"
 	"github.com/jing2uo/cellar/internal/config"
 	"github.com/jing2uo/cellar/internal/desktop"
+	"github.com/jing2uo/cellar/internal/fonts"
 	"github.com/jing2uo/cellar/internal/importer"
 	"github.com/jing2uo/cellar/internal/launch"
 	"github.com/jing2uo/cellar/internal/reconcile"
@@ -120,6 +121,10 @@ func (s *Service) Available() (Catalog, error) {
 	}
 	return Catalog{Releases: rels, Warnings: warns}, err
 }
+
+// FontStatus tells what each font set would use on this machine (it runs
+// fc-list, so the dialogs ask for it, not every refresh).
+func (s *Service) FontStatus() []fonts.Status { return fonts.Statuses() }
 
 // InstallRunner downloads "<source>[@<version>]" and returns its name.
 func (s *Service) InstallRunner(id string) (string, error) {

@@ -3,6 +3,7 @@ package reconcile
 import (
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"strings"
 	"unicode/utf16"
@@ -53,13 +54,21 @@ func parseValue(raw any, expand func(string) (string, error)) (value, error) {
 			if !ok {
 				return "", fmt.Errorf("multi_sz wants a list")
 			}
-			ss := make([]string, len(arr))
-			for i, a := range arr {
+			// An entry naming a font role nothing fills is left out; the
+			// value goes only when all of them are.
+			ss := []string{}
+			for _, a := range arr {
 				s, err := expand(fmt.Sprint(a))
+				if errors.Is(err, errUnresolved) {
+					continue
+				}
 				if err != nil {
 					return "", err
 				}
-				ss[i] = s
+				ss = append(ss, s)
+			}
+			if len(ss) == 0 && len(arr) > 0 {
+				return "", errUnresolved
 			}
 			b, _ := json.Marshal(ss)
 			return value("multi_sz:" + string(b)), nil
