@@ -33,7 +33,7 @@ aside { width: 240px; background: var(--side); border-right: 1px solid var(--lin
 .item.sel { background: var(--accent-soft); color: var(--accent); font-weight: 600; }
 .item small { color: var(--mute); font-weight: 400; }
 .foot { padding: 10px 12px; border-top: 1px solid var(--line); color: var(--mute); font-size: 12px; }
-main { flex: 1; overflow: auto; padding: 28px 32px; }
+main { flex: 1; min-width: 0; overflow: auto; padding: 28px 32px; }
 h1 { margin: 0; font-size: 22px; font-weight: 650; }
 .meta { color: var(--mute); margin-top: 4px; word-break: break-all; display: flex; gap: 14px; flex-wrap: wrap; }
 .head { flex-wrap: wrap; display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; margin-bottom: 24px; }
@@ -66,6 +66,8 @@ section h2 { font-size: 13px; font-weight: 600; color: var(--mute); margin: 0 0 
 .op-set, .op-link, .op-map, .op-init, .op-download { color: var(--ok); } .op-delete, .op-unlink, .op-unmap { color: var(--err); } .op-update { color: var(--warn); }
 table { width: 100%; border-collapse: collapse; font-size: 13px; }
 td { white-space: nowrap; padding: 6px 4px; border-bottom: 1px solid var(--line); }
+/* The command takes what width is left and is cut short, not the page widened. */
+td.cmd { width: 100%; max-width: 0; overflow: hidden; text-overflow: ellipsis; }
 tr.run:hover { background: color-mix(in srgb, var(--text) 4%, transparent); }
 .mono { font-family: var(--mono); font-size: 12px; }
 .empty { color: var(--mute); padding: 6px 0; }
@@ -499,7 +501,7 @@ async function showRuns(name) {
   $("#runs").outerHTML = `<div id="runs">${runs.length ? `<table>${runs.map((r) => `
     <tr class="run" data-id="${esc(r.id)}"><td class="mono">${esc(r.id)}</td><td>${esc(r.app || "—")}</td>
     <td class="${r.exit_code ? "s-error" : "s-applied"}">退出码 ${r.exit_code}</td><td>${r.seconds.toFixed(1)}s</td>
-    <td class="mono">${esc(r.argv.slice(1).join(" "))}</td></tr>`).join("")}</table>` : `<div class="empty">还没运行过</div>`}</div>`;
+    <td class="mono cmd" title="${esc(r.argv.slice(1).join(" "))}">${esc(r.argv.slice(1).join(" "))}</td></tr>`).join("")}</table>` : `<div class="empty">还没运行过</div>`}</div>`;
   document.querySelectorAll("tr.run").forEach((tr) => tr.onclick = () => showLog(name, tr.dataset.id));
   const b = $("#clearruns");
   b.hidden = !runs.length;
