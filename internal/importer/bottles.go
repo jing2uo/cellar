@@ -66,30 +66,47 @@ type Bottle struct {
 	Error  string   `json:"error,omitempty"`
 }
 
-// Find lists the bottles on this machine.
+// Find lists the bottles in Bottles' usual places.
 func Find() []Bottle {
 	var out []Bottle
 	for _, root := range BottlesDirs() {
-		ents, _ := os.ReadDir(root)
-		for _, e := range ents {
-			dir := filepath.Join(root, e.Name())
-			b := Bottle{Name: e.Name(), Prefix: slug(e.Name()), Dir: dir}
-			y, err := read(dir)
-			if err != nil {
-				if errors.Is(err, os.ErrNotExist) {
-					continue
-				}
-				b.Error = err.Error()
-			} else {
-				b.Runner = y.Runner
-				for _, p := range programs(y) {
-					b.Apps = append(b.Apps, p.Name)
-				}
-			}
+		out = append(out, Scan(root)...)
+	}
+	return out
+}
+
+// Scan lists the bottles in dir: dir itself when it is one, else the ones
+// directly in it (Bottles' bottles directory, wherever the user moved it).
+func Scan(dir string) []Bottle {
+	if b, ok := bottle(dir); ok {
+		return []Bottle{b}
+	}
+	var out []Bottle
+	ents, _ := os.ReadDir(dir)
+	for _, e := range ents {
+		if b, ok := bottle(filepath.Join(dir, e.Name())); ok {
 			out = append(out, b)
 		}
 	}
 	return out
+}
+
+func bottle(dir string) (Bottle, bool) {
+	name := filepath.Base(dir)
+	b := Bottle{Name: name, Prefix: slug(name), Dir: dir}
+	y, err := read(dir)
+	if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return b, false
+		}
+		b.Error = err.Error()
+		return b, true
+	}
+	b.Runner = y.Runner
+	for _, p := range programs(y) {
+		b.Apps = append(b.Apps, p.Name)
+	}
+	return b, true
 }
 
 func read(dir string) (*bottleYML, error) {
@@ -144,14 +161,16 @@ func slug(s string) string {
 }
 
 // winPath turns a program path Bottles stored as a host path inside the
-// bottle into a C:\ path, so it survives the move.
+// bottle into a C:\ path, so it survives the move. The bottle may be read
+// from elsewhere than Bottles wrote it (a Flatpak document portal path), so
+// the path matches on the bottle's own name.
 func winPath(bottleDir, p string) string {
 	if len(p) >= 2 && p[1] == ':' {
 		return p
 	}
-	driveC := filepath.Join(bottleDir, "drive_c") + "/"
-	if rest, ok := strings.CutPrefix(p, driveC); ok {
-		return `C:\` + strings.ReplaceAll(rest, "/", `\`)
+	mark := "/" + filepath.Base(bottleDir) + "/drive_c/"
+	if i := strings.LastIndex(p, mark); i >= 0 {
+		return `C:\` + strings.ReplaceAll(p[i+len(mark):], "/", `\`)
 	}
 	return p
 }

@@ -15,6 +15,7 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+	"sync"
 	"syscall"
 
 	"github.com/wailsapp/wails/v3/pkg/application"
@@ -75,6 +76,9 @@ type Service struct {
 	version string
 	app     *application.App
 	tasks   tasks
+
+	mu        sync.Mutex
+	bottleDir string // picked in the import page; replaces the default places
 }
 
 type Env struct {
@@ -379,11 +383,47 @@ func (s *Service) Bottles() []BottleRow {
 	for _, n := range names {
 		have[n] = true
 	}
+	s.mu.Lock()
+	dir := s.bottleDir
+	s.mu.Unlock()
+	found := importer.Find()
+	if dir != "" {
+		found = importer.Scan(dir)
+	}
 	rows := []BottleRow{}
-	for _, b := range importer.Find() {
+	for _, b := range found {
 		rows = append(rows, BottleRow{Bottle: b, Imported: have[b.Prefix]})
 	}
 	return rows
+}
+
+// PickBottles asks for Bottles' bottles directory, or one bottle, with the
+// system file chooser. In the Flatpak that is the portal's, which grants
+// access to what the user picks; it also finds bottles Bottles keeps
+// somewhere other than its default. The page then lists only what is in
+// it. "" means cancelled.
+func (s *Service) PickBottles() (string, error) {
+	start := importer.BottlesDirs()[0]
+	if _, err := os.Stat(start); err != nil {
+		start, _ = os.UserHomeDir()
+	}
+	dir, err := s.app.Dialog.OpenFile().
+		SetTitle("选择 Bottles 的 bottles 目录，或其中一个 bottle").
+		SetDirectory(start).
+		CanChooseDirectories(true).
+		CanChooseFiles(false).
+		ShowHiddenFiles(true).
+		PromptForSingleSelection()
+	if err != nil || dir == "" {
+		return "", err
+	}
+	if len(importer.Scan(dir)) == 0 {
+		return "", fmt.Errorf("%s 里没有 bottle：选 Bottles 的 bottles 目录，或某个含 bottle.yml 的 bottle 目录", dir)
+	}
+	s.mu.Lock()
+	s.bottleDir = dir
+	s.mu.Unlock()
+	return dir, nil
 }
 
 func (s *Service) ImportBottle(dir string) (*importer.Result, error) {
