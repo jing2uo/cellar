@@ -10,8 +10,11 @@ import (
 // from the file alone (not merged with profiles), so writing them back
 // records only what the user set.
 type Settings struct {
-	Runner         string            `json:"runner"`
-	Profiles       []string          `json:"profiles"`
+	Runner   string   `json:"runner"`
+	Profiles []string `json:"profiles"`
+	// Locale and FontSets are the effective ones, profiles included.
+	Locale         string            `json:"locale"`
+	FontSets       []string          `json:"font_sets"`
 	WindowsVersion string            `json:"windows_version"`
 	VirtualDesktop string            `json:"virtual_desktop"`
 	DPI            int               `json:"dpi"`
@@ -30,6 +33,18 @@ func ReadSettings(path string) (Settings, error) {
 	}
 	st := Settings{Runner: c.Runner, Profiles: c.Profiles, WindowsVersion: c.WindowsVersion,
 		VirtualDesktop: c.VirtualDesktop, DPI: c.DPI, DllOverrides: c.DllOverrides, Dependencies: c.Dependencies}
+	file, err := parse(b, path)
+	if err != nil {
+		return Settings{}, err
+	}
+	layers, _, err := expand(c.Profiles)
+	if err != nil {
+		return Settings{}, err
+	}
+	st.Locale, st.FontSets = localeOf(append(layers, file))
+	if st.FontSets == nil {
+		st.FontSets = []string{}
+	}
 	if st.Profiles == nil {
 		st.Profiles = []string{}
 	}
@@ -56,7 +71,19 @@ func WriteSettings(path string, st Settings) error {
 		}
 	}
 	opt("runner", st.Runner, st.Runner == "")
-	opt("profiles", st.Profiles, false)
+	// zh-cn and cjk only carry a locale and font sets, now written out.
+	var profiles []string
+	for _, p := range st.Profiles {
+		if p != "zh-cn" && p != "cjk" {
+			profiles = append(profiles, p)
+		}
+	}
+	if profiles == nil {
+		profiles = []string{}
+	}
+	opt("profiles", profiles, false)
+	opt("locale", st.Locale, st.Locale == "")
+	opt("font_sets", st.FontSets, false)
 	opt("windows_version", st.WindowsVersion, st.WindowsVersion == "")
 	opt("virtual_desktop", st.VirtualDesktop, st.VirtualDesktop == "")
 	opt("dpi", st.DPI, st.DPI == 0)

@@ -80,7 +80,7 @@ func Open(name string) (*Prefix, error) {
 	return p, nil
 }
 
-func Create(name, runner string, profiles []string) (*Prefix, error) {
+func Create(name, runner string, profiles []string, locale string, fontSets []string) (*Prefix, error) {
 	if !validName.MatchString(name) {
 		return nil, fmt.Errorf("bad prefix name %q", name)
 	}
@@ -91,7 +91,7 @@ func Create(name, runner string, profiles []string) (*Prefix, error) {
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return nil, err
 	}
-	if err := os.WriteFile(filepath.Join(dir, "cellar.toml"), []byte(config.Template(name, runner, profiles)), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(dir, "cellar.toml"), []byte(config.Template(name, runner, profiles, locale, fontSets)), 0o644); err != nil {
 		return nil, err
 	}
 	return Open(name)

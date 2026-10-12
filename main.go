@@ -30,7 +30,8 @@ var version = "dev"
 
 const usage = `cellar - Wine prefixes from cellar.toml
 
-  cellar new <prefix> [--runner R] [--profile zh-cn,...]
+  cellar new <prefix> [--runner R] [--locale zh_CN] [--fonts zh-hans,...] [--profile P,...]
+                                     (font sets: zh-hans zh-hant ja ko core)
   cellar list
   cellar inspect <prefix>            effective config after profiles merge
   cellar plan <prefix> [--force]     what apply would change
@@ -180,6 +181,8 @@ func cmdNew(args []string) error {
 	fs := flag.NewFlagSet("new", flag.ContinueOnError)
 	rn := fs.String("runner", "", "runner (default: system Wine, else newest download)")
 	prof := fs.String("profile", "", "comma-separated profiles")
+	loc := fs.String("locale", "", "Windows region (zh_CN, ja_JP...; default: the host's)")
+	fonts := fs.String("fonts", "", "comma-separated font sets (default: the locale's)")
 	pos, _, err := parse(fs, args)
 	if err != nil {
 		return err
@@ -196,7 +199,21 @@ func cmdNew(args []string) error {
 	if *prof != "" {
 		profiles = strings.Split(*prof, ",")
 	}
-	p, err := store.Create(pos[0], *rn, profiles)
+	// Without --locale/--fonts a --profile decides them; otherwise the host's
+	// locale and its font sets.
+	locale, sets := *loc, []string(nil)
+	if *fonts != "" {
+		sets = strings.Split(*fonts, ",")
+	}
+	if *prof == "" {
+		if locale == "" {
+			locale = config.HostLocale()
+		}
+		if sets == nil {
+			sets = config.SuggestedFontSets(locale)
+		}
+	}
+	p, err := store.Create(pos[0], *rn, profiles, locale, sets)
 	if err != nil {
 		return err
 	}

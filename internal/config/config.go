@@ -1,8 +1,8 @@
 // Package config defines cellar.toml and how its layers merge.
 //
 // Layers, later wins: the built-in "base" profile, the profiles the file
-// lists (in order), the file itself, then an optional override file. Tables
-// merge deeply; apps merge by id.
+// lists (in order), what locale and font_sets imply, the file itself, then
+// an optional override file. Tables merge deeply; apps merge by id.
 package config
 
 import (
@@ -24,9 +24,14 @@ import (
 var profileFS embed.FS
 
 type Config struct {
-	Name           string                    `toml:"name,omitempty" json:"name,omitempty"`
-	Runner         string                    `toml:"runner,omitempty" json:"runner,omitempty"`
-	Profiles       []string                  `toml:"profiles,omitempty" json:"profiles,omitempty"`
+	Name     string   `toml:"name,omitempty" json:"name,omitempty"`
+	Runner   string   `toml:"runner,omitempty" json:"runner,omitempty"`
+	Profiles []string `toml:"profiles,omitempty" json:"profiles,omitempty"`
+	// Locale is the Windows region, a glibc-style name (zh_CN, ja_JP): UI
+	// language and ANSI code page. "" leaves the host's.
+	Locale string `toml:"locale,omitempty" json:"locale,omitempty"`
+	// FontSets name the FontSets to apply (zh-hans, ja, core...).
+	FontSets       []string                  `toml:"font_sets,omitempty" json:"font_sets,omitempty"`
 	WindowsVersion string                    `toml:"windows_version,omitempty" json:"windows_version,omitempty"`
 	Env            map[string]string         `toml:"env,omitempty" json:"env,omitempty"`
 	DllOverrides   map[string]string         `toml:"dll_overrides,omitempty" json:"dll_overrides,omitempty"`
@@ -230,6 +235,8 @@ func Load(path, override string) (*Config, error) {
 	for _, p := range layers {
 		merge(merged, p)
 	}
+	locale, sets := localeOf(append(layers, user, ov))
+	merge(merged, localeLayer(locale, sets))
 	merge(merged, user)
 	if ov != nil {
 		merge(merged, ov)
@@ -246,7 +253,38 @@ func Load(path, override string) (*Config, error) {
 		return nil, fmt.Errorf("%s: %w", path, err)
 	}
 	c.Profiles = names[1:]
+	c.Locale, c.FontSets = locale, sets
+	c.applyFontSets()
 	return &c, nil
+}
+
+// localeOf finds locale and font_sets, the last layer setting each winning.
+// The set the locale suggests goes first: its fonts lead the UI fallbacks.
+func localeOf(layers []map[string]any) (string, []string) {
+	var locale string
+	var sets []string
+	for _, l := range layers {
+		if v, ok := l["locale"].(string); ok {
+			locale = v
+		}
+		if v, ok := l["font_sets"].([]any); ok {
+			sets = []string{}
+			for _, x := range v {
+				sets = append(sets, fmt.Sprint(x))
+			}
+		}
+	}
+	for _, loc := range Locales {
+		if loc.ID == locale && loc.FontSet != "" {
+			for i, s := range sets {
+				if s == loc.FontSet {
+					sets = append([]string{s}, append(sets[:i:i], sets[i+1:]...)...)
+					break
+				}
+			}
+		}
+	}
+	return locale, sets
 }
 
 func merge(dst, src map[string]any) {
@@ -297,16 +335,28 @@ func mergeApps(dst, src any) any {
 }
 
 // Template is what `cellar new` writes.
-func Template(name, runner string, profiles []string) string {
-	q := make([]string, len(profiles))
-	for i, p := range profiles {
-		q[i] = fmt.Sprintf("%q", p)
+func Template(name, runner string, profiles []string, locale string, fontSets []string) string {
+	list := func(xs []string, sorted bool) string {
+		q := make([]string, len(xs))
+		for i, x := range xs {
+			q[i] = fmt.Sprintf("%q", x)
+		}
+		if sorted {
+			sort.Strings(q)
+		}
+		return strings.Join(q, ", ")
 	}
-	sort.Strings(q)
+	extra := ""
+	if locale != "" {
+		extra += fmt.Sprintf("locale = %q\n", locale)
+	}
+	if fontSets != nil {
+		extra += fmt.Sprintf("font_sets = [%s]\n", list(fontSets, false))
+	}
 	return fmt.Sprintf(`# cellar prefix %q. Edit, then `+"`cellar plan %s`"+` / `+"`cellar apply %s`"+`.
 runner = %q
 profiles = [%s]
-
+%s
 # [dll_overrides]
 # taisafe = "disabled"
 
@@ -317,5 +367,5 @@ profiles = [%s]
 # id = "app"
 # exe = 'C:\Program Files\App\app.exe'
 # desktop = true
-`, name, name, name, runner, strings.Join(q, ", "))
+`, name, name, name, runner, list(profiles, true), extra)
 }

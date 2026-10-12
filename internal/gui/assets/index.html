@@ -100,6 +100,9 @@ select { font: inherit; padding: 6px 10px; border: 1px solid var(--line); border
 .form input, .form select { margin: 0; }
 .inline { display: flex; gap: 8px; align-items: center; }
 .inline input[type=checkbox] { width: auto; margin: 0; }
+.fsets { flex-wrap: wrap; gap: 4px 14px; color: var(--text); }
+.fsets label { gap: 5px; color: var(--text); }
+.fsets input { width: auto; margin: 0; }
 .deps { display: grid; grid-template-columns: 1fr 1fr; gap: 4px 14px; max-height: 210px; overflow: auto; }
 .deps label { display: flex; gap: 6px; align-items: flex-start; color: var(--text); font-size: 13px; }
 .deps input { width: auto; margin: 3px 0 0; }
@@ -217,7 +220,8 @@ async function renderMain() {
     <div class="head">
       <div><h1>${esc(p.name)}</h1>
         <div class="meta"><span class="badge s-${p.state}">${stateText[p.state]}</span>
-          <span>runner：${esc(p.runner)}</span><span>配置集：${esc((p.profiles || []).join("、") || "无")}</span></div></div>
+          <span>runner：${esc(p.runner)}</span><span>区域：${esc(localeName(p.locale))}</span>
+          ${(p.font_sets || []).length ? `<span>字体：${esc(p.font_sets.map(fontSetName).join("、"))}</span>` : ""}</div></div>
       <div class="actions">
         <button id="settings">设置</button><button id="install" class="primary">运行安装程序…</button></div>
     </div>
@@ -397,6 +401,34 @@ function runExe(name) {
   });
 }
 
+// Region and font sets: the locale sets the Windows UI language and code
+// page; each font set maps one script's Windows fonts to host fonts.
+const localeName = (id) => !id ? "跟随系统" : (env.locales.find((l) => l.id === id) || { name: id }).name;
+const fontSetName = (id) => (env.font_sets.find((f) => f.id === id) || { name: id }).name;
+const OTHER = "\u0000other";
+function localeField(value) {
+  const known = !value || env.locales.some((l) => l.id === value);
+  return `<div class="inline"><select id="loc"><option value="">跟随系统</option>
+    ${env.locales.map((l) => `<option value="${l.id}" ${l.id === value ? "selected" : ""}>${esc(l.name)} ${l.id}</option>`).join("")}
+    <option value="${OTHER}" ${known ? "" : "selected"}>其他…</option></select>
+    <input id="locx" placeholder="如 sv_SE" value="${known ? "" : esc(value)}" style="width:110px" ${known ? "hidden" : ""}></div>`;
+}
+const fontField = (sets) => `<div class="inline fsets">${env.font_sets.map((f) =>
+  `<label class="inline"><input type="checkbox" value="${f.id}" ${sets.includes(f.id) ? "checked" : ""}>${esc(f.name)}</label>`).join("")}</div>`;
+// wireLocale shows the free-form box for "其他…"; picking a locale ticks
+// its font set.
+function wireLocale(d) {
+  const sel = d.querySelector("#loc"), x = d.querySelector("#locx");
+  sel.onchange = () => {
+    x.hidden = sel.value !== OTHER;
+    const l = env.locales.find((l) => l.id === sel.value);
+    if (l && l.font_set) { const c = d.querySelector(`.fsets input[value="${l.font_set}"]`); if (c) c.checked = true; }
+  };
+}
+const readLocale = (d) => { const v = d.querySelector("#loc").value; return v === OTHER ? d.querySelector("#locx").value.trim() : v; };
+const readFonts = (d) => [...d.querySelectorAll(".fsets input:checked")].map((i) => i.value);
+const LOCALE_NOTE = "Windows 界面语言与编码（老软件乱码多半是它）";
+const FONTS_NOTE = "把程序点名要的字体（宋体、MS Gothic、Gulim…）换成本机 Noto CJK；西文核心字体用 winetricks 装微软原版";
 const WINVER = [["win11", "Windows 11"], ["win10", "Windows 10"], ["win81", "Windows 8.1"], ["win7", "Windows 7"], ["winxp", "Windows XP"]];
 const DLLMODE = [["native,builtin", "原生优先"], ["builtin,native", "内置优先"], ["native", "仅原生"], ["builtin", "仅内置"], ["disabled", "禁用"]];
 const DPIS = [[0, "自动（跟随系统 Xft.dpi）"], [96, "100%"], [120, "125%"], [144, "150%"], [168, "175%"], [192, "200%"]];
@@ -415,7 +447,8 @@ async function settings(name) {
         <input id="vdres" placeholder="1920x1080" value="${esc(st.virtual_desktop || "1920x1080")}" style="width:140px"><small class="meta">程序都开在一个 Wine 桌面窗口里</small></div>
       <label>缩放（DPI）</label><select id="dpi">${DPIS.map(([v, t]) => `<option value="${v}" ${st.dpi === v ? "selected" : ""}>${t}${v ? `（${v}）` : ""}</option>`).join("")}
         ${st.dpi && !DPIS.some(([v]) => v === st.dpi) ? `<option value="${st.dpi}" selected>${st.dpi}</option>` : ""}</select>
-      <label>中文环境</label><div class="inline"><input type="checkbox" id="zh" ${st.profiles.includes("zh-cn") ? "checked" : ""}><small class="meta">zh-cn 配置集：中文区域、Noto CJK 字体链接与替换</small></div>
+      <label>区域</label><div>${localeField(st.locale)}<small class="meta">${LOCALE_NOTE}</small></div>
+      <label>字体</label><div>${fontField(st.font_sets)}<small class="meta">${FONTS_NOTE}</small></div>
     </div>
     <div class="meta">依赖（winetricks 安装，已装的会跳过）</div>
     <div class="deps">${cat.map((d) => `<label><input type="checkbox" value="${d.verb}" ${st.dependencies.includes(d.verb) ? "checked" : ""}>
@@ -427,6 +460,7 @@ async function settings(name) {
     <div class="row"><button id="c">取消</button><button id="s" class="primary">保存并应用</button></div>`, (d) => {
     const wireX = () => d.querySelectorAll(".dx").forEach((b) => b.onclick = () => b.parentElement.remove());
     wireX();
+    wireLocale(d);
     d.querySelector("#adddll").onclick = () => { d.querySelector("#dlls").insertAdjacentHTML("beforeend", dllRow()); wireX(); };
     d.querySelector("#c").onclick = () => d.close();
     d.querySelector("#s").onclick = async () => {
@@ -434,9 +468,7 @@ async function settings(name) {
         .concat(d.querySelector("#extra").value.split(/\s+/).filter(Boolean));
       const dll = {};
       d.querySelectorAll(".dll").forEach((r) => { const k = r.querySelector(".dk").value.trim(); if (k) dll[k] = r.querySelector(".dv").value; });
-      let profiles = st.profiles.filter((x) => x !== "zh-cn");
-      if (d.querySelector("#zh").checked) profiles = ["zh-cn", ...profiles];
-      const next = { ...st, profiles, windows_version: d.querySelector("#wv").value,
+      const next = { ...st, locale: readLocale(d), font_sets: readFonts(d), windows_version: d.querySelector("#wv").value,
         virtual_desktop: d.querySelector("#vd").checked ? d.querySelector("#vdres").value.trim() : "",
         dpi: +d.querySelector("#dpi").value, dll_overrides: dll, dependencies: [...new Set(deps)] };
       try { await call("SaveSettings", name, next); d.close(); await load(); startTask(name, () => call("ApplyTask", name)); }
@@ -494,13 +526,14 @@ function newPrefix() {
   if (!env.runners.length) { sel = RUNNERS; renderList(); renderMain(); return; }
   dialog(`<b>新建 prefix</b><div class="meta">名称</div><input id="n" placeholder="例如 wechat">
     <div class="meta">runner</div><select id="r">${env.runners.map((r) => `<option value="${esc(r.name)}" ${r.default ? "selected" : ""}>${esc(r.name)} — ${esc(r.version)}${r.problems && r.problems.length ? "（⚠ 缺 32 位支持）" : ""}</option>`).join("")}</select>
-    <div class="meta">配置集（逗号分隔；zh-cn = 中文区域与 Noto CJK 字体）</div><input id="p" value="zh-cn">
+    <div class="meta">区域 · ${LOCALE_NOTE}</div>${localeField(env.host_locale)}
+    <div class="meta">字体</div>${fontField(env.host_fonts || [])}
     <div id="e" class="err"></div><div class="row"><button id="c">取消</button><button id="k" class="primary">创建</button></div>`, (d) => {
     d.querySelector("#c").onclick = () => d.close();
+    wireLocale(d);
     d.querySelector("#k").onclick = async () => {
       const n = d.querySelector("#n").value.trim();
-      const prof = d.querySelector("#p").value.split(",").map((s) => s.trim()).filter(Boolean);
-      try { const id = await call("Create", n, d.querySelector("#r").value, prof); sel = n; d.close(); await load(); if (id) watchTask(n, id); }
+      try { const id = await call("Create", n, d.querySelector("#r").value, readLocale(d), readFonts(d)); sel = n; d.close(); await load(); if (id) watchTask(n, id); }
       catch (e) { d.querySelector("#e").textContent = e.message || e; }
     };
   });

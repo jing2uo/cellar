@@ -67,7 +67,7 @@ exe = 'C:\a.exe'
 
 func TestSettingsRoundTrip(t *testing.T) {
 	p := filepath.Join(t.TempDir(), "cellar.toml")
-	os.WriteFile(p, []byte(Template("x", "system", []string{"zh-cn"})), 0o644)
+	os.WriteFile(p, []byte(Template("x", "system", []string{"zh-cn"}, "", nil)), 0o644)
 	st, err := ReadSettings(p)
 	if err != nil {
 		t.Fatal(err)
@@ -83,7 +83,7 @@ func TestSettingsRoundTrip(t *testing.T) {
 		t.Fatal(err)
 	}
 	if c.VirtualDesktop != "1920x1080" || c.DPI != 144 || c.WindowsVersion != "win7" || c.DllOverrides["mfc42"] != "native,builtin" ||
-		len(c.Dependencies) != 2 || len(c.Profiles) != 1 {
+		len(c.Dependencies) != 2 || len(c.Profiles) != 0 || c.Locale != "zh_CN" {
 		t.Fatalf("not applied: %+v", c)
 	}
 	// Base profile's override survives next to the user's.

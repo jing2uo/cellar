@@ -77,13 +77,18 @@ type Service struct {
 }
 
 type Env struct {
-	Version  string        `json:"version"`
-	Home     string        `json:"home"`
-	Packaged bool          `json:"packaged"`
-	Flatpak  bool          `json:"flatpak"`
-	Runners  []runner.Info `json:"runners"`
-	Default  string        `json:"default_runner"`
-	Profiles []string      `json:"profiles"`
+	Version  string           `json:"version"`
+	Home     string           `json:"home"`
+	Packaged bool             `json:"packaged"`
+	Flatpak  bool             `json:"flatpak"`
+	Runners  []runner.Info    `json:"runners"`
+	Default  string           `json:"default_runner"`
+	Profiles []string         `json:"profiles"`
+	Locales  []config.Locale  `json:"locales"`
+	FontSets []config.FontSet `json:"font_sets"`
+	// HostLocale and its font sets are what a new prefix starts with.
+	HostLocale string   `json:"host_locale"`
+	HostFonts  []string `json:"host_fonts"`
 }
 
 func (s *Service) Env() Env {
@@ -95,6 +100,8 @@ func (s *Service) Env() Env {
 	return Env{
 		Version: s.version, Home: store.Home(), Packaged: store.Packaged(), Flatpak: runner.InFlatpak(),
 		Runners: infos, Default: def, Profiles: config.Profiles(),
+		Locales: config.Locales, FontSets: config.FontSets,
+		HostLocale: config.HostLocale(), HostFonts: config.SuggestedFontSets(config.HostLocale()),
 	}
 }
 
@@ -132,6 +139,8 @@ type PrefixRow struct {
 	Source   string       `json:"source"` // local | flatpak
 	Runner   string       `json:"runner"`
 	Profiles []string     `json:"profiles"`
+	Locale   string       `json:"locale"`
+	FontSets []string     `json:"font_sets"`
 	State    string       `json:"state"` // new | applied | changed | error
 	Apps     []AppRow     `json:"apps"`
 	Config   string       `json:"config"`
@@ -159,7 +168,7 @@ func (s *Service) Prefixes() ([]PrefixRow, error) {
 			continue
 		}
 		st, _ := p.State()
-		r.Runner, r.Profiles = c.Runner, c.Profiles
+		r.Runner, r.Profiles, r.Locale, r.FontSets = c.Runner, c.Profiles, c.Locale, c.FontSets
 		switch {
 		case st.Hash == "":
 			r.State = "new"
@@ -292,7 +301,7 @@ func (s *Service) Launch(name, app, exe string) error {
 
 // Create makes the prefix and starts its first apply (wineboot, fonts),
 // returning the task id.
-func (s *Service) Create(name, runnerName string, profiles []string) (string, error) {
+func (s *Service) Create(name, runnerName, locale string, fontSets []string) (string, error) {
 	if runnerName == "" {
 		var err error
 		if runnerName, err = runner.Default(); err != nil {
@@ -302,7 +311,10 @@ func (s *Service) Create(name, runnerName string, profiles []string) (string, er
 	if _, err := runner.Resolve(runnerName); err != nil {
 		return "", err
 	}
-	if _, err := store.Create(name, runnerName, profiles); err != nil {
+	if fontSets == nil {
+		fontSets = []string{}
+	}
+	if _, err := store.Create(name, runnerName, nil, locale, fontSets); err != nil {
 		return "", err
 	}
 	return s.ApplyTask(name)
