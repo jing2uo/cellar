@@ -452,6 +452,9 @@ func (s *Service) ApplyTask(name string) (string, error) {
 		if err != nil {
 			return err
 		}
+		if len(pl.Changes) == 0 {
+			log("prefix 已经和配置一致，不用改动")
+		}
 		for _, c := range pl.Changes {
 			log(c.String())
 		}
