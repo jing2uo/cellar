@@ -183,8 +183,9 @@ func (e *Editor) AddApp(a App) {
 	e.lines = append(e.lines, b...)
 }
 
-// RemoveApp deletes the [[apps]] block with this id.
-func (e *Editor) RemoveApp(id string) bool {
+// app finds the [[apps]] block with this id: its header line and the line
+// after its end, or -1.
+func (e *Editor) app(id string) (int, int) {
 	for i, l := range e.lines {
 		if strings.TrimSpace(l) != "[[apps]]" {
 			continue
@@ -197,15 +198,40 @@ func (e *Editor) RemoveApp(id string) bool {
 			}
 		}
 		if k := e.findKey(i+1, end, "id"); k >= 0 && strings.Contains(e.lines[k], quote(id)) {
-			from := i
-			if from > 0 && strings.TrimSpace(e.lines[from-1]) == "" {
-				from--
-			}
-			e.lines = append(e.lines[:from], e.lines[end:]...)
-			return true
+			return i, end
 		}
 	}
-	return false
+	return -1, -1
+}
+
+// RemoveApp deletes the [[apps]] block with this id.
+func (e *Editor) RemoveApp(id string) bool {
+	from, end := e.app(id)
+	if from < 0 {
+		return false
+	}
+	if from > 0 && strings.TrimSpace(e.lines[from-1]) == "" {
+		from--
+	}
+	e.lines = append(e.lines[:from], e.lines[end:]...)
+	return true
+}
+
+// RenameApp sets the display name of the app with this id; its id, which
+// launchers and `cellar run` use, stays.
+func (e *Editor) RenameApp(id, name string) bool {
+	start, end := e.app(id)
+	if start < 0 {
+		return false
+	}
+	line := "name = " + quote(name)
+	if k := e.findKey(start+1, end, "name"); k >= 0 {
+		e.lines[k] = line
+		return true
+	}
+	k := e.findKey(start+1, end, "id")
+	e.lines = append(e.lines[:k+1], append([]string{line}, e.lines[k+1:]...)...)
+	return true
 }
 
 // Save writes the file if it still loads; otherwise nothing changes.

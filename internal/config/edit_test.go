@@ -127,3 +127,21 @@ func TestAddAppControlChars(t *testing.T) {
 		t.Errorf("%q %q", a.Args, a.Workdir)
 	}
 }
+
+func TestRenameApp(t *testing.T) {
+	p := filepath.Join(t.TempDir(), "cellar.toml")
+	os.WriteFile(p, []byte("runner = \"system\"\n"), 0o644)
+	e, _ := Edit(p)
+	e.AddApp(App{ID: "a", Exe: `C:\a.exe`})
+	e.AddApp(App{ID: "b", Name: "B", Exe: `C:\b.exe`})
+	if !e.RenameApp("a", "Alpha \"1\"") || !e.RenameApp("b", "Beta") || e.RenameApp("c", "x") {
+		t.Fatal("rename result")
+	}
+	if err := e.Save(); err != nil {
+		t.Fatal(err)
+	}
+	c, _ := Load(p, "")
+	if c.Apps[0].Name != "Alpha \"1\"" || c.Apps[0].ID != "a" || c.Apps[1].Name != "Beta" {
+		t.Errorf("%+v", c.Apps)
+	}
+}

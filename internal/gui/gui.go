@@ -633,6 +633,14 @@ func (s *Service) AddApp(name string, prog winapp.Program) (string, error) {
 	return a.ID, err
 }
 
+func (s *Service) RenameApp(name, id, label string) error {
+	p, err := store.Open(name)
+	if err != nil {
+		return err
+	}
+	return appmgr.Rename(s.self, p, id, label)
+}
+
 func (s *Service) RemoveApp(name, id string) error {
 	p, err := store.Open(name)
 	if err != nil {

@@ -115,6 +115,25 @@ func RefreshDesktop(cellarBin string, p *store.Prefix) error {
 	return nil
 }
 
+// Rename changes an app's display name, in cellar.toml and its launcher.
+func Rename(cellarBin string, p *store.Prefix, id, name string) error {
+	name = strings.TrimSpace(name)
+	if name == "" {
+		return fmt.Errorf("empty name")
+	}
+	e, err := config.Edit(p.Config)
+	if err != nil {
+		return err
+	}
+	if !e.RenameApp(id, name) {
+		return fmt.Errorf("no app %q", id)
+	}
+	if err := e.Save(); err != nil {
+		return err
+	}
+	return RefreshDesktop(cellarBin, p)
+}
+
 // Remove drops the app and its launcher; program files stay.
 func Remove(p *store.Prefix, id string) error {
 	desktop.Remove(p, id)

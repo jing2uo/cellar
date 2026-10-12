@@ -50,9 +50,12 @@ section h2 { font-size: 13px; font-weight: 600; color: var(--mute); margin: 0 0 
 .apps { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 10px; }
 .app { border: 1px solid var(--line); border-radius: 10px; padding: 12px 14px; display: flex; flex-direction: column; gap: 6px; }
 .app b { font-weight: 600; }
-.app .top { display: flex; gap: 10px; align-items: center; }
+.app .top { display: flex; gap: 10px; align-items: center; height: 2.7em; }
+.app .top b { flex: 1; min-width: 0; line-height: 1.35; overflow: hidden; overflow-wrap: anywhere;
+  display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; }
+.app .dots { border: none; background: none; padding: 0 4px; color: var(--mute); font-size: 18px; line-height: 1; }
 .app img { width: 32px; height: 32px; object-fit: contain; }
-.app .btns { display: flex; gap: 6px; } .app .btns button:first-child { flex: 1; }
+.app .btns { display: flex; gap: 6px; margin-top: auto; } .app .btns button:first-child { flex: 1; }
 .app code { color: var(--mute); font-size: 11.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .badge { font-size: 11.5px; padding: 1px 8px; border-radius: 99px; border: 1px solid currentColor; }
 .s-applied, .item small.s-applied { color: var(--ok); } .s-changed, .s-new, .item small.s-changed, .item small.s-new { color: var(--warn); } .s-error, .item small.s-error { color: var(--err); }
@@ -252,8 +255,8 @@ async function renderMain() {
     ${noWine()}${p.error ? `<section><div class="err">${esc(p.error)}</div></section>` : ""}
     <div id="task"></div>
     <section><div class="sechead"><h2>应用</h2><div class="actions"><button id="install">运行程序</button><button id="addapp">添加应用</button></div></div><div class="apps">${p.apps.map((a) => `
-      <div class="app"><div class="top">${a.icon ? `<img src="${a.icon}">` : ""}<b>${esc(a.name)}</b><span style="flex:1"></span>
-        <button class="x" data-rm="${esc(a.id)}" title="移除这个应用（不删程序文件）">×</button></div>
+      <div class="app"><div class="top">${a.icon ? `<img src="${a.icon}">` : ""}<b title="${esc(a.name)}">${esc(a.name)}</b>
+        <button class="dots" data-appmenu="${esc(a.id)}" title="改名、删除">⋯</button></div>
       <code title="${esc(a.exe)}">${esc(a.exe)}</code>
       <div class="btns"><button data-app="${esc(a.id)}">启动</button>
       <button data-desk="${esc(a.id)}" data-on="${a.desktop ? 1 : ""}" title="${a.desktop ? "从应用菜单移除" : "在应用菜单里创建快捷方式"}">${a.desktop ? "移除快捷方式" : "快捷方式"}</button></div></div>`).join("") || `<div class="empty">还没有应用。先点“运行程序”装好软件，再点“添加应用”。</div>`}</div></section>
@@ -266,10 +269,23 @@ async function renderMain() {
     try { await call("Desktop", p.name, b.dataset.desk, !!b.dataset.on); } catch (e) { fail(e); }
     await load();
   });
-  document.querySelectorAll("[data-rm]").forEach((b) => b.onclick = async () => {
-    if (!await ask(`移除应用 ${b.dataset.rm}？程序文件保留，菜单快捷方式会删掉。`)) return;
-    try { await call("RemoveApp", p.name, b.dataset.rm); } catch (e) { fail(e); }
-    await load();
+  document.querySelectorAll("[data-appmenu]").forEach((b) => b.onclick = (ev) => {
+    const a = p.apps.find((x) => x.id === b.dataset.appmenu);
+    const r = b.getBoundingClientRect();
+    ev.stopPropagation();
+    openMenu([
+      ["改名", async () => {
+        const label = await ask("应用名称（菜单里显示的名字）", a.name);
+        if (!label || label === a.name) return;
+        try { await call("RenameApp", p.name, a.id, label); } catch (e) { fail(e); }
+        await load();
+      }],
+      ["删除", async () => {
+        if (!await ask(`删除应用 ${a.name}？只是从 Cellar 里移除，程序文件保留，菜单快捷方式会删掉。`)) return;
+        try { await call("RemoveApp", p.name, a.id); } catch (e) { fail(e); }
+        await load();
+      }, "danger"],
+    ], r.right - 120, r.bottom + 4);
   });
   wireNoWine();
   showPlan(p.name);
