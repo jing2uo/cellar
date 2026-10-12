@@ -82,10 +82,11 @@ func ParseLnk(b []byte) (*Shortcut, error) {
 		}
 		raw := b[off : off+n]
 		off += n
+		// Wine counts a terminating NUL in, Windows does not.
 		if flags&isUnicode != 0 {
-			return utf16s(raw)
+			return utf16z(raw)
 		}
-		return string(raw)
+		return ansiz(raw)
 	}
 	var rel string
 	if flags&hasName != 0 {
