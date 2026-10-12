@@ -274,9 +274,24 @@ async function watchTask(name, id) {
     if (watching !== id || sel !== name || !$("#task")) return;
     let t;
     try { t = await call("Task", id); } catch { return; }
-    $("#task").innerHTML = `<div class="task ${t.error ? "err" : ""}"><b>${t.done ? (t.error ? "失败：" : "完成：") : `<span class="spin"></span>`}${esc(t.title)}</b>
-      ${t.error ? `<div class="err">${esc(t.error.split("\n")[0])}</div>` : ""}<pre>${esc(t.lines.slice(-60).join("\n"))}</pre></div>`;
-    const pre = $("#task pre"); if (pre) pre.scrollTop = pre.scrollHeight;
+    // Update the panel in place: rebuilding it every poll would reset the
+    // log's scroll. The log follows new output only while scrolled to the end.
+    let pre = $("#task pre");
+    if (!pre || pre.dataset.task !== id) {
+      $("#task").innerHTML = `<div class="task"><b></b><div class="err" hidden></div><pre data-task="${esc(id)}"></pre></div>`;
+      pre = $("#task pre");
+    }
+    const box = $("#task .task");
+    box.classList.toggle("err", !!t.error);
+    box.querySelector("b").innerHTML = `${t.done ? (t.error ? "失败：" : "完成：") : `<span class="spin"></span>`}${esc(t.title)}`;
+    const errEl = box.querySelector("div.err");
+    errEl.hidden = !t.error; errEl.textContent = t.error ? t.error.split("\n")[0] : "";
+    const text = t.lines.slice(-200).join("\n");
+    if (pre.textContent !== text) {
+      const atEnd = pre.scrollHeight - pre.scrollTop - pre.clientHeight < 8;
+      pre.textContent = text;
+      if (atEnd) pre.scrollTop = pre.scrollHeight;
+    }
     if (t.done) {
       if (t.error) { // keep the panel up so the error and log stay readable
         toast("失败：" + t.title, true);
@@ -334,6 +349,7 @@ function fmt(c) {
   if (c.op === "set") return `${c.key}\\${c.name} = ${c.value}`;
   if (c.op === "delete") return `${c.key}\\${c.name}`;
   if (c.op === "link" || c.op === "unlink") return `${c.name} → ${c.value}`;
+  if (c.op === "install") return c.value ? `${c.name} ${c.value}` : `winetricks ${c.name}`;
   return `${c.name}: → ${c.value}`;
 }
 

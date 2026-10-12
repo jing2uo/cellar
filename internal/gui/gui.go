@@ -44,6 +44,13 @@ func Run(version, view string) error {
 	if err != nil {
 		return err
 	}
+	// GTK's default Vulkan renderer cannot import the dmabufs WebKit hands it
+	// on some GPUs (Intel Lunar Lake's CCS modifier): it reads every frame
+	// back to the CPU, and the window stalls for seconds while the page
+	// animates. The GL renderer imports them directly.
+	if os.Getenv("GSK_RENDERER") == "" {
+		os.Setenv("GSK_RENDERER", "gl")
+	}
 	svc := &Service{self: self, version: version}
 	app := application.New(application.Options{
 		Name:        "Cellar",
