@@ -105,7 +105,6 @@ select { font: inherit; padding: 6px 10px; border: 1px solid var(--line); border
 @keyframes spin { to { transform: rotate(360deg); } }
 .sechead { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; }
 .sechead h2 { margin: 0; }
-.x { border: none; background: none; color: var(--mute); padding: 0 4px; font-size: 16px; }
 .form { display: grid; grid-template-columns: 120px 1fr; gap: 10px 14px; align-items: center; margin: 12px 0; }
 .form label { color: var(--mute); }
 .form input, .form select { margin: 0; }
@@ -127,7 +126,6 @@ select { font: inherit; padding: 6px 10px; border: 1px solid var(--line); border
 .deps label { display: flex; gap: 6px; align-items: flex-start; color: var(--text); font-size: 13px; }
 .deps input { width: auto; margin: 3px 0 0; }
 .deps small { color: var(--mute); display: block; }
-.dll { display: flex; gap: 6px; margin-bottom: 6px; } .dll input, .dll select { margin: 0; }
 .plist { max-height: 46vh; overflow: auto; display: flex; flex-direction: column; gap: 6px; margin: 10px 0; }
 .prow { display: flex; gap: 10px; align-items: center; border: 1px solid var(--line); border-radius: 8px; padding: 6px 10px; }
 .prow img, .prow .ph { width: 28px; height: 28px; object-fit: contain; flex: none; }
@@ -631,16 +629,12 @@ const readFonts = (d) => [...d.querySelectorAll(".fsets input:checked")].map((i)
 const LOCALE_NOTE = "Windows 界面语言与编码（老软件乱码多半是它）";
 const FONTS_NOTE = "程序点名要的字体（宋体、MS Gothic、Gulim、Arial…）统一换成 Noto CJK / Liberation，本机没有的在应用时下载";
 const WINVER = [["win11", "Windows 11"], ["win10", "Windows 10"], ["win81", "Windows 8.1"], ["win7", "Windows 7"], ["winxp", "Windows XP"]];
-const DLLMODE = [["native,builtin", "原生优先"], ["builtin,native", "内置优先"], ["native", "仅原生"], ["builtin", "仅内置"], ["disabled", "禁用"]];
 const DPIS = [[0, "自动（跟随系统 Xft.dpi）"], [96, "100%"], [120, "125%"], [144, "150%"], [168, "175%"], [192, "200%"]];
 
 async function settings(name) {
   const [st, cat] = await Promise.all([call("Settings", name), call("DependencyCatalog")]);
   const known = new Set(cat.map((d) => d.verb));
   const extra = st.dependencies.filter((v) => !known.has(v));
-  const dllRow = (k = "", v = "native,builtin") => `<div class="dll"><input class="dk" placeholder="dll 名，如 mfc42" value="${esc(k)}">
-    <select class="dv">${DLLMODE.map(([m, t]) => `<option value="${m}" ${m === v ? "selected" : ""}>${t}（${m}）</option>`).join("")}</select>
-    <button class="x dx">×</button></div>`;
   dialog(`<b>${esc(name)} 设置</b>
     <div class="form">
       <label>Windows 版本</label><select id="wv"><option value="">默认（Windows 10）</option>${WINVER.map(([v, t]) => `<option value="${v}" ${st.windows_version === v ? "selected" : ""}>${t}</option>`).join("")}</select>
@@ -655,24 +649,17 @@ async function settings(name) {
     <div class="deps">${cat.map((d) => `<label><input type="checkbox" value="${d.verb}" ${st.dependencies.includes(d.verb) ? "checked" : ""}>
       <span>${d.verb}${d.slow ? "（慢）" : ""}<small>${esc(d.note)}</small></span></label>`).join("")}</div>
     <input id="extra" placeholder="其他 winetricks verb，空格分隔" value="${esc(extra.join(" "))}">
-    <div class="meta">DLL 覆盖</div><div id="dlls">${Object.entries(st.dll_overrides).map(([k, v]) => dllRow(k, v)).join("")}</div>
-    <button id="adddll">＋ DLL</button>
     <div id="e" class="err"></div>
     <div class="row"><button id="c">取消</button><button id="s" class="primary">保存并应用</button></div>`, (d) => {
-    const wireX = () => d.querySelectorAll(".dx").forEach((b) => b.onclick = () => b.parentElement.remove());
-    wireX();
     wireLocale(d);
     showFontStatus(d);
-    d.querySelector("#adddll").onclick = () => { d.querySelector("#dlls").insertAdjacentHTML("beforeend", dllRow()); wireX(); };
     d.querySelector("#c").onclick = () => d.close();
     d.querySelector("#s").onclick = async () => {
       const deps = [...d.querySelectorAll(".deps input:checked")].map((i) => i.value)
         .concat(d.querySelector("#extra").value.split(/\s+/).filter(Boolean));
-      const dll = {};
-      d.querySelectorAll(".dll").forEach((r) => { const k = r.querySelector(".dk").value.trim(); if (k) dll[k] = r.querySelector(".dv").value; });
       const next = { ...st, locale: readLocale(d), font_sets: readFonts(d), windows_version: d.querySelector("#wv").value,
         virtual_desktop: d.querySelector("#vd").checked ? d.querySelector("#vdres").value.trim() : "",
-        dpi: +d.querySelector("#dpi").value, dll_overrides: dll, dependencies: [...new Set(deps)] };
+        dpi: +d.querySelector("#dpi").value, dependencies: [...new Set(deps)] };
       try { await call("SaveSettings", name, next); d.close(); await applyNow(name); }
       catch (e) { d.querySelector("#e").textContent = e.message || e; }
     };

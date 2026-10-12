@@ -18,7 +18,6 @@ type Settings struct {
 	WindowsVersion string            `json:"windows_version"`
 	VirtualDesktop string            `json:"virtual_desktop"`
 	DPI            int               `json:"dpi"`
-	DllOverrides   map[string]string `json:"dll_overrides"`
 	Dependencies   []string          `json:"dependencies"`
 }
 
@@ -32,7 +31,7 @@ func ReadSettings(path string) (Settings, error) {
 		return Settings{}, err
 	}
 	st := Settings{Runner: c.Runner, Profiles: c.Profiles, WindowsVersion: c.WindowsVersion,
-		VirtualDesktop: c.VirtualDesktop, DPI: c.DPI, DllOverrides: c.DllOverrides, Dependencies: c.Dependencies}
+		VirtualDesktop: c.VirtualDesktop, DPI: c.DPI, Dependencies: c.Dependencies}
 	file, err := parse(b, path)
 	if err != nil {
 		return Settings{}, err
@@ -47,9 +46,6 @@ func ReadSettings(path string) (Settings, error) {
 	}
 	if st.Profiles == nil {
 		st.Profiles = []string{}
-	}
-	if st.DllOverrides == nil {
-		st.DllOverrides = map[string]string{}
 	}
 	if st.Dependencies == nil {
 		st.Dependencies = []string{}
@@ -88,6 +84,5 @@ func WriteSettings(path string, st Settings) error {
 	opt("virtual_desktop", st.VirtualDesktop, st.VirtualDesktop == "")
 	opt("dpi", st.DPI, st.DPI == 0)
 	opt("dependencies", st.Dependencies, len(st.Dependencies) == 0)
-	e.SetTable("dll_overrides", st.DllOverrides)
 	return e.Save()
 }

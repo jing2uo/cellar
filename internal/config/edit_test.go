@@ -67,13 +67,12 @@ exe = 'C:\a.exe'
 
 func TestSettingsRoundTrip(t *testing.T) {
 	p := filepath.Join(t.TempDir(), "cellar.toml")
-	os.WriteFile(p, []byte(Template("x", "system", []string{"zh-cn"}, "", nil)), 0o644)
+	os.WriteFile(p, []byte(Template("x", "system", []string{"zh-cn"}, "", nil)+"\n[dll_overrides]\ntaisafe = \"disabled\"\n"), 0o644)
 	st, err := ReadSettings(p)
 	if err != nil {
 		t.Fatal(err)
 	}
 	st.VirtualDesktop, st.DPI, st.WindowsVersion = "1920x1080", 144, "win7"
-	st.DllOverrides["mfc42"] = "native,builtin"
 	st.Dependencies = []string{"vcrun2022", "riched20"}
 	if err := WriteSettings(p, st); err != nil {
 		t.Fatal(err)
@@ -82,13 +81,14 @@ func TestSettingsRoundTrip(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if c.VirtualDesktop != "1920x1080" || c.DPI != 144 || c.WindowsVersion != "win7" || c.DllOverrides["mfc42"] != "native,builtin" ||
+	if c.VirtualDesktop != "1920x1080" || c.DPI != 144 || c.WindowsVersion != "win7" ||
 		len(c.Dependencies) != 2 || len(c.Profiles) != 0 || c.Locale != "zh_CN" {
 		t.Fatalf("not applied: %+v", c)
 	}
-	// Base profile's override survives next to the user's.
-	if c.DllOverrides["winemenubuilder.exe"] != "disabled" {
-		t.Fatal("lost base dll override")
+	// DLL overrides are not a setting: the file's own and the base
+	// profile's stay as they were.
+	if c.DllOverrides["taisafe"] != "disabled" || c.DllOverrides["winemenubuilder.exe"] != "disabled" {
+		t.Fatalf("dll overrides %v", c.DllOverrides)
 	}
 	b, _ := os.ReadFile(p)
 	if !strings.Contains(string(b), "# [[apps]]") {
@@ -97,13 +97,12 @@ func TestSettingsRoundTrip(t *testing.T) {
 	// Clearing.
 	st, _ = ReadSettings(p)
 	st.VirtualDesktop, st.DPI, st.WindowsVersion, st.Dependencies = "", 0, "", nil
-	st.DllOverrides = map[string]string{}
 	st.Profiles = []string{}
 	if err := WriteSettings(p, st); err != nil {
 		t.Fatal(err)
 	}
 	c, _ = Load(p, "")
-	if c.VirtualDesktop != "" || c.DPI != 0 || c.WindowsVersion != "win10" || len(c.Dependencies) != 0 || len(c.Profiles) != 0 || c.DllOverrides["mfc42"] != "" {
+	if c.VirtualDesktop != "" || c.DPI != 0 || c.WindowsVersion != "win10" || len(c.Dependencies) != 0 || len(c.Profiles) != 0 {
 		t.Fatalf("not cleared: %+v", c)
 	}
 }
