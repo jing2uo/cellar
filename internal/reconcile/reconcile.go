@@ -430,15 +430,25 @@ func (pl *Plan) Apply(log func(string)) error {
 		log(fmt.Sprintf("drive %s: -> %s", letter, orNone(target)))
 	}
 
+	// A verb that fails (often a download) does not stop the rest: the
+	// others still install and the state is still recorded. winetricks.log
+	// decides what is pending, so the failed ones stay in the next plan.
+	var failed []string
+	var details []string
 	for _, v := range pl.deps {
 		log("winetricks " + v)
 		if err := pl.winetricks(v, log); err != nil {
-			return err
+			log("  ✗ " + v + " failed, skipped")
+			failed = append(failed, v)
+			details = append(details, err.Error())
 		}
 	}
 
 	installFP := pl.st.Install
-	if pl.install != nil {
+	if pl.install != nil && len(failed) > 0 {
+		// The installer may need what failed; it runs on the next apply.
+		log("install skipped: dependencies failed")
+	} else if pl.install != nil {
 		run := pl.RunProgram
 		if run == nil {
 			return errors.New("install: no program runner set")
@@ -466,7 +476,18 @@ func (pl *Plan) Apply(log func(string)) error {
 			st.Registry[key][n] = string(v)
 		}
 	}
-	return pl.p.SaveState(st)
+	if len(failed) > 0 {
+		// Not the config's hash, so the prefix still reads as changed.
+		st.Hash = "partial:" + pl.Hash
+	}
+	if err := pl.p.SaveState(st); err != nil {
+		return err
+	}
+	if len(failed) > 0 {
+		return fmt.Errorf("winetricks failed: %s (the rest was applied)\n%s",
+			strings.Join(failed, " "), strings.Join(details, "\n"))
+	}
+	return nil
 }
 
 func (pl *Plan) wineboot(arg string) error {
