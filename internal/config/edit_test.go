@@ -3,6 +3,7 @@ package config
 import (
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 )
@@ -73,7 +74,9 @@ func TestSettingsRoundTrip(t *testing.T) {
 		t.Fatal(err)
 	}
 	st.VirtualDesktop, st.DPI, st.WindowsVersion = "1920x1080", 144, "win7"
-	st.Dependencies = []string{"vcrun2022", "riched20"}
+	if err := WriteDependencies(p, []string{"vcrun2022", "riched20"}); err != nil {
+		t.Fatal(err)
+	}
 	if err := WriteSettings(p, st); err != nil {
 		t.Fatal(err)
 	}
@@ -96,13 +99,13 @@ func TestSettingsRoundTrip(t *testing.T) {
 	}
 	// Clearing.
 	st, _ = ReadSettings(p)
-	st.VirtualDesktop, st.DPI, st.WindowsVersion, st.Dependencies = "", 0, "", nil
+	st.VirtualDesktop, st.DPI, st.WindowsVersion = "", 0, ""
 	st.Profiles = []string{}
 	if err := WriteSettings(p, st); err != nil {
 		t.Fatal(err)
 	}
 	c, _ = Load(p, "")
-	if c.VirtualDesktop != "" || c.DPI != 0 || c.WindowsVersion != "win10" || len(c.Dependencies) != 0 || len(c.Profiles) != 0 {
+	if c.VirtualDesktop != "" || c.DPI != 0 || c.WindowsVersion != "win10" || len(c.Profiles) != 0 {
 		t.Fatalf("not cleared: %+v", c)
 	}
 }
@@ -142,5 +145,25 @@ func TestRenameApp(t *testing.T) {
 	c, _ := Load(p, "")
 	if c.Apps[0].Name != "Alpha \"1\"" || c.Apps[0].ID != "a" || c.Apps[1].Name != "Beta" {
 		t.Errorf("%+v", c.Apps)
+	}
+}
+
+func TestDependencies(t *testing.T) {
+	p := filepath.Join(t.TempDir(), "cellar.toml")
+	os.WriteFile(p, []byte(Template("x", "system", nil, "", nil)), 0o644)
+	if d, err := ReadDependencies(p); err != nil || len(d) != 0 {
+		t.Fatal(d, err)
+	}
+	WriteDependencies(p, []string{"vcrun2022", "riched20"})
+	// Settings saves leave them alone.
+	st, _ := ReadSettings(p)
+	st.DPI = 120
+	WriteSettings(p, st)
+	if d, _ := ReadDependencies(p); !slices.Equal(d, []string{"vcrun2022", "riched20"}) {
+		t.Fatal(d)
+	}
+	WriteDependencies(p, nil)
+	if b, _ := os.ReadFile(p); strings.Contains(string(b), "\ndependencies") {
+		t.Fatalf("not removed:\n%s", b)
 	}
 }

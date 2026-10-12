@@ -38,6 +38,7 @@ h1 { margin: 0; font-size: 22px; font-weight: 650; }
 .meta { color: var(--mute); margin-top: 4px; word-break: break-all; display: flex; gap: 14px; flex-wrap: wrap; }
 .head { flex-wrap: wrap; display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; margin-bottom: 24px; }
 .actions { display: flex; gap: 8px; }
+a { color: var(--accent); }
 button {
   white-space: nowrap; font: inherit; border: 1px solid var(--line); background: var(--panel); color: var(--text);
   padding: 6px 14px; border-radius: 8px; cursor: default;
@@ -122,10 +123,16 @@ select { font: inherit; padding: 6px 10px; border: 1px solid var(--line); border
 .fsets input { width: auto; margin: 3px 0 0; }
 .fsets small { color: var(--mute); display: block; }
 .fsets small.warn { color: var(--err); }
-.deps { display: grid; grid-template-columns: 1fr 1fr; gap: 4px 14px; max-height: 210px; overflow: auto; }
-.deps label { display: flex; gap: 6px; align-items: flex-start; color: var(--text); font-size: 13px; }
-.deps input { width: auto; margin: 3px 0 0; }
-.deps small { color: var(--mute); display: block; }
+.vlist { max-height: 52vh; overflow: auto; border: 1px solid var(--line); border-radius: 8px; margin: 8px 0; }
+.vlist summary { position: sticky; top: 0; z-index: 1; padding: 6px 10px; font-size: 12px; font-weight: 600; color: var(--mute);
+  background: var(--panel); border-bottom: 1px solid var(--line); cursor: default; user-select: none; }
+.vrow { display: flex; gap: 10px; align-items: baseline; padding: 4px 10px; color: var(--text); font-size: 13px; }
+.vrow:hover { background: color-mix(in srgb, var(--text) 5%, transparent); }
+.vrow input { width: auto; margin: 0; align-self: center; }
+.vrow code { font-family: var(--mono); font-size: 12px; min-width: 140px; }
+.vrow .t { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.vrow small { color: var(--mute); white-space: nowrap; }
+.vrow small.ok { color: var(--ok); }
 .plist { max-height: 46vh; overflow: auto; display: flex; flex-direction: column; gap: 6px; margin: 10px 0; }
 .prow { display: flex; gap: 10px; align-items: center; border: 1px solid var(--line); border-radius: 8px; padding: 6px 10px; }
 .prow img, .prow .ph { width: 28px; height: 28px; object-fit: contain; flex: none; }
@@ -297,7 +304,7 @@ const refreshRuns = (name, ms) => setTimeout(() => { if (sel === name) showRuns(
 function prefixMenu(name) {
   const tool = (x) => async () => { try { await call("Launch", name, "", x); } catch (e) { fail(e); } refreshRuns(name, 3000); };
   return [
-    ["设置", () => settings(name)], ["编辑 cellar.toml", () => edit(name)], null,
+    ["设置", () => settings(name)], ["编辑 cellar.toml", () => edit(name)], ["依赖", () => deps(name)], null,
     ["Wine 设置", tool("winecfg")], ["注册表", tool("regedit")], ["文件管理器", tool("explorer")],
     ["命令行", tool("wineconsole")], ["任务管理器", tool("taskmgr")], ["运行其他程序", () => runExe(name)], null,
     ["结束所有进程", async () => { await call("Kill", name); refreshRuns(name, 1500); }],
@@ -632,9 +639,7 @@ const WINVER = [["win11", "Windows 11"], ["win10", "Windows 10"], ["win81", "Win
 const DPIS = [[0, "自动（跟随系统 Xft.dpi）"], [96, "100%"], [120, "125%"], [144, "150%"], [168, "175%"], [192, "200%"]];
 
 async function settings(name) {
-  const [st, cat] = await Promise.all([call("Settings", name), call("DependencyCatalog")]);
-  const known = new Set(cat.map((d) => d.verb));
-  const extra = st.dependencies.filter((v) => !known.has(v));
+  const st = await call("Settings", name);
   dialog(`<b>${esc(name)} 设置</b>
     <div class="form">
       <label>Windows 版本</label><select id="wv"><option value="">默认（Windows 10）</option>${WINVER.map(([v, t]) => `<option value="${v}" ${st.windows_version === v ? "selected" : ""}>${t}</option>`).join("")}</select>
@@ -645,22 +650,81 @@ async function settings(name) {
       <label>区域</label><div>${localeField(st.locale)}<small class="meta">${LOCALE_NOTE}</small></div>
       <label>字体</label><div>${fontField(st.font_sets)}<small class="meta">${FONTS_NOTE}</small></div>
     </div>
-    <div class="meta">依赖（winetricks 安装，已装的会跳过）</div>
-    <div class="deps">${cat.map((d) => `<label><input type="checkbox" value="${d.verb}" ${st.dependencies.includes(d.verb) ? "checked" : ""}>
-      <span>${d.verb}${d.slow ? "（慢）" : ""}<small>${esc(d.note)}</small></span></label>`).join("")}</div>
-    <input id="extra" placeholder="其他 winetricks verb，空格分隔" value="${esc(extra.join(" "))}">
     <div id="e" class="err"></div>
     <div class="row"><button id="c">取消</button><button id="s" class="primary">保存并应用</button></div>`, (d) => {
     wireLocale(d);
     showFontStatus(d);
     d.querySelector("#c").onclick = () => d.close();
     d.querySelector("#s").onclick = async () => {
-      const deps = [...d.querySelectorAll(".deps input:checked")].map((i) => i.value)
-        .concat(d.querySelector("#extra").value.split(/\s+/).filter(Boolean));
       const next = { ...st, locale: readLocale(d), font_sets: readFonts(d), windows_version: d.querySelector("#wv").value,
         virtual_desktop: d.querySelector("#vd").checked ? d.querySelector("#vdres").value.trim() : "",
-        dpi: +d.querySelector("#dpi").value, dependencies: [...new Set(deps)] };
+        dpi: +d.querySelector("#dpi").value };
       try { await call("SaveSettings", name, next); d.close(); await applyNow(name); }
+      catch (e) { d.querySelector("#e").textContent = e.message || e; }
+    };
+  });
+}
+
+// deps picks the prefix's winetricks verbs from everything winetricks
+// offers. Unticking only stops asking for one: winetricks cannot remove
+// what it installed.
+const WINETRICKS_URL = "https://github.com/Winetricks/winetricks";
+async function deps(name) {
+  dialog(`<b>${esc(name)} 的依赖</b>
+    <div class="meta">用 winetricks 安装，已装的跳过；装上的卸不掉，取消勾选只是以后不再要求。
+      每个 verb 的说明见 <a href="#" id="wtl">winetricks</a>。</div>
+    <input id="q" placeholder="搜索 verb 或说明，如 vcrun、d3dx9、riched、.net" autocomplete="off" spellcheck="false">
+    <div class="vlist" id="vl"><div class="empty" style="padding:10px">读取 winetricks 列表…</div></div>
+    <input id="extra" placeholder="列表里没有的 verb，空格分隔">
+    <div id="e" class="err"></div>
+    <div class="row"><span class="meta" id="cnt"></span><span style="flex:1"></span><button id="c">取消</button><button id="s" class="primary">保存并应用</button></div>`, async (d) => {
+    d.querySelector("#c").onclick = () => d.close();
+    d.querySelector("#wtl").onclick = (ev) => { ev.preventDefault(); call("OpenURL", WINETRICKS_URL).catch(fail); };
+    let st;
+    try { st = await call("Dependencies", name); }
+    catch (e) { d.querySelector("#vl").innerHTML = `<div class="err" style="padding:10px">${esc(e.message || e)}</div>`; return; }
+    const known = new Set(st.verbs.map((v) => v.verb));
+    const want = new Set(st.want.filter((v) => known.has(v)));
+    d.querySelector("#extra").value = st.want.filter((v) => !known.has(v)).join(" ");
+    const done = new Set(st.installed);
+    const byVerb = Object.fromEntries(st.verbs.map((v) => [v.verb, v]));
+    const row = (verb, text, by) => `<label class="vrow"><input type="checkbox" value="${esc(verb)}" ${want.has(verb) ? "checked" : ""}>
+      <code>${esc(verb)}</code><span class="t" title="${esc(text)}">${esc(text)}</span>
+      ${done.has(verb) ? `<small class="ok">已安装</small>` : by ? `<small>${esc(by)}</small>` : ""}</label>`;
+    // Groups fold; the long lists start folded. A search opens every group
+    // with a match, and folding while searching is not remembered.
+    const folded = new Set(["dlls", "fonts"]);
+    let q = "";
+    const group = (key, title, rows) => rows.length
+      ? `<details data-g="${key}" ${q || !folded.has(key) ? "open" : ""}><summary>${title}（${rows.length}）</summary>${rows.join("")}</details>` : "";
+    d.querySelector("#vl").addEventListener("toggle", (ev) => {
+      if (q) return;
+      const g = ev.target.dataset.g;
+      ev.target.open ? folded.delete(g) : folded.add(g);
+    }, true);
+    const render = () => {
+      q = d.querySelector("#q").value.trim().toLowerCase();
+      const hit = (...xs) => !q || xs.some((x) => (x || "").toLowerCase().includes(q));
+      const com = st.common.filter((c) => hit(c.verb, c.note, byVerb[c.verb]?.title))
+        .map((c) => row(c.verb, c.note + (c.slow ? "（慢）" : ""), ""));
+      const list = (cat) => st.verbs.filter((v) => v.category === cat && hit(v.verb, v.title, v.by)).map((v) => row(v.verb, v.title, v.by));
+      const html = (want.size && !q ? group("want", "已选", [...want].map((v) => row(v, byVerb[v].title, byVerb[v].by))) : "") +
+        group("common", "常用", com) + group("dlls", "DLL 与运行库", list("dlls")) + group("fonts", "字体", list("fonts"));
+      d.querySelector("#vl").innerHTML = html || `<div class="empty" style="padding:10px">没有匹配的 verb</div>`;
+      d.querySelector("#cnt").textContent = `已选 ${want.size} 个`;
+    };
+    // A verb shows in more than one group: its boxes move together.
+    d.querySelector("#vl").addEventListener("change", (ev) => {
+      const v = ev.target.value;
+      ev.target.checked ? want.add(v) : want.delete(v);
+      d.querySelectorAll(`.vrow input[value="${CSS.escape(v)}"]`).forEach((i) => i.checked = ev.target.checked);
+      d.querySelector("#cnt").textContent = `已选 ${want.size} 个`;
+    });
+    d.querySelector("#q").oninput = render;
+    render();
+    d.querySelector("#s").onclick = async () => {
+      const list = [...want, ...d.querySelector("#extra").value.split(/\s+/).filter(Boolean)];
+      try { await call("SaveDependencies", name, [...new Set(list)]); d.close(); await applyNow(name); }
       catch (e) { d.querySelector("#e").textContent = e.message || e; }
     };
   });

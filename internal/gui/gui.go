@@ -13,6 +13,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strings"
 	"sync"
@@ -79,6 +80,9 @@ type Service struct {
 
 	mu        sync.Mutex
 	bottleDir string // picked in the import page; replaces the default places
+
+	vmu   sync.Mutex
+	verbs []runner.Verb // winetricks' list, once asked
 }
 
 type Env struct {
@@ -507,24 +511,104 @@ type Dep struct {
 	Slow bool   `json:"slow,omitempty"`
 }
 
-// DependencyCatalog is the short list worth offering; any winetricks verb
-// can still be typed in.
-func (s *Service) DependencyCatalog() []Dep {
+// common is the short list the dialog puts first, with a note on when each
+// helps; verbs this winetricks lacks are left out.
+func common() []Dep {
 	return []Dep{
 		{"vcrun2022", "VC++ 2015–2022 运行库，大多数新软件需要", false},
 		{"vcrun2013", "VC++ 2013 运行库", false},
 		{"vcrun2010", "VC++ 2010 运行库", false},
 		{"vcrun2008", "VC++ 2008 运行库，较老的软件", false},
+		{"vcrun2005", "VC++ 2005 运行库", false},
 		{"vcrun6", "VC6 运行库，很老的软件", false},
 		{"mfc42", "MFC 4.2，老式国产软件常用", false},
+		{"vb6run", "VB6 运行库，老式国产软件常用", false},
 		{"riched20", "RichEdit 控件，聊天框、编辑框显示异常时装", false},
 		{"gdiplus", "GDI+，图片或图表显示异常时装", false},
 		{"msxml6", "MSXML 6", false},
+		{"msxml3", "MSXML 3，老软件读写 XML 用", false},
+		{"quartz", "DirectShow，程序里放视频", false},
 		{"corefonts", "微软核心英文字体（Arial、Times 等）", false},
 		{"d3dx9", "DirectX 9 组件，老游戏", false},
+		{"d3dcompiler_47", "D3D 着色器编译器，新一些的程序和浏览器内核用", false},
+		{"xact", "XAudio / XACT 音频，游戏没声音时装", false},
 		{"dxvk", "DXVK：用 Vulkan 跑 D3D 9–11，游戏用", false},
+		{"vkd3d", "VKD3D：用 Vulkan 跑 D3D 12", false},
 		{"dotnet48", ".NET Framework 4.8", true},
+		{"dotnet40", ".NET Framework 4.0", true},
+		{"dotnet35", ".NET Framework 3.5", true},
+		{"dotnetdesktop8", ".NET 8 桌面运行时", false},
 	}
+}
+
+// DepState is what the dependency dialog shows: the verbs winetricks has,
+// the prefix's list and what winetricks logged as installed in it.
+type DepState struct {
+	Common    []Dep         `json:"common"`
+	Verbs     []runner.Verb `json:"verbs"`
+	Want      []string      `json:"want"`
+	Installed []string      `json:"installed"`
+}
+
+// verbList keeps winetricks' list: asking takes it a couple of seconds.
+func (s *Service) verbList() ([]runner.Verb, error) {
+	s.vmu.Lock()
+	defer s.vmu.Unlock()
+	if s.verbs == nil {
+		v, err := runner.Verbs()
+		if err != nil {
+			return nil, err
+		}
+		s.verbs = v
+	}
+	return s.verbs, nil
+}
+
+func (s *Service) Dependencies(name string) (DepState, error) {
+	p, err := store.Open(name)
+	if err != nil {
+		return DepState{}, err
+	}
+	st := DepState{Common: []Dep{}, Installed: []string{}}
+	if st.Want, err = config.ReadDependencies(p.Config); err != nil {
+		return st, err
+	}
+	if st.Verbs, err = s.verbList(); err != nil {
+		return st, err
+	}
+	have := map[string]bool{}
+	for _, v := range st.Verbs {
+		have[v.Verb] = true
+	}
+	for _, d := range common() {
+		if have[d.Verb] {
+			st.Common = append(st.Common, d)
+		}
+	}
+	b, _ := os.ReadFile(filepath.Join(p.Pfx, "winetricks.log"))
+	for _, v := range strings.Fields(string(b)) {
+		if !slices.Contains(st.Installed, v) {
+			st.Installed = append(st.Installed, v)
+		}
+	}
+	return st, nil
+}
+
+// SaveDependencies writes the prefix's list; the page applies after.
+func (s *Service) SaveDependencies(name string, deps []string) error {
+	p, err := store.Open(name)
+	if err != nil {
+		return err
+	}
+	return config.WriteDependencies(p.Config, deps)
+}
+
+// OpenURL opens a web page in the host's browser.
+func (s *Service) OpenURL(url string) error {
+	if !strings.HasPrefix(url, "https://") {
+		return fmt.Errorf("not a web address: %s", url)
+	}
+	return s.app.Browser.OpenURL(url)
 }
 
 // PickInstaller asks for an installer (.exe / .msi) with the system file

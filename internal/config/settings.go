@@ -18,7 +18,6 @@ type Settings struct {
 	WindowsVersion string            `json:"windows_version"`
 	VirtualDesktop string            `json:"virtual_desktop"`
 	DPI            int               `json:"dpi"`
-	Dependencies   []string          `json:"dependencies"`
 }
 
 func ReadSettings(path string) (Settings, error) {
@@ -31,7 +30,7 @@ func ReadSettings(path string) (Settings, error) {
 		return Settings{}, err
 	}
 	st := Settings{Runner: c.Runner, Profiles: c.Profiles, WindowsVersion: c.WindowsVersion,
-		VirtualDesktop: c.VirtualDesktop, DPI: c.DPI, Dependencies: c.Dependencies}
+		VirtualDesktop: c.VirtualDesktop, DPI: c.DPI}
 	file, err := parse(b, path)
 	if err != nil {
 		return Settings{}, err
@@ -47,10 +46,37 @@ func ReadSettings(path string) (Settings, error) {
 	if st.Profiles == nil {
 		st.Profiles = []string{}
 	}
-	if st.Dependencies == nil {
-		st.Dependencies = []string{}
-	}
 	return st, nil
+}
+
+// ReadDependencies is the file's own dependency list.
+func ReadDependencies(path string) ([]string, error) {
+	b, err := os.ReadFile(path)
+	if err != nil {
+		return nil, err
+	}
+	var c Config
+	if err := toml.Unmarshal(b, &c); err != nil {
+		return nil, err
+	}
+	if c.Dependencies == nil {
+		return []string{}, nil
+	}
+	return c.Dependencies, nil
+}
+
+// WriteDependencies sets the file's dependency list; empty removes it.
+func WriteDependencies(path string, deps []string) error {
+	e, err := Edit(path)
+	if err != nil {
+		return err
+	}
+	if len(deps) == 0 {
+		e.Set("dependencies", "")
+	} else {
+		e.Set("dependencies", Literal(deps))
+	}
+	return e.Save()
 }
 
 // WriteSettings edits the file in place; empty values remove their key.
@@ -83,6 +109,5 @@ func WriteSettings(path string, st Settings) error {
 	opt("windows_version", st.WindowsVersion, st.WindowsVersion == "")
 	opt("virtual_desktop", st.VirtualDesktop, st.VirtualDesktop == "")
 	opt("dpi", st.DPI, st.DPI == 0)
-	opt("dependencies", st.Dependencies, len(st.Dependencies) == 0)
 	return e.Save()
 }
