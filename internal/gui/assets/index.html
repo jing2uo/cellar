@@ -85,8 +85,16 @@ input { font: inherit; padding: 6px 10px; border: 1px solid var(--line); border-
 .tag.rec { background: var(--accent-soft); color: var(--accent); }
 .warn { color: var(--warn); font-size: 12px; }
 select { font: inherit; padding: 6px 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--bg); color: var(--text); width: 100%; margin: 4px 0 10px; }
-.tools { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 10px; }
-.tools button { font-size: 12.5px; padding: 3px 10px; }
+.item .dots { visibility: hidden; border: none; background: none; padding: 0 4px; color: var(--mute); line-height: 1; }
+.item:hover .dots, .item.sel .dots { visibility: visible; }
+.item .end { display: flex; align-items: center; gap: 4px; }
+.menu { position: fixed; z-index: 10; min-width: 190px; display: flex; flex-direction: column;
+  background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 6px; box-shadow: 0 8px 24px rgba(0,0,0,.18); }
+.menu[hidden] { display: none; }
+.menu button { border: none; background: none; text-align: left; padding: 7px 10px; border-radius: 6px; }
+.menu button:hover { background: color-mix(in srgb, var(--text) 7%, transparent); }
+.menu button.danger { color: var(--err); }
+.menu hr { border: none; border-top: 1px solid var(--line); margin: 4px 2px; }
 .task { border: 1px solid var(--accent); border-radius: 12px; padding: 12px 16px; margin-bottom: 16px; }
 .task pre { margin: 8px 0 0; max-height: 180px; overflow: auto; font-family: var(--mono); font-size: 11.5px; color: var(--mute); white-space: pre-wrap; -webkit-user-select: text; user-select: text; }
 .task.err { border-color: var(--err); }
@@ -139,6 +147,7 @@ select { font: inherit; padding: 6px 10px; border: 1px solid var(--line); border
 <dialog id="dlg"></dialog>
 <dialog id="dlg2"></dialog>
 <div id="toast"></div>
+<div class="menu" id="ctx" role="menu" hidden></div>
 
 <script type="module">
 import { Call } from "/wails/runtime.js";
@@ -195,11 +204,19 @@ function renderList() {
   const local = prefixes.filter((p) => p.source === "local");
   $("#list").innerHTML = `<div class="group">本地 prefix</div>` +
     (local.map((p) => `<div class="item ${p.name === sel ? "sel" : ""}" data-n="${esc(p.name)}">
-      <span>${esc(p.name)}</span><small class="s-${p.state}">●</small></div>`).join("") || `<div class="empty item">还没有 prefix</div>`) +
+      <span>${esc(p.name)}</span><span class="end"><button class="dots" title="更多操作（也可右键）">⋯</button><small class="s-${p.state}">●</small></span></div>`).join("") || `<div class="empty item">还没有 prefix</div>`) +
     `<div class="item" id="new"><small>＋ 新建 prefix</small></div>` +
     (bottles.some((b) => !b.imported) ? `<div class="item ${sel === IMPORT ? "sel" : ""}" id="imp"><small>⇣ 从 Bottles 导入（${bottles.filter((b) => !b.imported).length}）</small></div>` : "") +
     `<div class="group">Wine</div><div class="item ${sel === RUNNERS ? "sel" : ""}" id="runners"><span>Runner</span><small>${env.runners.length}</small></div>`;
-  document.querySelectorAll(".item[data-n]").forEach((el) => el.onclick = () => { sel = el.dataset.n; renderList(); renderMain(); });
+  document.querySelectorAll(".item[data-n]").forEach((el) => {
+    el.onclick = () => { sel = el.dataset.n; renderList(); renderMain(); };
+    el.oncontextmenu = (e) => { e.preventDefault(); openMenu(prefixMenu(el.dataset.n), e.clientX, e.clientY); };
+    el.querySelector(".dots").onclick = (e) => {
+      e.stopPropagation();
+      const r = e.currentTarget.getBoundingClientRect();
+      openMenu(prefixMenu(el.dataset.n), r.left, r.bottom + 4);
+    };
+  });
   $("#new").onclick = newPrefix;
   $("#runners").onclick = () => { sel = RUNNERS; renderList(); renderMain(); };
   if ($("#imp")) $("#imp").onclick = () => { sel = IMPORT; renderList(); renderMain(); };
@@ -232,7 +249,7 @@ async function renderMain() {
           <span>runner：${esc(p.runner)}</span><span>区域：${p.locale ? esc(localeName(p.locale)) : "未设置"}</span>
           ${(p.font_sets || []).length ? `<span>字体：${esc(p.font_sets.map(fontSetName).join("、"))}</span>` : ""}</div></div>
       <div class="actions">
-        <button id="delete">删除</button><button id="settings">设置</button><button id="install" class="primary">运行安装程序…</button></div>
+        <button id="install" class="primary">运行安装程序…</button></div>
     </div>
     ${noWine()}${p.error ? `<section><div class="err">${esc(p.error)}</div></section>` : ""}
     <div id="task"></div>
@@ -243,25 +260,10 @@ async function renderMain() {
       <div class="btns"><button data-app="${esc(a.id)}">启动</button>
       <button data-desk="${esc(a.id)}" data-on="${a.desktop ? 1 : ""}" title="${a.desktop ? "从应用菜单移除" : "在应用菜单里创建快捷方式"}">${a.desktop ? "移除快捷方式" : "快捷方式"}</button></div></div>`).join("") || `<div class="empty">还没有应用。先“运行安装程序”，装好后点“添加应用”。</div>`}</div></section>
     <section><div class="sechead"><h2>待调和变更</h2><button id="apply">应用配置</button></div><div id="plan" class="empty">计算中…</div></section>
-    <section><h2>工具</h2><div class="tools">
-      ${[["winecfg", "Wine 设置"], ["regedit", "注册表"], ["explorer", "文件管理器"], ["wineconsole", "命令行"], ["taskmgr", "任务管理器"]].map(([x, t]) => `<button data-tool="${x}">${t}</button>`).join("")}
-      <button id="other">运行其他程序…</button><button id="edit">编辑 cellar.toml</button><button id="kill">结束所有进程</button></div></section>
     <section><div class="sechead"><h2>运行记录</h2><button id="clearruns" hidden>清除</button></div><div id="runs" class="empty">读取中…</div></section>`;
   $("#apply").onclick = () => startTask(p.name, () => call("ApplyTask", p.name));
-  $("#settings").onclick = () => settings(p.name);
-  $("#delete").onclick = async () => {
-    if (!await ask(`删除 prefix ${p.name}？会结束它里面的程序、移除菜单快捷方式，并删掉整个目录（包括装在里面的 Windows 程序和它们的数据），无法恢复。`)) return;
-    try { await call("Delete", p.name); sel = null; history.replaceState(null, "", "#"); toast(`已删除 ${p.name}`); await load(); } catch (e) { fail(e); }
-  };
   $("#install").onclick = () => install(p.name);
   $("#addapp").onclick = () => addApp(p.name);
-  $("#edit").onclick = () => edit(p.name);
-  $("#other").onclick = () => runExe(p.name);
-  $("#kill").onclick = async () => { await call("Kill", p.name); setTimeout(() => showRuns(p.name), 1500); };
-  document.querySelectorAll("[data-tool]").forEach((b) => b.onclick = async () => {
-    await call("Launch", p.name, "", b.dataset.tool);
-    setTimeout(() => showRuns(p.name), 3000);
-  });
   document.querySelectorAll("[data-app]").forEach((b) => b.onclick = () => launch(p.name, b.dataset.app, b));
   document.querySelectorAll("[data-desk]").forEach((b) => b.onclick = async () => {
     try { await call("Desktop", p.name, b.dataset.desk, !!b.dataset.on); } catch (e) { fail(e); }
@@ -278,6 +280,40 @@ async function renderMain() {
   const running = await call("Running", p.name);
   if (running) watchTask(p.name, running);
 }
+
+// ── prefix menu (right click or ⋯ in the list) ────────────────────────────
+const refreshRuns = (name, ms) => setTimeout(() => { if (sel === name) showRuns(name); }, ms);
+function prefixMenu(name) {
+  const tool = (x) => async () => { try { await call("Launch", name, "", x); } catch (e) { fail(e); } refreshRuns(name, 3000); };
+  return [
+    ["Wine 设置", tool("winecfg")], ["注册表", tool("regedit")], ["文件管理器", tool("explorer")],
+    ["命令行", tool("wineconsole")], ["任务管理器", tool("taskmgr")], ["运行其他程序…", () => runExe(name)], null,
+    ["设置…", () => settings(name)], ["编辑 cellar.toml", () => edit(name)], null,
+    ["结束所有进程", async () => { await call("Kill", name); refreshRuns(name, 1500); }],
+    ["删除 prefix…", async () => {
+      if (!await ask(`删除 prefix ${name}？会结束它里面的程序、移除菜单快捷方式，并删掉整个目录（包括装在里面的 Windows 程序和它们的数据），无法恢复。`)) return;
+      try {
+        await call("Delete", name);
+        if (sel === name) { sel = null; history.replaceState(null, "", "#"); }
+        toast(`已删除 ${name}`); await load();
+      } catch (e) { fail(e); }
+    }, "danger"],
+  ];
+}
+function openMenu(items, x, y) {
+  const m = $("#ctx");
+  m.innerHTML = items.map((it, i) => it ? `<button data-i="${i}" class="${it[2] || ""}">${esc(it[0])}</button>` : "<hr>").join("");
+  m.querySelectorAll("button").forEach((b) => b.onclick = () => { m.hidden = true; items[b.dataset.i][1](); });
+  m.hidden = false;
+  // Keep it on screen.
+  m.style.left = Math.min(x, innerWidth - m.offsetWidth - 8) + "px";
+  m.style.top = Math.min(y, innerHeight - m.offsetHeight - 8) + "px";
+}
+document.addEventListener("mousedown", (e) => {
+  if (!$("#ctx").hidden && !e.target.closest("#ctx")) $("#ctx").hidden = true;
+});
+document.addEventListener("keydown", (e) => { if (e.key === "Escape") $("#ctx").hidden = true; });
+window.addEventListener("blur", () => { $("#ctx").hidden = true; });
 
 // ── background tasks ──────────────────────────────────────────────────────
 async function startTask(name, start) {
