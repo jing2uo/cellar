@@ -39,12 +39,19 @@ const usage = `cellar - Wine prefixes from cellar.toml
   cellar apply <prefix> [--force]
   cellar revert <prefix>             undo cellar.toml edits made since the last apply
   cellar run <prefix>[/<app>] [--exe X] [--trace +chan] [-- args]
-  cellar logs <prefix> [--run ID] [--tail N]
+  cellar config <prefix> [key=value ...]   show or change settings, applied at once:
+                                     runner locale fonts=core,cjk|all|none winver desktop=WxH|off dpi=N|auto
+  cellar deps <prefix> [add|rm <verb>...]  winetricks verbs (dlls, fonts); add installs at once
+  cellar deps search <word>...       find winetricks verbs
+  cellar fonts [list] | get <pack> | rm <pack> | policy [host-first|auto|library-only]
+                                     the font library (packs: cjk cjk-serif scripts)
+  cellar logs <prefix> [--run ID] [--tail N] [--clear]
   cellar kill <prefix>
   cellar desktop <prefix>[/<app>] [--remove]
   cellar app discover <prefix>       programs installed but not added yet
   cellar app add <prefix> <C:\path.exe> [--name N] [--args "..."] [--no-desktop]
   cellar app rm <prefix> <id>
+  cellar app rename <prefix> <id> <name>
   cellar import bottles [--list] [<bottle>...] [--as NAME]
   cellar runner list | available [--n 3] | install <source[@ver]|url> | rm <name>
   cellar icon <program.exe> <out.png>   extract a program's icon (packaging)
@@ -52,6 +59,7 @@ const usage = `cellar - Wine prefixes from cellar.toml
   cellar gui [runners|<prefix>]
 
 Global: --json. Data: $CELLAR_HOME (default $XDG_DATA_HOME/cellar).
+In a FlatPark package, leave out <prefix>: flatpak run --command=cellar <app-id> config locale=ja_JP
 `
 
 func main() {
@@ -67,7 +75,7 @@ func main() {
 	}
 	cmds := map[string]func([]string) error{
 		"new": cmdNew, "create": cmdNew, "rm": cmdRm, "list": cmdList, "inspect": cmdInspect, "plan": cmdPlan,
-		"apply": cmdApply, "revert": cmdRevert, "run": cmdRun, "logs": cmdLogs, "kill": cmdKill,
+		"apply": cmdApply, "config": cmdConfig, "deps": cmdDeps, "fonts": cmdFonts, "revert": cmdRevert, "run": cmdRun, "logs": cmdLogs, "kill": cmdKill,
 		"desktop": cmdDesktop, "import": cmdImport, "app": cmdApp, "runner": cmdRunner,
 		"gui": func(a []string) error {
 			view := ""
@@ -472,6 +480,7 @@ func cmdLogs(args []string) error {
 	id := fs.String("run", "", "run id (default: latest)")
 	n := fs.Int("tail", 50, "log lines")
 	list := fs.Bool("list", false, "list runs only")
+	clear := fs.Bool("clear", false, "delete the finished runs' records")
 	pos, _, err := parse(fs, args)
 	if err != nil {
 		return err
@@ -479,6 +488,9 @@ func cmdLogs(args []string) error {
 	p, _, _, err := open(pos)
 	if err != nil {
 		return err
+	}
+	if *clear {
+		return launch.ClearRuns(p)
 	}
 	runs, err := launch.Runs(p)
 	if err != nil {
@@ -784,6 +796,13 @@ func cmdApp(args []string) error {
 			return errors.New("usage: cellar app rm <prefix> <id>")
 		}
 		return appmgr.Remove(p, rest[0])
+	case "rename":
+		if len(rest) != 2 {
+			return errors.New("usage: cellar app rename <prefix> <id> <name>")
+		}
+		self, _ := os.Executable()
+		self, _ = filepath.EvalSymlinks(self)
+		return appmgr.Rename(self, p, rest[0], rest[1])
 	default:
 		return fmt.Errorf("unknown app command %q", args[0])
 	}
