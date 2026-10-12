@@ -237,6 +237,14 @@ func (s *Service) Runs(name string) ([]launch.Meta, error) {
 	return runs, err
 }
 
+func (s *Service) ClearRuns(name string) error {
+	p, err := store.Open(name)
+	if err != nil {
+		return err
+	}
+	return launch.ClearRuns(p)
+}
+
 func (s *Service) Log(name, id string) (string, error) {
 	runs, err := s.Runs(name)
 	if err != nil {

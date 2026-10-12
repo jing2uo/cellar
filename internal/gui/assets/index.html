@@ -246,7 +246,7 @@ async function renderMain() {
     <section><h2>工具</h2><div class="tools">
       ${[["winecfg", "Wine 设置"], ["regedit", "注册表"], ["explorer", "文件管理器"], ["wineconsole", "命令行"], ["taskmgr", "任务管理器"]].map(([x, t]) => `<button data-tool="${x}">${t}</button>`).join("")}
       <button id="other">运行其他程序…</button><button id="edit">编辑 cellar.toml</button><button id="kill">结束所有进程</button></div></section>
-    <section><h2>运行记录</h2><div id="runs" class="empty">读取中…</div></section>`;
+    <section><div class="sechead"><h2>运行记录</h2><button id="clearruns" hidden>清除</button></div><div id="runs" class="empty">读取中…</div></section>`;
   $("#apply").onclick = () => startTask(p.name, () => call("ApplyTask", p.name));
   $("#settings").onclick = () => settings(p.name);
   $("#delete").onclick = async () => {
@@ -378,6 +378,12 @@ async function showRuns(name) {
     <td class="${r.exit_code ? "s-error" : "s-applied"}">退出码 ${r.exit_code}</td><td>${r.seconds.toFixed(1)}s</td>
     <td class="mono">${esc(r.argv.slice(1).join(" "))}</td></tr>`).join("")}</table>` : `<div class="empty">还没运行过</div>`}</div>`;
   document.querySelectorAll("tr.run").forEach((tr) => tr.onclick = () => showLog(name, tr.dataset.id));
+  const b = $("#clearruns");
+  b.hidden = !runs.length;
+  b.onclick = async () => {
+    try { await call("ClearRuns", name); } catch (e) { fail(e); }
+    showRuns(name);
+  };
 }
 
 

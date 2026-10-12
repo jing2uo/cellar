@@ -250,6 +250,21 @@ func Runs(p *store.Prefix) ([]Meta, error) {
 	return out, nil
 }
 
+// ClearRuns deletes the finished runs' records; running ones, which have no
+// meta.json yet, stay.
+func ClearRuns(p *store.Prefix) error {
+	runs, err := Runs(p)
+	if err != nil {
+		return err
+	}
+	for _, m := range runs {
+		if err := os.RemoveAll(filepath.Join(p.RunsDir(), m.ID)); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 func prune(dir string) {
 	ents, _ := os.ReadDir(dir)
 	if len(ents) <= keepRuns {
