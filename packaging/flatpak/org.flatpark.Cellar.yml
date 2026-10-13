@@ -40,8 +40,9 @@ inherit-extensions:
   - org.winehq.Wine.mono
 
 # Only legacy (non-WoW64) community runners such as Bottles' vaniglia need these.
-# Not auto-downloaded: the base Wine and the recommended runners are WoW64,
-# and cellar prints the install command when a legacy runner lacks them.
+# Not auto-downloaded: the base Wine and the recommended runners are WoW64 and
+# load no i386 Linux libraries. Turning on 32-bit runners in the settings
+# shows the install command when they are missing.
 add-extensions:
   org.freedesktop.Platform.Compat.i386:
     directory: lib/i386-linux-gnu

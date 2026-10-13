@@ -106,7 +106,7 @@ func Available(perSource int) ([]Release, []string, error) {
 	for _, n := range List() {
 		installed[n] = true
 	}
-	legacyOK := len(problems("legacy")) == 0
+	legacyOK := Legacy32()
 	var out []Release
 	var warns []string
 	byRepo := map[string][]ghRelease{}

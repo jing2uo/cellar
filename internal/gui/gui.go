@@ -136,6 +136,22 @@ func (s *Service) Available() (Catalog, error) {
 	return Catalog{Releases: rels, Warnings: warns}, err
 }
 
+// Legacy32 is what turning on 32-bit runners checks: whether their 32-bit
+// libraries are here, and if not, the command that installs them (Flatpak).
+type Legacy32 struct {
+	OK      bool   `json:"ok"`
+	Flatpak bool   `json:"flatpak"`
+	Command string `json:"command"`
+}
+
+func (s *Service) Legacy32() Legacy32 {
+	st := Legacy32{OK: runner.Legacy32(), Flatpak: runner.InFlatpak()}
+	if !st.OK && st.Flatpak {
+		st.Command = runner.FlatpakI386
+	}
+	return st
+}
+
 // FontStatus tells what each font set would use on this machine (it runs
 // fc-list, so the dialogs ask for it, not every refresh).
 func (s *Service) FontStatus() []fonts.Status { return fonts.Statuses() }

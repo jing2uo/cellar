@@ -59,6 +59,12 @@ func kindOf(dir string) string {
 // In the Flatpak /lib/ld-linux.so.2 resolves through /app/lib/i386-linux-gnu
 // only when the Compat.i386 extension is installed; on the host it comes
 // with i386 multiarch.
+// FlatpakI386 installs the 32-bit runtime the Flatpak's extension points take.
+const FlatpakI386 = "flatpak install flathub org.freedesktop.Platform.Compat.i386//26.08 org.freedesktop.Platform.GL32.default//26.08"
+
+// Legacy32 tells whether legacy (non-WoW64) runners can run here.
+func Legacy32() bool { return len(problems("legacy")) == 0 }
+
 func problems(kind string) []string {
 	if kind != "legacy" {
 		return nil
@@ -67,8 +73,7 @@ func problems(kind string) []string {
 		return nil
 	}
 	if InFlatpak() {
-		return []string{"legacy (non-WoW64) build needs the 32-bit runtime: " +
-			"flatpak install flathub org.freedesktop.Platform.Compat.i386//26.08 org.freedesktop.Platform.GL32.default//26.08"}
+		return []string{"legacy (non-WoW64) build needs the 32-bit runtime: " + FlatpakI386}
 	}
 	return []string{"legacy (non-WoW64) build needs 32-bit host libraries: " +
 		"enable i386 multiarch (Debian: dpkg --add-architecture i386 && apt install libc6:i386 ...) or use a -wow64 build"}

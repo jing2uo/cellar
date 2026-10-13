@@ -29,8 +29,15 @@ const (
 )
 
 type Prefs struct {
-	Fonts Fonts `toml:"fonts" json:"fonts"`
-	UI    UI    `toml:"ui" json:"ui"`
+	Fonts   Fonts   `toml:"fonts" json:"fonts"`
+	UI      UI      `toml:"ui" json:"ui"`
+	Runners Runners `toml:"runners" json:"runners"`
+}
+
+type Runners struct {
+	// Legacy lists legacy (non-WoW64) runners for download; off by default,
+	// they need 32-bit libraries the recommended WoW64 ones do without.
+	Legacy bool `toml:"legacy,omitempty" json:"legacy"`
 }
 
 type UI struct {

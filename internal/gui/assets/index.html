@@ -541,7 +541,28 @@ async function watchFontTask(id) {
 // runnerUsers are the prefixes set to this runner; "" means the default one.
 const runnerUsers = (r) => prefixes.filter((p) => p.source === "local" && (p.runner === r.name || !p.runner && r.default)).map((p) => p.name);
 
+// legacyHelp says what turning on 32-bit runners lacks: in the Flatpak the
+// runtime extension (mounted at start, hence the restart), on the host the
+// distribution's 32-bit Wine.
+function legacyHelp(st) {
+  if (!st.flatpak) {
+    dialog(`<b>${t("未找到 32 位库")}</b><div class="meta">${t("请在系统里安装 Wine 的 i386（32 位）支持，再打开这个开关。")}</div>
+      <div class="row"><button id="c">${t("关闭")}</button></div>`, (d) => d.querySelector("#c").onclick = () => d.close());
+    return;
+  }
+  dialog(`<b>${t("缺少 32 位运行时")}</b><div class="meta">${t("传统 32 位 runner 需要 Flatpak 的 32 位运行时。在终端里运行下面的命令，然后重新打开 Cellar：")}</div>
+    <pre class="log">${esc(st.command)}</pre>
+    <div class="row"><button id="cp">${t("复制")}</button><button id="c" class="primary">${t("关闭")}</button></div>`, (d) => {
+    d.querySelector("#c").onclick = () => d.close();
+    d.querySelector("#cp").onclick = async () => {
+      try { await call("CopyText", st.command); toast(t("已复制")); } catch (e) { fail(e); }
+    };
+  });
+}
+
 async function renderRunners() {
+  const pr = await call("Prefs");
+  if (!onTab("runner")) return;
   $("#settab").innerHTML = `${noWine()}
     <section><h2>${t("已有")}</h2><div class="rlist">${env.runners.map((r) => `
       <div class="rrow"><div class="grow"><b>${esc(t(r.name))}</b> ${r.default ? `<span class="tag rec">${t("默认")}</span>` : ""}
@@ -551,12 +572,24 @@ async function renderRunners() {
         ${r.source === "system" ? "" : runnerUsers(r).length
           ? `<button disabled title="${esc(t("{0} 在用，先给它们换一个 runner", runnerUsers(r).join(t("、"))))}">${t("删除")}</button>`
           : `<button data-rrm="${esc(r.name)}">${t("删除")}</button>`}</div>`).join("") || `<div class="empty">${t("还没有")}</div>`}</div></section>
-    <section><h2>${t("可下载")}</h2><div id="avail" class="empty">${t("正在查询 GitHub…")}</div></section>
+    <section><div class="sechead"><h2>${t("可下载")}</h2>
+      <label class="inline" title="${esc(t("老式 WoW 构建，需要 32 位系统库；推荐的 WoW64 版不需要"))}"><input type="checkbox" id="legacy" ${pr.runners.legacy ? "checked" : ""}>${t("显示传统 32 位 runner")}</label></div>
+      <div id="avail" class="empty">${t("正在查询 GitHub…")}</div></section>
     <section><h2>${t("自己添加")}</h2>
       <div class="btnrow"><button id="runnerdir">${t("打开 runner 目录")}</button>
         <span class="meta">${t("自己下载解压后放进 runner 目录即可，目录里需要有 bin/wine 或 files/bin/wine。")}</span></div></section>`;
   wireNoWine();
   $("#runnerdir").onclick = () => call("OpenRunnerDir").catch(fail);
+  $("#legacy").onchange = async (ev) => {
+    const on = ev.target.checked;
+    if (on) {
+      let st;
+      try { st = await call("Legacy32"); } catch (e) { fail(e); ev.target.checked = false; return; }
+      if (!st.ok) { ev.target.checked = false; legacyHelp(st); return; }
+    }
+    try { await call("SavePrefs", { ...pr, runners: { ...pr.runners, legacy: on } }); } catch (e) { fail(e); ev.target.checked = !on; return; }
+    renderRunners();
+  };
   document.querySelectorAll("[data-rrm]").forEach((b) => b.onclick = async () => {
     if (!await ask(t("删除 runner {0}？之后可以重新下载。", b.dataset.rrm))) return;
     try { await call("RemoveRunner", b.dataset.rrm); toast(t("已删除 {0}", b.dataset.rrm)); } catch (e) { fail(e); }
@@ -566,7 +599,7 @@ async function renderRunners() {
     const cat = await call("Available");
     if (!onTab("runner")) return;
     $("#avail").outerHTML = `<div id="avail" class="rlist">${(cat.warnings || []).map((w) => `<div class="warn">⚠ ${esc(w)}</div>`).join("")}
-      ${(cat.releases || []).map((r) => `<div class="rrow"><div class="grow"><b>${esc(t(r.name))}</b> <span class="mono">${esc(r.version)}</span>
+      ${(cat.releases || []).filter((r) => pr.runners.legacy || r.kind !== "legacy").map((r) => `<div class="rrow"><div class="grow"><b>${esc(t(r.name))}</b> <span class="mono">${esc(r.version)}</span>
         ${r.default ? `<span class="tag rec">${t("推荐")}</span>` : ""} <span class="tag">${kindText(r.kind)}</span>
         <div class="sub">${esc(t(r.note))}${r.size ? ` · ${(r.size / 1048576).toFixed(0)} MB` : ""}</div>
         ${r.usable ? "" : `<div class="warn">⚠ ${t("当前环境缺 32 位支持，装上也跑不起来")}</div>`}</div>
