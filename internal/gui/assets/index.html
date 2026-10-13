@@ -91,9 +91,7 @@ input { font: inherit; padding: 6px 10px; border: 1px solid var(--line); border-
 .tag.rec { background: var(--accent-soft); color: var(--accent); }
 .warn { color: var(--warn); font-size: 12px; }
 select { font: inherit; padding: 6px 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--bg); color: var(--text); width: 100%; margin: 4px 0 10px; }
-.item .dots { visibility: hidden; border: none; background: none; padding: 0 4px; color: var(--mute); line-height: 1; }
-.item:hover .dots, .item.sel .dots { visibility: visible; }
-.item .end { display: flex; align-items: center; gap: 4px; }
+.head .more { font-size: 18px; line-height: 1; padding: 4px 12px; }
 .menu { position: fixed; z-index: 10; min-width: 190px; display: flex; flex-direction: column;
   background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 6px; box-shadow: 0 8px 24px rgba(0,0,0,.18); }
 .menu[hidden] { display: none; }
@@ -220,19 +218,13 @@ function renderList() {
   const local = prefixes.filter((p) => p.source === "local");
   $("#list").innerHTML = `<div class="group">本地 prefix</div>` +
     (local.map((p) => `<div class="item ${p.name === sel ? "sel" : ""}" data-n="${esc(p.name)}">
-      <span>${esc(p.name)}</span><span class="end"><button class="dots" title="更多操作（也可右键）">⋯</button><small class="s-${p.state}">●</small></span></div>`).join("") || `<div class="empty item">还没有 prefix</div>`) +
+      <span>${esc(p.name)}</span><small class="s-${p.state}">●</small></div>`).join("") || `<div class="empty item">还没有 prefix</div>`) +
     `<div class="item" id="new"><small>＋ 新建 prefix</small></div>` +
     (`<div class="item ${sel === IMPORT ? "sel" : ""}" id="imp"><small>⇣ 从 Bottles 导入${bottles.some((b) => !b.imported) ? `（${bottles.filter((b) => !b.imported).length}）` : ""}</small></div>`) +
     `<div class="group">Cellar</div><div class="item ${sel === SETTINGS ? "sel" : ""}" id="settingsitem"><span>设置</span></div>` +
     `<div class="item ${sel === RUNNERS ? "sel" : ""}" id="runners"><span>Runner</span><small>${env.runners.length}</small></div>`;
   document.querySelectorAll(".item[data-n]").forEach((el) => {
     el.onclick = () => { sel = el.dataset.n; renderList(); renderMain(); };
-    el.oncontextmenu = (e) => { e.preventDefault(); openMenu(prefixMenu(el.dataset.n), e.clientX, e.clientY); };
-    el.querySelector(".dots").onclick = (e) => {
-      e.stopPropagation();
-      const r = e.currentTarget.getBoundingClientRect();
-      openMenu(prefixMenu(el.dataset.n), r.left, r.bottom + 4);
-    };
   });
   $("#new").onclick = newPrefix;
   $("#runners").onclick = () => { sel = RUNNERS; renderList(); renderMain(); };
@@ -267,6 +259,7 @@ async function renderMain() {
         <div class="meta"><span class="badge s-${p.state}">${stateText[p.state]}</span>
           <span>runner：${esc(p.runner)}</span><span>区域：${p.locale ? esc(localeName(p.locale)) : "未设置"}</span>
           ${(p.font_sets || []).length ? `<span>字体：${esc(p.font_sets.map(fontSetName).join("、"))}</span>` : ""}</div></div>
+      <button id="pmenu" class="more" title="更多操作">⋯</button>
     </div>
     ${noWine()}${p.error ? `<section><div class="err">${esc(p.error)}</div></section>` : ""}
     <div id="task"></div>
@@ -278,6 +271,11 @@ async function renderMain() {
       <button data-desk="${esc(a.id)}" data-on="${a.desktop ? 1 : ""}" title="${a.desktop ? "从应用菜单移除" : "在应用菜单里创建快捷方式"}">${a.desktop ? "移除快捷方式" : "快捷方式"}</button></div></div>`).join("") || `<div class="empty">还没有应用。先点“运行程序”装好软件，再点“添加应用”。</div>`}</div></section>
     <div id="plan"></div>
     <section><div class="sechead"><h2>运行记录</h2><button id="clearruns" hidden>清除</button></div><div id="runs" class="empty">读取中…</div></section>`;
+  $("#pmenu").onclick = (ev) => {
+    const r = ev.currentTarget.getBoundingClientRect();
+    openMenu(prefixMenu(p.name), r.left, r.bottom + 4);
+    $("#ctx").style.left = Math.max(8, r.right - $("#ctx").offsetWidth) + "px";
+  };
   $("#install").onclick = () => install(p.name);
   $("#addapp").onclick = () => addApp(p.name);
   document.querySelectorAll("[data-app]").forEach((b) => b.onclick = () => launch(p.name, b.dataset.app, b));
