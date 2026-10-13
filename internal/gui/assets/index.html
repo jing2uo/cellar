@@ -70,7 +70,10 @@ section h2 { font-size: 13px; font-weight: 600; color: var(--mute); margin: 0 0 
   display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; }
 .app .dots { border: none; background: none; padding: 0 4px; color: var(--mute); font-size: 18px; line-height: 1; }
 .app img { width: 32px; height: 32px; object-fit: contain; }
-.app .btns { display: flex; gap: 6px; margin-top: auto; } .app .btns button:first-child { flex: 1; }
+/* Buttons keep their text on one line; when the card is too narrow for
+   both (English labels are longer), the second wraps and both widen. */
+.app .btns { display: flex; flex-wrap: wrap; gap: 6px; margin-top: auto; }
+.app .btns button { flex: 1 1 auto; white-space: nowrap; }
 .app code { color: var(--mute); font-size: 11.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .badge { font-size: 11.5px; padding: 1px 8px; border-radius: 99px; border: 1px solid currentColor; }
 .s-applied, .item small.s-applied { color: var(--ok); } .s-changed, .s-new, .item small.s-changed, .item small.s-new { color: var(--warn); } .s-error, .item small.s-error { color: var(--err); }
