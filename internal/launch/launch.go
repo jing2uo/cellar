@@ -69,6 +69,10 @@ func Run(p *store.Prefix, c *config.Config, r *runner.Runner, o Options) (*Meta,
 	vd := c.VirtualDesktop
 	if o.Exe != "" {
 		exe = o.Exe
+		// A Windows Installer package is not a program: msiexec runs it.
+		if strings.EqualFold(filepath.Ext(exe), ".msi") {
+			exe, args = "msiexec", []string{"/i", o.Exe}
+		}
 	} else {
 		app, err := c.App(o.App)
 		if err != nil {

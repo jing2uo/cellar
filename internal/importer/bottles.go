@@ -17,6 +17,7 @@ import (
 	"regexp"
 	"sort"
 	"strings"
+	"syscall"
 	"time"
 
 	"gopkg.in/yaml.v3"
@@ -96,7 +97,8 @@ func bottle(dir string) (Bottle, bool) {
 	b := Bottle{Name: name, Prefix: slug(name), Dir: dir}
 	y, err := read(dir)
 	if err != nil {
-		if errors.Is(err, os.ErrNotExist) {
+		// No bottle.yml, or a file rather than a folder: not a bottle.
+		if errors.Is(err, os.ErrNotExist) || errors.Is(err, syscall.ENOTDIR) {
 			return b, false
 		}
 		b.Error = err.Error()

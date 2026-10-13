@@ -5,11 +5,14 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"slices"
 	"strconv"
 	"strings"
 
+	"github.com/jing2uo/cellar/internal/about"
+	"github.com/jing2uo/cellar/internal/appmgr"
 	"github.com/jing2uo/cellar/internal/config"
 	"github.com/jing2uo/cellar/internal/fonts"
 	"github.com/jing2uo/cellar/internal/prefs"
@@ -18,8 +21,8 @@ import (
 	"github.com/jing2uo/cellar/internal/store"
 )
 
-// The commands here give the CLI what the GUI's settings, dependency and
-// settings-page dialogs do. In a package the prefix argument is left out:
+// The commands here give the CLI what the GUI's settings, dependency,
+// edit and settings-page dialogs do. In a package the prefix argument is left out:
 // a package has one, defined by its user's cellar.toml.
 
 // prefixArg opens the prefix the arguments start with (none in a package)
@@ -168,6 +171,9 @@ func cmdDeps(args []string) error {
 	if len(pos) > 0 && pos[0] == "search" {
 		return depsSearch(pos[1:])
 	}
+	if len(pos) == 1 && pos[0] == "common" {
+		return depsCommon()
+	}
 	p, rest, err := prefixArg(pos)
 	if err != nil {
 		return err
@@ -200,7 +206,8 @@ func cmdDeps(args []string) error {
 			fmt.Println("\nalso installed (not asked for any more, or by hand):", strings.Join(extra, " "))
 		}
 		if len(want) == 0 && len(extra) == 0 {
-			fmt.Println("none. cellar deps search <word> finds verbs; cellar deps", or(p.Name, "<prefix>"), "add <verb>...")
+			fmt.Println("none. cellar deps common lists what most programs need, cellar deps search <word> finds more;")
+			fmt.Println("cellar deps", or(p.Name, "<prefix>"), "add <verb>... installs them")
 		}
 		return nil
 	}
@@ -235,6 +242,30 @@ func cmdDeps(args []string) error {
 		return nil
 	}
 	return applyNow(p)
+}
+
+func depsCommon() error {
+	if jsonOut {
+		type dep struct {
+			Verb string `json:"verb"`
+			Note string `json:"note"`
+			Slow bool   `json:"slow,omitempty"`
+		}
+		out := []dep{}
+		for _, d := range runner.Common {
+			out = append(out, dep{d.Verb, d.En, d.Slow})
+		}
+		emit(out)
+		return nil
+	}
+	for _, d := range runner.Common {
+		note := d.En
+		if d.Slow {
+			note += " (slow)"
+		}
+		fmt.Printf("%-16s %s\n", d.Verb, note)
+	}
+	return nil
 }
 
 func depsSearch(words []string) error {
@@ -311,7 +342,11 @@ func cmdFonts(args []string) error {
 		return nil
 	case "get", "rm":
 		if len(pos) != 2 || config.PackByID(pos[1]) == nil {
-			return fmt.Errorf("usage: cellar fonts %s cjk|cjk-serif|scripts", pos[0])
+			var ids []string
+			for _, p := range config.Packs {
+				ids = append(ids, p.ID)
+			}
+			return fmt.Errorf("usage: cellar fonts %s %s", pos[0], strings.Join(ids, "|"))
 		}
 		if pos[0] == "rm" {
 			return fonts.RemovePack(pos[1])
@@ -338,4 +373,76 @@ func or(s, def string) string {
 		return def
 	}
 	return s
+}
+
+// cmdEdit edits cellar.toml in $VISUAL or $EDITOR and applies it: the
+// GUI's "Edit cellar.toml". A file that does not load is not saved; the
+// editor opens again on it.
+func cmdEdit(args []string) error {
+	fs := flag.NewFlagSet("edit", flag.ContinueOnError)
+	noApply := fs.Bool("no-apply", false, "only write cellar.toml")
+	pos, _, err := parse(fs, args)
+	if err != nil {
+		return err
+	}
+	p, _, err := prefixArg(pos)
+	if err != nil {
+		return err
+	}
+	editor := or(os.Getenv("VISUAL"), or(os.Getenv("EDITOR"), "vi"))
+	tmp, err := os.CreateTemp("", "cellar-*.toml")
+	if err != nil {
+		return err
+	}
+	defer os.Remove(tmp.Name())
+	old, err := os.ReadFile(p.Config)
+	if err != nil {
+		return err
+	}
+	tmp.Write(old)
+	tmp.Close()
+	for {
+		cmd := exec.Command("sh", "-c", editor+` "$1"`, "sh", tmp.Name())
+		cmd.Stdin, cmd.Stdout, cmd.Stderr = os.Stdin, os.Stdout, os.Stderr
+		if err := cmd.Run(); err != nil {
+			return fmt.Errorf("%s: %w", editor, err)
+		}
+		text, err := os.ReadFile(tmp.Name())
+		if err != nil {
+			return err
+		}
+		if string(text) == string(old) {
+			fmt.Fprintln(os.Stderr, "no changes")
+			return nil
+		}
+		err = appmgr.SaveConfig(selfBin(), p, string(text))
+		if err == nil {
+			break
+		}
+		fmt.Fprintf(os.Stderr, "cellar: %v\nedit again? [Y/n] ", err)
+		var answer string
+		fmt.Scanln(&answer)
+		if a := strings.ToLower(strings.TrimSpace(answer)); a == "n" || a == "no" {
+			return errors.New("not saved")
+		}
+	}
+	if *noApply {
+		return nil
+	}
+	return applyNow(p)
+}
+
+// cmdAbout prints the version and the system, as the GUI's General tab
+// shows and copies them.
+func cmdAbout(args []string) error {
+	if _, _, err := parse(flag.NewFlagSet("about", flag.ContinueOnError), args); err != nil {
+		return err
+	}
+	a := about.Get(version)
+	if jsonOut {
+		emit(a)
+	} else {
+		fmt.Print(a.String())
+	}
+	return nil
 }

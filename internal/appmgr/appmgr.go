@@ -84,6 +84,23 @@ func Add(p *store.Prefix, c *config.Config, prog winapp.Program, cellarBin strin
 	return &a, nil
 }
 
+// SaveConfig replaces cellar.toml with text only if it loads; the old file
+// stays otherwise. The menu launchers follow the new apps.
+func SaveConfig(cellarBin string, p *store.Prefix, text string) error {
+	tmp := filepath.Join(p.Dir, ".cellar.toml.new")
+	if err := os.WriteFile(tmp, []byte(text), 0o644); err != nil {
+		return err
+	}
+	if _, err := config.Load(tmp); err != nil {
+		os.Remove(tmp)
+		return fmt.Errorf("%s", strings.ReplaceAll(err.Error(), tmp, p.Config))
+	}
+	if err := os.Rename(tmp, p.Config); err != nil {
+		return err
+	}
+	return RefreshDesktop(cellarBin, p)
+}
+
 // RefreshDesktop rewrites the prefix's menu launchers after cellar.toml
 // changed: the ones there get the apps' current name, icon and command, and
 // the ones whose app is gone are removed. It adds none; that stays the

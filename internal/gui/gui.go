@@ -13,7 +13,6 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"runtime"
 	"slices"
 	"sort"
 	"strings"
@@ -22,6 +21,7 @@ import (
 
 	"github.com/wailsapp/wails/v3/pkg/application"
 
+	"github.com/jing2uo/cellar/internal/about"
 	"github.com/jing2uo/cellar/internal/appmgr"
 	"github.com/jing2uo/cellar/internal/config"
 	"github.com/jing2uo/cellar/internal/desktop"
@@ -240,46 +240,7 @@ func (s *Service) OpenHome() error {
 
 // About is what the settings' General tab shows: cellar and the system
 // it runs on, for a bug report.
-type About struct {
-	Version string `json:"version"`
-	Install string `json:"install"` // flatpak | host
-	Home    string `json:"home"`
-	OS      string `json:"os"`
-	Runtime string `json:"runtime,omitempty"` // the flatpak runtime
-	Kernel  string `json:"kernel"`
-	Arch    string `json:"arch"`
-	Desktop string `json:"desktop"`
-	Locale  string `json:"locale"`
-	Go      string `json:"go"`
-}
-
-func (s *Service) About() About {
-	a := About{Version: s.version, Install: "host", Home: store.Home(), Arch: runtime.GOARCH, Go: runtime.Version(),
-		Locale: config.HostLocale()}
-	a.OS = osName("/etc/os-release")
-	if runner.InFlatpak() {
-		a.Install, a.Runtime, a.OS = "flatpak", a.OS, osName("/run/host/os-release")
-	}
-	if b, err := os.ReadFile("/proc/sys/kernel/osrelease"); err == nil {
-		a.Kernel = strings.TrimSpace(string(b))
-	}
-	a.Desktop = strings.TrimSpace(os.Getenv("XDG_CURRENT_DESKTOP") + " " + os.Getenv("XDG_SESSION_TYPE"))
-	return a
-}
-
-// osName is an os-release file's PRETTY_NAME.
-func osName(path string) string {
-	b, err := os.ReadFile(path)
-	if err != nil {
-		return ""
-	}
-	for _, l := range strings.Split(string(b), "\n") {
-		if v, ok := strings.CutPrefix(l, "PRETTY_NAME="); ok {
-			return strings.Trim(v, `"'`)
-		}
-	}
-	return ""
-}
+func (s *Service) About() about.Info { return about.Get(s.version) }
 
 // RemoveRunner deletes a downloaded runner that no prefix uses.
 func (s *Service) RemoveRunner(name string) error { return appmgr.RemoveRunner(name) }
@@ -439,18 +400,7 @@ func (s *Service) SaveConfig(name, text string) error {
 	if err != nil {
 		return err
 	}
-	tmp := filepath.Join(p.Dir, ".cellar.toml.new")
-	if err := os.WriteFile(tmp, []byte(text), 0o644); err != nil {
-		return err
-	}
-	if _, err := config.Load(tmp); err != nil {
-		os.Remove(tmp)
-		return err
-	}
-	if err := os.Rename(tmp, p.Config); err != nil {
-		return err
-	}
-	return appmgr.RefreshDesktop(s.self, p)
+	return appmgr.SaveConfig(s.self, p, text)
 }
 
 // Launch starts `cellar run` detached and returns at once; the run shows up
@@ -676,36 +626,6 @@ type Dep struct {
 	Slow bool   `json:"slow,omitempty"`
 }
 
-// common is the short list the dialog puts first, with a note on when each
-// helps; verbs this winetricks lacks are left out.
-func common() []Dep {
-	return []Dep{
-		{"vcrun2022", tr("VC++ 2015–2022 运行库，大多数新软件需要", "VC++ 2015–2022 runtime, needed by most newer software"), false},
-		{"vcrun2013", tr("VC++ 2013 运行库", "VC++ 2013 runtime"), false},
-		{"vcrun2010", tr("VC++ 2010 运行库", "VC++ 2010 runtime"), false},
-		{"vcrun2008", tr("VC++ 2008 运行库，较老的软件", "VC++ 2008 runtime for older software"), false},
-		{"vcrun2005", tr("VC++ 2005 运行库", "VC++ 2005 runtime"), false},
-		{"vcrun6", tr("VC6 运行库，很老的软件", "VC6 runtime for very old software"), false},
-		{"mfc42", tr("MFC 4.2，老式国产软件常用", "MFC 4.2, commonly used by older Chinese software"), false},
-		{"vb6run", tr("VB6 运行库，老式国产软件常用", "VB6 runtime, commonly used by older Chinese software"), false},
-		{"riched20", tr("RichEdit 控件，聊天框、编辑框显示异常时装", "RichEdit control, useful when chat or edit boxes render incorrectly"), false},
-		{"gdiplus", tr("GDI+，图片或图表显示异常时装", "GDI+, useful when images or charts render incorrectly"), false},
-		{"msxml6", "MSXML 6", false},
-		{"msxml3", tr("MSXML 3，老软件读写 XML 用", "MSXML 3, used by older software to read and write XML"), false},
-		{"quartz", tr("DirectShow，程序里放视频", "DirectShow, for programs that play video"), false},
-		{"corefonts", tr("微软核心英文字体（Arial、Times 等）", "Microsoft core fonts (Arial, Times, and others)"), false},
-		{"d3dx9", tr("DirectX 9 组件，老游戏", "DirectX 9 components for older games"), false},
-		{"d3dcompiler_47", tr("D3D 着色器编译器，新一些的程序和浏览器内核用", "D3D shader compiler, used by newer programs and browser engines"), false},
-		{"xact", tr("XAudio / XACT 音频，游戏没声音时装", "XAudio / XACT audio, useful when games have no sound"), false},
-		{"dxvk", tr("DXVK：用 Vulkan 跑 D3D 9–11，游戏用", "DXVK: runs D3D 9–11 through Vulkan for games"), false},
-		{"vkd3d", tr("VKD3D：用 Vulkan 跑 D3D 12", "VKD3D: runs D3D 12 through Vulkan"), false},
-		{"dotnet48", ".NET Framework 4.8", true},
-		{"dotnet40", ".NET Framework 4.0", true},
-		{"dotnet35", ".NET Framework 3.5", true},
-		{"dotnetdesktop8", tr(".NET 8 桌面运行时", ".NET 8 desktop runtime"), false},
-	}
-}
-
 // DepState is what the dependency dialog shows: the verbs winetricks has,
 // the prefix's list and what winetricks logged as installed in it.
 type DepState struct {
@@ -745,9 +665,9 @@ func (s *Service) Dependencies(name string) (DepState, error) {
 	for _, v := range st.Verbs {
 		have[v.Verb] = true
 	}
-	for _, d := range common() {
+	for _, d := range runner.Common {
 		if have[d.Verb] {
-			st.Common = append(st.Common, d)
+			st.Common = append(st.Common, Dep{d.Verb, tr(d.Zh, d.En), d.Slow})
 		}
 	}
 	b, _ := os.ReadFile(filepath.Join(p.Pfx, "winetricks.log"))
@@ -792,13 +712,10 @@ func (s *Service) PickInstaller() (string, error) {
 		PromptForSingleSelection()
 }
 
-// RunInstaller starts an installer detached; .msi goes through msiexec.
+// RunInstaller starts an installer detached; launch runs a .msi through
+// msiexec.
 func (s *Service) RunInstaller(name, path string) error {
-	args := []string{"run", name, "--exe", path}
-	if strings.EqualFold(filepath.Ext(path), ".msi") {
-		args = []string{"run", name, "--exe", "msiexec", "--", "/i", path}
-	}
-	cmd := exec.Command(s.self, args...)
+	cmd := exec.Command(s.self, "run", name, "--exe", path)
 	cmd.SysProcAttr = &syscall.SysProcAttr{Setsid: true}
 	if err := cmd.Start(); err != nil {
 		return err

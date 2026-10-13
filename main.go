@@ -13,6 +13,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 
 	"github.com/jing2uo/cellar/internal/appmgr"
@@ -30,21 +31,26 @@ var version = "dev"
 
 const usage = `cellar - Wine prefixes from cellar.toml
 
-  cellar new <prefix> [--runner R] [--locale zh_CN] [--fonts core,cjk|all|none]
-                                     (alias: create; fonts default: core, plus cjk for a CJK region)
+  cellar new <prefix> [--runner R] [--locale zh_CN] [--fonts core,cjk|all|none] [--no-apply]
+                                     (alias: create; fonts default: core, plus cjk for a CJK region;
+                                     then applies: wineboot and fonts)
   cellar list
   cellar rm <prefix> [--yes]         delete it and everything installed in it
   cellar inspect <prefix>            effective config, defaults merged in
   cellar plan <prefix> [--force]     what apply would change
   cellar apply <prefix> [--force]
+  cellar edit <prefix>               edit cellar.toml in $EDITOR, then apply
   cellar revert <prefix>             undo cellar.toml edits made since the last apply
   cellar run <prefix>[/<app>] [--exe X] [--trace +chan] [-- args]
+                                     --exe: a program in C:, a host path (an installer, .msi
+                                     too) or a Wine tool: winecfg control regedit explorer
   cellar config <prefix> [key=value ...]   show or change settings, applied at once:
                                      runner locale fonts=core,cjk|all|none winver desktop=WxH|off dpi=N|auto
   cellar deps <prefix> [add|rm <verb>...]  winetricks verbs (dlls, fonts); add installs at once
+  cellar deps common                 the verbs most programs need
   cellar deps search <word>...       find winetricks verbs
   cellar fonts [list] | get <pack> | rm <pack> | policy [host-first|library-only]
-                                     the font library (packs: cjk cjk-serif scripts)
+                                     the font library (packs: ` + "PACKS" + `)
   cellar logs <prefix> [--run ID] [--tail N] [--clear]
   cellar kill <prefix>
   cellar desktop <prefix>[/<app>] [--remove]
@@ -52,11 +58,13 @@ const usage = `cellar - Wine prefixes from cellar.toml
   cellar app add <prefix> <C:\path.exe> [--name N] [--args "..."] [--no-desktop]
   cellar app rm <prefix> <id>
   cellar app rename <prefix> <id> <name>
-  cellar import bottles [--list] [<bottle>...] [--as NAME]
+  cellar import bottles [--list] [--dir D] [<bottle>...] [--as NAME]
+                                     --dir: Bottles' bottles directory, if not the usual one
   cellar runner list | available [--n 3] | install <source[@ver]|url> | rm <name>
   cellar icon <program.exe> <out.png>   extract a program's icon (packaging)
   cellar extract                     a package's apply_extra: unpack its installer
-  cellar gui [runners|<prefix>]
+  cellar about                       version and system, for a bug report
+  cellar gui [<prefix>]
 
 Global: --json. Data: $CELLAR_HOME (default $XDG_DATA_HOME/cellar).
 In a FlatPark package, leave out <prefix>: flatpak run --command=cellar <app-id> config locale=ja_JP
@@ -70,7 +78,7 @@ func main() {
 		if hasGUI {
 			os.Exit(exit(runGUI("")))
 		}
-		fmt.Print(usage)
+		fmt.Print(usageText())
 		os.Exit(2)
 	}
 	cmds := map[string]func([]string) error{
@@ -86,7 +94,7 @@ func main() {
 		},
 		"version": func([]string) error { fmt.Println(version); return nil },
 	}
-	cmds["extract"], cmds["icon"] = cmdExtract, cmdIcon
+	cmds["extract"], cmds["icon"], cmds["edit"], cmds["about"] = cmdExtract, cmdIcon, cmdEdit, cmdAbout
 	f, ok := cmds[os.Args[1]]
 	if !ok && store.Packaged() {
 		// Inside a package the launcher is called as `cellar [files...]`
@@ -95,13 +103,31 @@ func main() {
 	}
 	if !ok {
 		if os.Args[1] == "help" || os.Args[1] == "-h" || os.Args[1] == "--help" {
-			fmt.Print(usage)
+			fmt.Print(usageText())
 			return
 		}
-		fmt.Fprintf(os.Stderr, "unknown command %q\n\n%s", os.Args[1], usage)
+		fmt.Fprintf(os.Stderr, "unknown command %q\n\n%s", os.Args[1], usageText())
 		os.Exit(2)
 	}
 	os.Exit(exit(f(os.Args[2:])))
+}
+
+// usageText is usage with the font library's packs filled in.
+func usageText() string {
+	var ids []string
+	for _, p := range config.Packs {
+		ids = append(ids, p.ID)
+	}
+	return strings.Replace(usage, "PACKS", strings.Join(ids, " "), 1)
+}
+
+// selfBin is cellar's own path, which menu launchers call.
+func selfBin() string {
+	self, _ := os.Executable()
+	if real, err := filepath.EvalSymlinks(self); err == nil {
+		return real
+	}
+	return self
 }
 
 type exitCode int
@@ -194,6 +220,7 @@ func cmdNew(args []string) error {
 	rn := fs.String("runner", "", "runner (default: system Wine, else newest download)")
 	loc := fs.String("locale", "", "Windows region (zh_CN, ja_JP...; default: the host's)")
 	fonts := fs.String("fonts", "", "font sets: core, cjk, all, comma-separated, or none (default: core, and cjk for a CJK region)")
+	noApply := fs.Bool("no-apply", false, "only write cellar.toml")
 	pos, _, err := parse(fs, args)
 	if err != nil {
 		return err
@@ -205,6 +232,9 @@ func cmdNew(args []string) error {
 		if *rn, err = runner.Default(); err != nil {
 			return err
 		}
+	}
+	if _, err := runner.Resolve(*rn); err != nil {
+		return err
 	}
 	// Unset, the region is the host's, and the fonts English plus CJK for
 	// a CJK region.
@@ -226,10 +256,17 @@ func cmdNew(args []string) error {
 		os.RemoveAll(p.Dir)
 		return err
 	}
+	if !jsonOut {
+		fmt.Println(p.Config)
+	}
+	// As the GUI does: set the prefix up now rather than on the first run.
+	if !*noApply {
+		if err := applyNow(p); err != nil {
+			return err
+		}
+	}
 	if jsonOut {
 		emit(p)
-	} else {
-		fmt.Println(p.Config)
 	}
 	return nil
 }
@@ -276,6 +313,8 @@ func cmdList(args []string) error {
 	type row struct {
 		Name    string   `json:"name"`
 		Runner  string   `json:"runner"`
+		Locale  string   `json:"locale"`
+		Fonts   []string `json:"font_sets"`
 		Applied bool     `json:"applied"`
 		Dirty   bool     `json:"dirty"`
 		Apps    []string `json:"apps"`
@@ -289,7 +328,7 @@ func cmdList(args []string) error {
 			var c *config.Config
 			if c, err = p.Load(); err == nil {
 				st, _ := p.State()
-				r.Runner, r.Applied = c.Runner, st.Hash != ""
+				r.Runner, r.Locale, r.Fonts, r.Applied = c.Runner, c.Locale, c.FontSets, st.Hash != ""
 				r.Dirty = r.Applied && st.Hash != c.Hash()
 				for _, a := range c.Apps {
 					r.Apps = append(r.Apps, a.ID)
@@ -315,7 +354,11 @@ func cmdList(args []string) error {
 		case r.Dirty:
 			state = "changed"
 		}
-		fmt.Printf("%-16s %-32s %-10s %s\n", r.Name, r.Runner, state, strings.Join(r.Apps, " "))
+		fonts := strings.Join(r.Fonts, ",")
+		if fonts == "" {
+			fonts = "-"
+		}
+		fmt.Printf("%-16s %-32s %-8s %-10s %-10s %s\n", r.Name, r.Runner, r.Locale, fonts, state, strings.Join(r.Apps, " "))
 	}
 	return nil
 }
@@ -398,9 +441,7 @@ func cmdRevert(args []string) error {
 	if err := p.RevertConfig(); err != nil {
 		return err
 	}
-	self, _ := os.Executable()
-	self, _ = filepath.EvalSymlinks(self)
-	return appmgr.RefreshDesktop(self, p)
+	return appmgr.RefreshDesktop(selfBin(), p)
 }
 
 func cmdApply(args []string) error {
@@ -418,6 +459,12 @@ func cmdApply(args []string) error {
 	}
 	if err := pl.Apply(logf); err != nil {
 		return err
+	}
+	// cellar.toml may have been edited by hand: launchers follow its apps.
+	if p, err := store.Open(pl.Prefix); err == nil {
+		if err := appmgr.RefreshDesktop(selfBin(), p); err != nil {
+			return err
+		}
 	}
 	if jsonOut {
 		emit(pl)
@@ -564,11 +611,7 @@ func cmdDesktop(args []string) error {
 	if err != nil {
 		return err
 	}
-	self, err := os.Executable()
-	if err != nil {
-		return err
-	}
-	self, _ = filepath.EvalSymlinks(self)
+	self := selfBin()
 	var done []string
 	for i := range c.Apps {
 		a := &c.Apps[i]
@@ -617,6 +660,7 @@ func cmdRunner(args []string) error {
 			return nil
 		}
 		if len(infos) == 0 {
+			fmt.Fprintln(os.Stderr, "runners:", store.RunnersDir())
 			return runner.ErrNone
 		}
 		for _, r := range infos {
@@ -629,6 +673,7 @@ func cmdRunner(args []string) error {
 				fmt.Println("    ! " + p)
 			}
 		}
+		fmt.Println("\n* default.  A Wine unpacked into", store.RunnersDir(), "shows up here too.")
 	case "available":
 		rels, warns, err := runner.Available(*n)
 		if err != nil {
@@ -688,26 +733,49 @@ func cmdRunner(args []string) error {
 
 func cmdImport(args []string) error {
 	if len(args) == 0 || args[0] != "bottles" {
-		return errors.New("usage: cellar import bottles [--list] [<bottle>...]")
+		return errors.New("usage: cellar import bottles [--list] [--dir D] [<bottle>...]")
 	}
 	fs := flag.NewFlagSet("import", flag.ContinueOnError)
 	list := fs.Bool("list", false, "list bottles found")
 	as := fs.String("as", "", "prefix name (one bottle only)")
+	from := fs.String("dir", "", "where the bottles are (default: Bottles' usual places)")
 	pos, _, err := parse(fs, args[1:])
 	if err != nil {
 		return err
 	}
-	found := importer.Find()
+	found, where := importer.Find(), importer.BottlesDirs()
+	if *from != "" {
+		found, where = importer.Scan(*from), []string{*from}
+	}
 	if *list || len(pos) == 0 {
+		have, _ := store.List()
+		type row struct {
+			importer.Bottle
+			Imported bool `json:"imported"`
+		}
+		rows := []row{}
+		for _, b := range found {
+			rows = append(rows, row{b, slices.Contains(have, b.Prefix)})
+		}
 		if jsonOut {
-			emit(found)
+			emit(rows)
 			return nil
 		}
 		if len(found) == 0 {
-			fmt.Println("no bottles in", strings.Join(importer.BottlesDirs(), ", "))
+			fmt.Println("no bottles in", strings.Join(where, ", "))
 		}
-		for _, b := range found {
-			fmt.Printf("%-16s %-16s %-30s %s%s\n", b.Name, b.Runner, strings.Join(b.Apps, ","), b.Dir, b.Error)
+		for _, r := range rows {
+			mark := " "
+			if r.Imported {
+				mark = "✓"
+			}
+			if r.Error != "" {
+				r.Error = "  ! " + r.Error
+			}
+			fmt.Printf("%s %-16s %-16s %-30s %s%s\n", mark, r.Name, r.Runner, strings.Join(r.Apps, ","), r.Dir, r.Error)
+		}
+		if len(found) > 0 {
+			fmt.Println("\n✓ imported.  cellar import bottles <name>...")
 		}
 		return nil
 	}
@@ -780,8 +848,7 @@ func cmdApp(args []string) error {
 		if len(rest) != 1 {
 			return errors.New(`usage: cellar app add <prefix> 'C:\path\to.exe'`)
 		}
-		self, _ := os.Executable()
-		a, err := appmgr.Add(p, c, winapp.Program{Name: *name, Exe: rest[0], Args: *appArgs}, self, *noDesk)
+		a, err := appmgr.Add(p, c, winapp.Program{Name: *name, Exe: rest[0], Args: *appArgs}, selfBin(), *noDesk)
 		if a == nil {
 			return err
 		}
@@ -800,9 +867,7 @@ func cmdApp(args []string) error {
 		if len(rest) != 2 {
 			return errors.New("usage: cellar app rename <prefix> <id> <name>")
 		}
-		self, _ := os.Executable()
-		self, _ = filepath.EvalSymlinks(self)
-		return appmgr.Rename(self, p, rest[0], rest[1])
+		return appmgr.Rename(selfBin(), p, rest[0], rest[1])
 	default:
 		return fmt.Errorf("unknown app command %q", args[0])
 	}
