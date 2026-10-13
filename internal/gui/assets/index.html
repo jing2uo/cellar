@@ -36,7 +36,8 @@ aside { width: 240px; background: var(--side); border-right: 1px solid var(--lin
 .brand img { width: 24px; height: 24px; }
 .list { flex: 1; overflow: auto; padding: 4px 8px; }
 .group { color: var(--mute); font-size: 12px; padding: 12px 10px 4px; }
-.group.gh { display: flex; align-items: center; justify-content: space-between; padding-right: 4px; }
+.group.gh { display: flex; align-items: center; justify-content: space-between; padding: 14px 4px 6px 10px; font-size: 14px; font-weight: 600; color: var(--text); }
+.group.gh .ico { width: 18px; height: 18px; }
 .gadd { border: none; background: none; padding: 3px; border-radius: 6px; color: var(--mute); display: flex; line-height: 0; }
 .gadd:hover { color: var(--text); background: color-mix(in srgb, var(--text) 8%, transparent); }
 .item { padding: 8px 10px; border-radius: 8px; cursor: default; display: flex; justify-content: space-between; align-items: center; gap: 8px; }
@@ -93,6 +94,8 @@ textarea, pre.log {
   -webkit-user-select: text; user-select: text; overflow: auto; white-space: pre;
 }
 input { font: inherit; padding: 6px 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--bg); color: var(--text); width: 100%; margin: 4px 0 10px; }
+/* A button with a note beside it; the note drops below when narrow. */
+.btnrow { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px; }
 .row { display: flex; justify-content: flex-end; align-items: center; gap: 8px; }
 .welcome { color: var(--mute); margin-top: 18vh; text-align: center; }
 .banner { border: 1px solid var(--warn); background: color-mix(in srgb, var(--warn) 10%, transparent); border-radius: 12px; padding: 14px 18px; margin-bottom: 16px; display: flex; justify-content: space-between; align-items: center; gap: 16px; }
@@ -250,7 +253,7 @@ function applyTheme(theme) {
 
 function renderList() {
   const local = prefixes.filter((p) => p.source === "local");
-  $("#list").innerHTML = `<div class="group gh"><span>${t("本地 prefix")}</span><button id="new" class="gadd" title="${t("新建 prefix")}"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg></button></div>` +
+  $("#list").innerHTML = `<div class="group gh"><span>${t("Prefix 列表")}</span><button id="new" class="gadd" title="${t("新建 prefix")}"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg></button></div>` +
     (local.map((p) => `<div class="item ${p.name === sel ? "sel" : ""}" data-n="${esc(p.name)}">
       <span>${esc(p.name)}</span><small class="s-${p.state}">●</small></div>`).join("") || `<div class="empty item">${t("还没有 prefix")}</div>`);
   $("#sys").innerHTML = `<div class="item ${sel === SETTINGS ? "sel" : ""}" id="settingsitem"><span class="withico"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>${t("设置")}</span></div>`;
@@ -494,7 +497,7 @@ async function renderFonts() {
         ${p.missing ? `<button data-get="${p.id}" title="${t("约 {0}", mb(p.missing_size))}">${p.missing === p.files ? t("下载") : t("下载缺的 {0} 个", p.missing)}</button>` : ""}
         ${p.have ? `<button data-rmp="${p.id}">${t("删除")}</button>` : ""}</div>`).join("")}</div>
       <div id="fonttask" class="meta"></div>
-      <div class="row" style="justify-content:flex-start"><button id="fontdir">${t("打开字体目录")}</button>
+      <div class="btnrow" style="margin-top:16px"><button id="fontdir">${t("打开字体目录")}</button>
         <span class="meta">${t("下载失败时，可以手动下载后放进这个目录。")}</span></div>
     </section>`;
   document.querySelectorAll('input[name="src"]').forEach((r) => r.onchange = async () => {
@@ -546,8 +549,8 @@ async function renderRunners() {
           : `<button data-rrm="${esc(r.name)}">${t("删除")}</button>`}</div>`).join("") || `<div class="empty">${t("还没有")}</div>`}</div></section>
     <section><h2>${t("可下载")}</h2><div id="avail" class="empty">${t("正在查询 GitHub…")}</div></section>
     <section><h2>${t("自己添加")}</h2>
-      <div class="meta">${t("自己下载解压后放进 runner 目录即可，目录里需要有 bin/wine 或 files/bin/wine。")}</div>
-      <div class="row" style="justify-content:flex-start"><button id="runnerdir">${t("打开 runner 目录")}</button></div></section>`;
+      <div class="btnrow"><button id="runnerdir">${t("打开 runner 目录")}</button>
+        <span class="meta">${t("自己下载解压后放进 runner 目录即可，目录里需要有 bin/wine 或 files/bin/wine。")}</span></div></section>`;
   wireNoWine();
   $("#runnerdir").onclick = () => call("OpenRunnerDir").catch(fail);
   document.querySelectorAll("[data-rrm]").forEach((b) => b.onclick = async () => {

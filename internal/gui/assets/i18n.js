@@ -47,7 +47,7 @@ export const EN = {
   "错误": "Error",
   "取消": "Cancel",
   "确定": "OK",
-  "本地 prefix": "Local prefixes",
+  "Prefix 列表": "Prefixes",
   "还没有 prefix": "No prefixes yet",
   "新建 prefix": "New prefix",
   "从 Bottles 导入": "Import from Bottles",
