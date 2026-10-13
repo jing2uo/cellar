@@ -223,8 +223,8 @@ function renderList() {
       <span>${esc(p.name)}</span><span class="end"><button class="dots" title="更多操作（也可右键）">⋯</button><small class="s-${p.state}">●</small></span></div>`).join("") || `<div class="empty item">还没有 prefix</div>`) +
     `<div class="item" id="new"><small>＋ 新建 prefix</small></div>` +
     (`<div class="item ${sel === IMPORT ? "sel" : ""}" id="imp"><small>⇣ 从 Bottles 导入${bottles.some((b) => !b.imported) ? `（${bottles.filter((b) => !b.imported).length}）` : ""}</small></div>`) +
-    `<div class="group">Wine</div><div class="item ${sel === RUNNERS ? "sel" : ""}" id="runners"><span>Runner</span><small>${env.runners.length}</small></div>` +
-    `<div class="group">Cellar</div><div class="item ${sel === SETTINGS ? "sel" : ""}" id="settingsitem"><span>设置</span></div>`;
+    `<div class="group">Cellar</div><div class="item ${sel === SETTINGS ? "sel" : ""}" id="settingsitem"><span>设置</span></div>` +
+    `<div class="item ${sel === RUNNERS ? "sel" : ""}" id="runners"><span>Runner</span><small>${env.runners.length}</small></div>`;
   document.querySelectorAll(".item[data-n]").forEach((el) => {
     el.onclick = () => { sel = el.dataset.n; renderList(); renderMain(); };
     el.oncontextmenu = (e) => { e.preventDefault(); openMenu(prefixMenu(el.dataset.n), e.clientX, e.clientY); };
