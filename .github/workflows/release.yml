@@ -73,3 +73,17 @@ jobs:
           gh release create "$TAG" --repo "$GITHUB_REPOSITORY" \
             --target "$GITHUB_SHA" --title "$TAG" --generate-notes \
             cellar-x86_64 cellar-cli-x86_64 SHA256SUMS
+
+  # Tells FlatPark the release is live, so it pins and publishes the new
+  # version right away. The release is created above with GITHUB_TOKEN, which
+  # starts no on: release runs, hence a job here with the tag passed in.
+  flatpark:
+    needs: [version, release]
+    runs-on: ubuntu-latest
+    # A FlatPark hiccup should never fail the release.
+    continue-on-error: true
+    steps:
+      - uses: flatpark/publish-action@v1
+        with:
+          app-id: org.flatpark.Cellar
+          tag: ${{ needs.version.outputs.tag }}

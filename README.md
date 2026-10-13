@@ -42,8 +42,14 @@ binaries, with their `SHA256SUMS`:
 Builds of every commit are attached to the
 [CI runs](https://github.com/jing2uo/cellar/actions/workflows/build.yml).
 
-A Flatpak (`org.flatpark.Cellar`, on the `org.winehq.Wine` base) is planned for
-FlatPark.
+The Flatpak, [`org.flatpark.Cellar`](https://flatpark.org/apps/org.flatpark.Cellar/),
+is on [FlatPark](https://flatpark.org), with Wine from the `org.winehq.Wine`
+base:
+
+```sh
+flatpak --user remote-add --if-not-exists flatpark https://dl.flatpark.org/flatpark.flatpakrepo
+flatpak --user install flatpark org.flatpark.Cellar
+```
 
 ## Usage
 
