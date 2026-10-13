@@ -663,9 +663,14 @@ function fmt(c) {
   return `${c.name}: → ${c.value}`;
 }
 
+// showRuns draws the prefix's finished runs. A run is recorded only when it
+// exits, so the open prefix's list is polled (runsPoll) and redrawn only
+// when a run came or went.
 async function showRuns(name) {
   const runs = await call("Runs", name);
-  $("#runs").outerHTML = `<div id="runs">${runs.length ? `<table>${runs.map((r) => `
+  const el = $("#runs"), key = runs.map((r) => r.id).join();
+  if (!el || sel !== name || el.dataset.key === key) return;
+  el.outerHTML = `<div id="runs" data-key="${esc(key)}">${runs.length ? `<table>${runs.map((r) => `
     <tr class="run" data-id="${esc(r.id)}"><td class="mono">${esc(r.id)}</td><td>${esc(r.app || "—")}</td>
     <td class="${r.exit_code ? "s-error" : "s-applied"}">${t("退出码 {0}", r.exit_code)}</td><td>${r.seconds.toFixed(1)}s</td>
     <td class="mono cmd" title="${esc(r.argv.slice(1).join(" "))}">${esc(r.argv.slice(1).join(" "))}</td></tr>`).join("")}</table>` : `<div class="empty">${t("暂无运行记录")}</div>`}</div>`;
@@ -1021,6 +1026,7 @@ function newPrefix() {
 }
 
 window.addEventListener("focus", () => load(false).catch(() => {}));
+setInterval(() => { if (!document.hidden && sel && sel !== SETTINGS && $("#runs")) showRuns(sel).catch(() => {}); }, 2000);
 load().catch((e) => { $("#main").innerHTML = `<div class="err">${esc(e.message || e)}</div>`; });
 </script>
 </body>
