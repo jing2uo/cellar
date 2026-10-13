@@ -19,8 +19,23 @@ const (
 	LibraryOnly = "library-only" // only the library's: the same on every machine
 )
 
+// UI choices for the GUI; "" follows the system.
+const (
+	LangZH = "zh"
+	LangEN = "en"
+
+	ThemeLight = "light"
+	ThemeDark  = "dark"
+)
+
 type Prefs struct {
 	Fonts Fonts `toml:"fonts" json:"fonts"`
+	UI    UI    `toml:"ui" json:"ui"`
+}
+
+type UI struct {
+	Language string `toml:"language,omitempty" json:"language"` // "" | zh | en
+	Theme    string `toml:"theme,omitempty" json:"theme"`       // "" | light | dark
 }
 
 type Fonts struct {
@@ -41,6 +56,12 @@ func Load() Prefs {
 	default:
 		p.Fonts.Source = HostFirst
 	}
+	if p.UI.Language != LangZH && p.UI.Language != LangEN {
+		p.UI.Language = ""
+	}
+	if p.UI.Theme != ThemeLight && p.UI.Theme != ThemeDark {
+		p.UI.Theme = ""
+	}
 	return p
 }
 
@@ -49,6 +70,16 @@ func Save(p Prefs) error {
 	case HostFirst, LibraryOnly:
 	default:
 		return fmt.Errorf("font source %q (want %s or %s)", p.Fonts.Source, HostFirst, LibraryOnly)
+	}
+	switch p.UI.Language {
+	case "", LangZH, LangEN:
+	default:
+		return fmt.Errorf("language %q (want %s or %s, or empty for the system's)", p.UI.Language, LangZH, LangEN)
+	}
+	switch p.UI.Theme {
+	case "", ThemeLight, ThemeDark:
+	default:
+		return fmt.Errorf("theme %q (want %s or %s, or empty for the system's)", p.UI.Theme, ThemeLight, ThemeDark)
 	}
 	b, err := toml.Marshal(p)
 	if err != nil {

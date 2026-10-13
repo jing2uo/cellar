@@ -52,7 +52,7 @@ var Sources = []Source{
 	{ID: "kron4ek-proton-wow64", Name: "Proton (Kron4ek, WoW64)", Repo: "Kron4ek/Wine-Builds",
 		Asset: regexp.MustCompile(`^wine-proton-([0-9][0-9.]*-[0-9]+)-amd64-wow64\.tar\.xz$`), Kind: "wow64",
 		Tag: regexp.MustCompile(`^proton-[0-9][0-9.]*-[0-9]+$`), AssetFor: func(t string) string { return "wine-" + t + "-amd64-wow64.tar.xz" },
-		Note: "Valve Proton 的 Wine，带游戏相关补丁；不含 DXVK，需要时用 winetricks 装"},
+		Note: "Valve Proton 的 Wine，不含 DXVK"},
 	{ID: "kron4ek-staging", Name: "Wine Staging (Kron4ek, 传统 32 位)", Repo: "Kron4ek/Wine-Builds",
 		Asset: regexp.MustCompile(`^wine-([0-9.]+(?:-rc[0-9]+)?)-staging-amd64\.tar\.xz$`), Kind: "legacy",
 		Tag: kronTag, AssetFor: func(t string) string { return "wine-" + t + "-staging-amd64.tar.xz" },

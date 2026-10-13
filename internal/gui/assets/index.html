@@ -9,13 +9,21 @@
   --text: #1f1d1a; --mute: #77726b; --accent: #8a2c3b; --accent-soft: #f3e6e8;
   --ok: #2f7d4f; --warn: #a86a12; --err: #b3261e; --mono: "JetBrains Mono", "Noto Sans Mono CJK SC", monospace;
 }
+/* Dark follows the system unless the settings pick a theme (data-theme). */
 @media (prefers-color-scheme: dark) {
-  :root {
+  :root:not([data-theme="light"]) {
     --bg: #1b1a19; --panel: #232220; --side: #161514; --line: #34322f;
     --text: #ebe8e3; --mute: #9b958c; --accent: #e07a8b; --accent-soft: #3a2429;
     --ok: #6cc28f; --warn: #e0a54a; --err: #ef6b62;
   }
 }
+:root[data-theme="dark"] {
+  --bg: #1b1a19; --panel: #232220; --side: #161514; --line: #34322f;
+  --text: #ebe8e3; --mute: #9b958c; --accent: #e07a8b; --accent-soft: #3a2429;
+  --ok: #6cc28f; --warn: #e0a54a; --err: #ef6b62;
+}
+:root[data-theme="light"] { color-scheme: light; }
+:root[data-theme="dark"] { color-scheme: dark; }
 * { box-sizing: border-box; }
 html, body { margin: 0; height: 100%; }
 body {
@@ -134,6 +142,7 @@ table.about { border-collapse: collapse; -webkit-user-select: text; user-select:
 table.about th { text-align: left; font-weight: 400; color: var(--mute); padding: 4px 24px 4px 0; white-space: nowrap; vertical-align: top; }
 table.about td { padding: 4px 0; word-break: break-all; }
 table.about td button { padding: 2px 10px; margin-left: 8px; font-size: 12px; }
+.pair { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
 .radios { display: flex; flex-direction: column; gap: 8px; margin: 6px 0; }
 .radios label { display: flex; gap: 8px; align-items: flex-start; }
 .radios input { width: auto; margin: 3px 0 0; }
@@ -174,6 +183,7 @@ table.about td button { padding: 2px 10px; margin-left: 8px; font-size: 12px; }
 
 <script type="module">
 import { Call } from "/wails/runtime.js";
+import { t, setLang, LANG_NAMES } from "./i18n.js";
 const S = "github.com/jing2uo/cellar/internal/gui.Service.";
 const call = (m, ...a) => Call.ByName(S + m, ...a);
 const $ = (s) => document.querySelector(s);
@@ -219,10 +229,18 @@ async function load(force = true) {
   if (!force && (sig === lastSig || $("#dlg").open)) return;
   lastSig = sig;
   env = e; prefixes = ps; bottles = bs;
+  setLang(env.lang);
+  applyTheme(env.theme);
   if (!sel && location.hash.length > 1) { sel = decodeURIComponent(location.hash.slice(1)); if (sel === "runners") { sel = SETTINGS; setTab = "runner"; } }
   if (!sel && prefixes.length) sel = prefixes[0].name;
   renderList();
   renderMain();
+}
+
+// applyTheme sets light or dark, or "" to follow the system.
+function applyTheme(theme) {
+  if (theme) document.documentElement.dataset.theme = theme;
+  else delete document.documentElement.dataset.theme;
 }
 
 function renderList() {
@@ -570,8 +588,21 @@ async function renderGeneral() {
     ["系统", a.os], ...(a.runtime ? [["Flatpak 运行时", a.runtime]] : []), ["内核", `${a.kernel} · ${a.arch}`],
     ["桌面", a.desktop], ["区域", a.locale], ["Go", a.go],
   ];
-  $("#settab").innerHTML = `<section><div class="sechead"><h2>关于</h2><button id="copyinfo">复制</button></div>
+  const pr = await call("Prefs");
+  if (!onTab("general")) return;
+  const pick = (id, cur, opts) => `<select id="${id}">${opts.map(([v, l]) => `<option value="${v}" ${cur === v ? "selected" : ""}>${l}</option>`).join("")}</select>`;
+  $("#settab").innerHTML = `<section><h2>${t("外观与语言")}</h2>
+      <div class="pair"><label>${t("语言")}${pick("uilang", pr.ui.language, [["", t("跟随系统")], ...Object.entries(LANG_NAMES)])}</label>
+        <label>${t("主题")}${pick("uitheme", pr.ui.theme, [["", t("跟随系统")], ["light", t("浅色")], ["dark", t("深色")]])}</label></div></section>
+    <section><div class="sechead"><h2>关于</h2><button id="copyinfo">复制</button></div>
     <table class="about">${rows.map(([k, v, x]) => `<tr><th>${k}</th><td>${esc(v || "未知")}${x || ""}</td></tr>`).join("")}</table></section>`;
+  const saveUI = async (ui) => {
+    try { await call("SavePrefs", { ...pr, ui: { ...pr.ui, ...ui } }); } catch (e) { fail(e); return false; }
+    return true;
+  };
+  $("#uitheme").onchange = async (ev) => { if (await saveUI({ theme: ev.target.value })) { applyTheme(ev.target.value); toast(t("已保存")); } };
+  // A new language re-renders everything: reload the data and the page.
+  $("#uilang").onchange = async (ev) => { if (await saveUI({ language: ev.target.value })) { await load(); toast(t("已保存")); } };
   $("#homedir").onclick = () => call("OpenHome").catch(fail);
   $("#repo").onclick = (ev) => { ev.preventDefault(); call("OpenURL", REPO).catch(fail); };
   $("#copyinfo").onclick = async () => {

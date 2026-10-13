@@ -48,8 +48,8 @@ type Pack struct {
 
 var Packs = []Pack{
 	{"cjk", "CJK", "Noto Sans CJK：简体、繁体、日文、韩文都在这一个文件里"},
-	{"cjk-serif", "CJK 衬线", "Noto Serif CJK：给点名要仿宋、楷体这类衬线字体的程序；没有它就用 CJK 的无衬线字体"},
-	{"scripts", "全语种", "150 种文字的 Noto Sans，补齐阿拉伯文、希伯来文、泰文、印度各文字等界面里缺的字（字体选“全部”时用）"},
+	{"cjk-serif", "CJK 衬线", "Noto Serif CJK：给要用仿宋、楷体等衬线字体的程序"},
+	{"scripts", "全语种", "150 种文字的 Noto Sans，补齐泰文、阿拉伯文、印度文字等（字体选“全部”时用）"},
 }
 
 // PackByID returns the pack, or nil.
@@ -105,7 +105,7 @@ type scriptFace struct {
 
 var FontSets = []FontSet{
 	{ID: "core", Name: "英文", Primary: "sans", Deps: []string{"corefonts"},
-		Note: "Arial、Times New Roman、Courier New 换成度量兼容的 Liberation；没有就装微软的 corefonts",
+		Note: "Arial、Times New Roman、Courier New 换成 Liberation，缺少时装 corefonts",
 		Roles: map[string]Face{
 			"sans":  {Host: []string{"Liberation Sans"}},
 			"serif": {Host: []string{"Liberation Serif"}},
@@ -114,7 +114,7 @@ var FontSets = []FontSet{
 		Subst: map[string]string{"Arial": "sans", "Times New Roman": "serif", "Courier New": "mono"},
 	},
 	{ID: "cjk", Name: "CJK", Primary: "SC",
-		Note: "宋体、细明体、MS Gothic、Gulim 这些简繁日韩字体名换成对应地区的 Noto Sans CJK，界面缺的中日韩字也用它补",
+		Note: "宋体、细明体、MS Gothic、Gulim 等换成对应地区的 Noto Sans CJK",
 		Roles: func() map[string]Face {
 			m := map[string]Face{}
 			for _, r := range cjkRegions {
@@ -143,7 +143,7 @@ var FontSets = []FontSet{
 			"바탕": "serif-KR|KR", "바탕체": "serif-KR|KR",
 		}},
 	{ID: "all", Name: "全部", Includes: []string{"core", "cjk"},
-		Note: "英文和 CJK，再用 150 种文字的 Noto Sans 补齐界面里缺的字（泰文、阿拉伯文、印度文字…）"},
+		Note: "英文和 CJK，再加 150 种文字的 Noto Sans"},
 }
 
 // EffectiveFontSets expands all into the sets it includes; scripts tells

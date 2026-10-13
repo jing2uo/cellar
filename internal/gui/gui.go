@@ -99,6 +99,10 @@ type Env struct {
 	// HostLocale and DefaultFontSets are what a new prefix starts with.
 	HostLocale      string   `json:"host_locale"`
 	DefaultFontSets []string `json:"default_font_sets"`
+	// Lang is the GUI's language (zh or en); Theme is light, dark or "" for
+	// the system's.
+	Lang  string `json:"lang"`
+	Theme string `json:"theme"`
 }
 
 func (s *Service) Env() Env {
@@ -112,6 +116,7 @@ func (s *Service) Env() Env {
 		Runners: infos, Default: def,
 		Locales: config.Locales, FontSets: config.FontSets,
 		HostLocale: config.HostLocale(), DefaultFontSets: config.DefaultFontSets(config.HostLocale()),
+		Lang: uiLang, Theme: prefs.Load().UI.Theme,
 	}
 }
 
@@ -138,7 +143,36 @@ func (s *Service) FontStatus() []fonts.Status { return fonts.Statuses() }
 // Prefs and SavePrefs are cellar's own settings (the settings page).
 func (s *Service) Prefs() prefs.Prefs { return prefs.Load() }
 
-func (s *Service) SavePrefs(p prefs.Prefs) error { return prefs.Save(p) }
+func (s *Service) SavePrefs(p prefs.Prefs) error {
+	if err := prefs.Save(p); err != nil {
+		return err
+	}
+	uiLang = effectiveLang(p)
+	return nil
+}
+
+// uiLang is the language the GUI speaks, zh or en; tr picks its text.
+var uiLang = effectiveLang(prefs.Load())
+
+// effectiveLang is the chosen language, or the system's: Chinese for a
+// zh locale, English otherwise.
+func effectiveLang(p prefs.Prefs) string {
+	if p.UI.Language != "" {
+		return p.UI.Language
+	}
+	if strings.HasPrefix(config.HostLocale(), "zh") {
+		return prefs.LangZH
+	}
+	return prefs.LangEN
+}
+
+// tr is a message the GUI shows, in its language.
+func tr(zh, en string) string {
+	if uiLang == prefs.LangEN {
+		return en
+	}
+	return zh
+}
 
 // FontPacks lists the font library's packs.
 func (s *Service) FontPacks() []fonts.PackStatus {
