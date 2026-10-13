@@ -889,8 +889,8 @@ async function settings(name) {
 const WINETRICKS_URL = "https://github.com/Winetricks/winetricks";
 async function deps(name) {
   dialog(`<b>${t("{0} 的依赖", esc(name))}</b>
-    <div class="meta">${t("用 winetricks 安装，已装的会跳过，装上后无法卸载。说明见 {0}。", "winetricks")}</div>
-    <input id="q" placeholder="${t("搜索 verb 或说明")}" autocomplete="off" spellcheck="false">
+    <div class="meta">${t("用 winetricks 安装，已装的会跳过，装上后无法卸载。说明见 {0}。", `<a href="#" id="wtl">winetricks</a>`)}</div>
+    <input id="q" placeholder="${t("搜索 verb 或说明")}" autofocus autocomplete="off" spellcheck="false">
     <div class="vlist" id="vl"><div class="empty" style="padding:10px">${t("读取 winetricks 列表…")}</div></div>
     <input id="extra" placeholder="${t("列表里没有的 verb，空格分隔")}">
     <div id="e" class="err"></div>
