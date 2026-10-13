@@ -16,14 +16,14 @@ import (
 // hidden scripts set). Deps are winetricks verbs installed when Primary has
 // no font.
 type FontSet struct {
-	ID       string   `json:"id"`
-	Name     string   `json:"name"`
-	Note     string   `json:"note"`
-	Includes []string `json:"includes,omitempty"` // sets it brings along
-	Primary  string   `json:"-"`
-	Roles   map[string]Face   `json:"-"`
-	Subst   map[string]string `json:"-"` // Windows family -> role; "a|b": the first there is
-	Deps    []string          `json:"-"`
+	ID       string            `json:"id"`
+	Name     string            `json:"name"`
+	Note     string            `json:"note"`
+	Includes []string          `json:"includes,omitempty"` // sets it brings along
+	Primary  string            `json:"-"`
+	Roles    map[string]Face   `json:"-"`
+	Subst    map[string]string `json:"-"` // Windows family -> role; "a|b": the first there is
+	Deps     []string          `json:"-"`
 }
 
 // Face is a role's font: the host's copy (any of Host, by family name),
@@ -315,10 +315,13 @@ func HostLocale() string {
 	return ""
 }
 
-// The fonts Windows UI text is drawn with. Each falls back, for glyphs it
-// lacks, to the CJK region the locale reads and the other regions (cjk),
-// then every script's Noto Sans (all): whichever of these are here.
-var uiFonts = []string{"Tahoma", "Segoe UI", "Microsoft Sans Serif", "MS Shell Dlg", "MS Shell Dlg 2", "Arial"}
+// LinkFont is the SystemLink entry the fallback chain goes on: for glyphs
+// it lacks, every font falls back to Microsoft Sans Serif's links (and
+// Tahoma's), so one entry serves all. The chain is the CJK region the
+// locale reads and the other regions (cjk), then every script's Noto Sans
+// (all): whichever of these are here. Reconcile spreads it over more
+// entries when it outgrows what Wine reads of one.
+const LinkFont = "Microsoft Sans Serif"
 
 // subst renders a Subst role spec ("serif-SC|SC") of a set as a template.
 func subst(set, spec string) string {
@@ -376,13 +379,17 @@ func localeLayer(locale string, sets []string) map[string]any {
 	if refs := fallback(locale, sets); len(refs) > 0 {
 		var link []any
 		for _, ref := range refs {
+			if strings.HasPrefix(ref, "@"+scripts.ID+".") {
+				// One family per file: the file alone names it, and the
+				// chain is long.
+				link = append(link, "{font:"+ref+"}")
+				continue
+			}
 			link = append(link, "{font:"+ref+"},{family:"+ref+"}")
 		}
-		sl := map[string]any{}
-		for _, f := range uiFonts {
-			sl[f] = map[string]any{"type": "multi_sz", "value": link}
+		reg[`HKLM\Software\Microsoft\Windows NT\CurrentVersion\FontLink\SystemLink`] = map[string]any{
+			LinkFont: map[string]any{"type": "multi_sz", "value": link},
 		}
-		reg[`HKLM\Software\Microsoft\Windows NT\CurrentVersion\FontLink\SystemLink`] = sl
 		reg[`HKCU\Control Panel\Desktop`] = map[string]any{
 			"FontSmoothing": "2", "FontSmoothingType": int64(2), "FontSmoothingGamma": int64(1400), "FontSmoothingOrientation": int64(1),
 		}

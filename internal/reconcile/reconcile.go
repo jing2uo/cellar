@@ -159,10 +159,11 @@ func (pl *Plan) diff(force bool) {
 	}
 
 	pl.sets, pl.dels = map[string]map[string]value{}, map[string]map[string]value{}
+	drift := linkDrift(pl.p.Pfx, applied[linkKey])
 	for key, vals := range pl.want.reg {
 		for n, v := range vals {
 			old, had := applied[key][n]
-			if had && value(old) == v && !force {
+			if had && value(old) == v && !force && !(key == linkKey && drift[n]) {
 				continue
 			}
 			put(pl.sets, key, n, v)
@@ -371,6 +372,9 @@ func want(c *config.Config) (*desired, []string, error) {
 			}
 			put(d.reg, nk, n, v)
 		}
+	}
+	if n := spreadLinks(d.reg); n > 0 {
+		warns = append(warns, linkWarning(n))
 	}
 	for dll, mode := range c.DllOverrides {
 		if mode == "disabled" {

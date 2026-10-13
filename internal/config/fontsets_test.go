@@ -41,7 +41,7 @@ func TestLocaleAndFontSet(t *testing.T) {
 func TestFallbackFollowsLocale(t *testing.T) {
 	first := func(text string) string {
 		c := load(t, text)
-		return c.Registry[linkKey]["Tahoma"].(map[string]any)["value"].([]any)[0].(string)
+		return c.Registry[linkKey][LinkFont].(map[string]any)["value"].([]any)[0].(string)
 	}
 	for locale, region := range map[string]string{"zh_CN": "SC", "zh_TW": "TC", "zh_HK": "HK", "ja_JP": "JP", "ko_KR": "KR", "en_US": "SC"} {
 		if got := first("locale = \"" + locale + "\"\nfont_sets = [\"core\", \"cjk\"]\n"); got != "{font:@cjk."+region+"},{family:@cjk."+region+"}" {
@@ -56,9 +56,14 @@ func TestFallbackFollowsLocale(t *testing.T) {
 
 func TestAllIncludesTheOthers(t *testing.T) {
 	c := load(t, "locale = \"ja_JP\"\nfont_sets = [\"all\"]\n")
-	link := c.Registry[linkKey]["Tahoma"].(map[string]any)["value"].([]any)
-	// The locale's CJK region, the other regions, then the scripts.
-	if link[0] != "{font:@cjk.JP},{family:@cjk.JP}" || link[5] != "{font:@scripts.NotoSans},{family:@scripts.NotoSans}" {
+	// One entry: every font falls back to it.
+	if len(c.Registry[linkKey]) != 1 {
+		t.Errorf("SystemLink entries %v", c.Registry[linkKey])
+	}
+	link := c.Registry[linkKey][LinkFont].(map[string]any)["value"].([]any)
+	// The locale's CJK region, the other regions, then the scripts, which
+	// name only their file.
+	if link[0] != "{font:@cjk.JP},{family:@cjk.JP}" || link[5] != "{font:@scripts.NotoSans}" {
 		t.Errorf("SystemLink %v", link[:6])
 	}
 	if c.Registry[substKey]["Arial"] != "{family:@core.sans}" || c.Registry[substKey]["MS Gothic"] != "{family:@cjk.JP}" {

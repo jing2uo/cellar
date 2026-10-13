@@ -1,6 +1,7 @@
 package reconcile
 
 import (
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"slices"
@@ -69,9 +70,9 @@ func TestAllFromHost(t *testing.T) {
 		t.Errorf("subst %v", sub)
 	}
 	// The fallback chain is what is here: the CJK regions, Thai, nothing more.
-	link := string(d.reg[normKey(linkK)]["Tahoma"])
+	link := string(d.reg[normKey(linkK)][config.LinkFont])
 	if !strings.HasPrefix(link, `multi_sz:["NotoSansCJK-Regular.ttc,Noto Sans CJK SC"`) ||
-		!strings.Contains(link, "NotoSansThai-Regular.ttf,Noto Sans Thai") || strings.Contains(link, "Arabic") {
+		!strings.Contains(link, `"NotoSansThai-Regular.ttf"`) || strings.Contains(link, "Arabic") {
 		t.Errorf("SystemLink %v", link)
 	}
 	// all brings in core, which, missing Liberation here, installs corefonts.
@@ -168,5 +169,58 @@ func TestPackNeeds(t *testing.T) {
 	home(t, "library-only")
 	if m, _ := missing("cjk"); m != 1 {
 		t.Errorf("library-only: cjk needs %d", m)
+	}
+}
+
+func TestLongChainFitsWine(t *testing.T) {
+	// auto: the whole chain resolves, far more than one entry holds.
+	home(t, "auto")
+	fakeFcList(t, nil)
+	d, warns, _ := want(loadSets(t, `"all"`))
+	sl := d.reg[normKey(linkK)]
+	if len(sl) < 3 || len(warns) != 0 {
+		t.Fatalf("entries %d warns %v", len(sl), warns)
+	}
+	if !strings.HasPrefix(string(sl[config.LinkFont]), `multi_sz:["NotoSansCJK-Regular.ttc,Noto Sans CJK SC"`) || sl["Tahoma"] == "" {
+		t.Errorf("SystemLink %v", sl)
+	}
+	all := map[string]bool{}
+	for name, v := range sl {
+		var entries []string
+		json.Unmarshal([]byte(strings.TrimPrefix(string(v), "multi_sz:")), &entries)
+		if linkSize(name, entries) > linkRoom {
+			t.Errorf("%s: %d bytes", name, linkSize(name, entries))
+		}
+		for _, e := range entries {
+			all[e] = true
+		}
+	}
+	if !all["NotoSansZanabazarSquare-Regular.ttf"] || !all["NotoSansThai-Regular.ttf"] || !all["NotoSansCJK-Regular.ttc,Noto Sans CJK KR"] {
+		t.Errorf("chain lost fonts: %d", len(all))
+	}
+}
+
+func TestLinkDrift(t *testing.T) {
+	pfx := t.TempDir()
+	os.WriteFile(filepath.Join(pfx, "system.reg"), []byte(`WINE REGISTRY Version 2
+
+[Software\\Microsoft\\Windows NT\\CurrentVersion\\FontLink\\SystemLink] 1791844608
+#time=1dd5a9a2b0c88ee
+"Microsoft Sans Serif"=str(7):"NotoSansCJK-Regular.ttc,Noto Sans CJK SC\0NotoSansThai-Regular.ttf\0"
+"Tahoma"=str(7):"SIMSUN.TTC,SimSun\0MSGOTHIC.TTC,MS UI Gothic\0"
+
+[Software\\Other] 1791844608
+"Segoe UI"=str(7):"NotoSansThai-Regular.ttf\0"
+`), 0o644)
+	applied := map[string]string{
+		"Microsoft Sans Serif": `multi_sz:["NotoSansCJK-Regular.ttc,Noto Sans CJK SC","NotoSansThai-Regular.ttf"]`,
+		"Tahoma":               `multi_sz:["NotoSansLao-Regular.ttf"]`,  // Wine put its own back
+		"Segoe UI":             `multi_sz:["NotoSansThai-Regular.ttf"]`, // gone from the key
+	}
+	if d := linkDrift(pfx, applied); d["Microsoft Sans Serif"] || !d["Tahoma"] || !d["Segoe UI"] {
+		t.Errorf("drift %v", d)
+	}
+	if s := unescapeReg(`a\\b\"c\x4e2d\0`); s != "a\\b\"c中\x00" {
+		t.Errorf("unescape %q", s)
 	}
 }
