@@ -193,7 +193,7 @@ func (s *Service) GetFontPack(id string) (string, error) {
 	if pk == nil {
 		return "", fmt.Errorf("no font pack %q", id)
 	}
-	return s.tasks.start(fontTask, "下载 "+pk.Name, func(log func(string)) error {
+	return s.tasks.start(fontTask, fmt.Sprintf(tr("下载 %s", "Download %s"), pk.Name), func(log func(string)) error {
 		return fonts.GetPack(id, func(done, total int, file string) {
 			log(fmt.Sprintf("%d/%d %s", done, total, file))
 		})
@@ -561,7 +561,7 @@ func (s *Service) PickBottles() (string, error) {
 		start, _ = os.UserHomeDir()
 	}
 	dir, err := s.app.Dialog.OpenFile().
-		SetTitle("选择 Bottles 的 bottles 目录，或其中一个 bottle").
+		SetTitle(tr("选择 Bottles 的 bottles 目录，或其中一个 bottle", "Choose the Bottles bottles directory or one bottle")).
 		SetDirectory(start).
 		CanChooseDirectories(true).
 		CanChooseFiles(false).
@@ -571,7 +571,7 @@ func (s *Service) PickBottles() (string, error) {
 		return "", err
 	}
 	if len(importer.Scan(dir)) == 0 {
-		return "", fmt.Errorf("%s 里没有 bottle：选 Bottles 的 bottles 目录，或某个含 bottle.yml 的 bottle 目录", dir)
+		return "", fmt.Errorf(tr("%s 里没有 bottle：选 Bottles 的 bottles 目录，或某个含 bottle.yml 的 bottle 目录", "No bottle found in %s: choose Bottles' bottles directory or a bottle directory containing bottle.yml"), dir)
 	}
 	s.mu.Lock()
 	s.bottleDir = dir
@@ -593,9 +593,9 @@ func (s *Service) ApplyTask(name string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	title := "应用配置"
+	title := tr("应用配置", "Apply configuration")
 	if !p.Initialized() {
-		title = "初始化 prefix"
+		title = tr("初始化 prefix", "Initialize prefix")
 	}
 	return s.tasks.start(name, title, func(log func(string)) error {
 		pl, err := s.Plan(name)
@@ -603,7 +603,7 @@ func (s *Service) ApplyTask(name string) (string, error) {
 			return err
 		}
 		if len(pl.Changes) == 0 {
-			log("prefix 已经和配置一致，不用改动")
+			log(tr("prefix 已经和配置一致，不用改动", "The prefix already matches its configuration"))
 		}
 		for _, c := range pl.Changes {
 			log(c.String())
@@ -634,7 +634,7 @@ func (s *Service) RevertConfig(name string) error {
 // Delete removes the prefix and everything in it.
 func (s *Service) Delete(name string) error {
 	if s.tasks.running(name) != "" {
-		return errors.New("这个 prefix 还有任务在跑，等它结束再删")
+		return errors.New(tr("这个 prefix 还有任务在跑，等它结束再删", "This prefix still has a running task; wait for it to finish before deleting it"))
 	}
 	p, err := store.Open(name)
 	if err != nil {
@@ -680,29 +680,29 @@ type Dep struct {
 // helps; verbs this winetricks lacks are left out.
 func common() []Dep {
 	return []Dep{
-		{"vcrun2022", "VC++ 2015–2022 运行库，大多数新软件需要", false},
-		{"vcrun2013", "VC++ 2013 运行库", false},
-		{"vcrun2010", "VC++ 2010 运行库", false},
-		{"vcrun2008", "VC++ 2008 运行库，较老的软件", false},
-		{"vcrun2005", "VC++ 2005 运行库", false},
-		{"vcrun6", "VC6 运行库，很老的软件", false},
-		{"mfc42", "MFC 4.2，老式国产软件常用", false},
-		{"vb6run", "VB6 运行库，老式国产软件常用", false},
-		{"riched20", "RichEdit 控件，聊天框、编辑框显示异常时装", false},
-		{"gdiplus", "GDI+，图片或图表显示异常时装", false},
+		{"vcrun2022", tr("VC++ 2015–2022 运行库，大多数新软件需要", "VC++ 2015–2022 runtime, needed by most newer software"), false},
+		{"vcrun2013", tr("VC++ 2013 运行库", "VC++ 2013 runtime"), false},
+		{"vcrun2010", tr("VC++ 2010 运行库", "VC++ 2010 runtime"), false},
+		{"vcrun2008", tr("VC++ 2008 运行库，较老的软件", "VC++ 2008 runtime for older software"), false},
+		{"vcrun2005", tr("VC++ 2005 运行库", "VC++ 2005 runtime"), false},
+		{"vcrun6", tr("VC6 运行库，很老的软件", "VC6 runtime for very old software"), false},
+		{"mfc42", tr("MFC 4.2，老式国产软件常用", "MFC 4.2, commonly used by older Chinese software"), false},
+		{"vb6run", tr("VB6 运行库，老式国产软件常用", "VB6 runtime, commonly used by older Chinese software"), false},
+		{"riched20", tr("RichEdit 控件，聊天框、编辑框显示异常时装", "RichEdit control, useful when chat or edit boxes render incorrectly"), false},
+		{"gdiplus", tr("GDI+，图片或图表显示异常时装", "GDI+, useful when images or charts render incorrectly"), false},
 		{"msxml6", "MSXML 6", false},
-		{"msxml3", "MSXML 3，老软件读写 XML 用", false},
-		{"quartz", "DirectShow，程序里放视频", false},
-		{"corefonts", "微软核心英文字体（Arial、Times 等）", false},
-		{"d3dx9", "DirectX 9 组件，老游戏", false},
-		{"d3dcompiler_47", "D3D 着色器编译器，新一些的程序和浏览器内核用", false},
-		{"xact", "XAudio / XACT 音频，游戏没声音时装", false},
-		{"dxvk", "DXVK：用 Vulkan 跑 D3D 9–11，游戏用", false},
-		{"vkd3d", "VKD3D：用 Vulkan 跑 D3D 12", false},
+		{"msxml3", tr("MSXML 3，老软件读写 XML 用", "MSXML 3, used by older software to read and write XML"), false},
+		{"quartz", tr("DirectShow，程序里放视频", "DirectShow, for programs that play video"), false},
+		{"corefonts", tr("微软核心英文字体（Arial、Times 等）", "Microsoft core fonts (Arial, Times, and others)"), false},
+		{"d3dx9", tr("DirectX 9 组件，老游戏", "DirectX 9 components for older games"), false},
+		{"d3dcompiler_47", tr("D3D 着色器编译器，新一些的程序和浏览器内核用", "D3D shader compiler, used by newer programs and browser engines"), false},
+		{"xact", tr("XAudio / XACT 音频，游戏没声音时装", "XAudio / XACT audio, useful when games have no sound"), false},
+		{"dxvk", tr("DXVK：用 Vulkan 跑 D3D 9–11，游戏用", "DXVK: runs D3D 9–11 through Vulkan for games"), false},
+		{"vkd3d", tr("VKD3D：用 Vulkan 跑 D3D 12", "VKD3D: runs D3D 12 through Vulkan"), false},
 		{"dotnet48", ".NET Framework 4.8", true},
 		{"dotnet40", ".NET Framework 4.0", true},
 		{"dotnet35", ".NET Framework 3.5", true},
-		{"dotnetdesktop8", ".NET 8 桌面运行时", false},
+		{"dotnetdesktop8", tr(".NET 8 桌面运行时", ".NET 8 desktop runtime"), false},
 	}
 }
 
@@ -785,10 +785,10 @@ func (s *Service) PickInstaller() (string, error) {
 		dir = strings.TrimSpace(string(out))
 	}
 	return s.app.Dialog.OpenFile().
-		SetTitle("选择要运行的程序（安装程序或绿色版）").
+		SetTitle(tr("选择要运行的程序（安装程序或绿色版）", "Choose a program to run (installer or portable)")).
 		SetDirectory(dir).
-		AddFilter("Windows 程序 (*.exe, *.msi)", "*.exe;*.msi;*.EXE;*.MSI").
-		AddFilter("所有文件", "*").
+		AddFilter(tr("Windows 程序 (*.exe, *.msi)", "Windows programs (*.exe, *.msi)"), "*.exe;*.msi;*.EXE;*.MSI").
+		AddFilter(tr("所有文件", "All files"), "*").
 		PromptForSingleSelection()
 }
 

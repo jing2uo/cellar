@@ -42,6 +42,7 @@ aside { width: 240px; background: var(--side); border-right: 1px solid var(--lin
 .item small { color: var(--mute); font-weight: 400; }
 .withico { display: flex; align-items: center; gap: 8px; }
 .ico { width: 16px; height: 16px; flex: none; }
+small.withico .ico { width: 14px; height: 14px; }
 .sys { padding: 6px 8px; border-top: 1px solid var(--line); }
 main { flex: 1; min-width: 0; overflow: auto; padding: 28px 32px; }
 h1 { margin: 0; font-size: 22px; font-weight: 650; }
@@ -90,7 +91,7 @@ textarea, pre.log {
   -webkit-user-select: text; user-select: text; overflow: auto; white-space: pre;
 }
 input { font: inherit; padding: 6px 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--bg); color: var(--text); width: 100%; margin: 4px 0 10px; }
-.row { display: flex; justify-content: flex-end; gap: 8px; }
+.row { display: flex; justify-content: flex-end; align-items: center; gap: 8px; }
 .welcome { color: var(--mute); margin-top: 18vh; text-align: center; }
 .banner { border: 1px solid var(--warn); background: color-mix(in srgb, var(--warn) 10%, transparent); border-radius: 12px; padding: 14px 18px; margin-bottom: 16px; display: flex; justify-content: space-between; align-items: center; gap: 16px; }
 .rlist { display: flex; flex-direction: column; gap: 8px; }
@@ -174,7 +175,7 @@ table.about td button { padding: 2px 10px; margin-left: 8px; font-size: 12px; }
   <div class="list" id="list"></div>
   <div class="sys" id="sys"></div>
 </aside>
-<main id="main"><div class="welcome">加载中…</div></main>
+<main id="main"><div class="welcome">…</div></main>
 
 <dialog id="dlg"></dialog>
 <dialog id="dlg2"></dialog>
@@ -188,7 +189,9 @@ const S = "github.com/jing2uo/cellar/internal/gui.Service.";
 const call = (m, ...a) => Call.ByName(S + m, ...a);
 const $ = (s) => document.querySelector(s);
 const esc = (s) => String(s ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
-const stateText = { applied: "已就绪", changed: "配置已改", new: "待应用", error: "错误" };
+const stateText = (state) => ({
+  applied: t("已就绪"), changed: t("配置已改"), new: t("待应用"), error: t("错误"),
+}[state]);
 
 let env, prefixes = [], sel = null;
 const IMPORT = "\u0000import", SETTINGS = "\u0000settings";
@@ -205,15 +208,15 @@ let lastSig = "";
 // not guaranteed to show the native ones, and prompt() then returns null.
 let toastTimer;
 function toast(msg, bad = false) {
-  const t = $("#toast"); t.textContent = msg; t.className = "on" + (bad ? " bad" : "");
-  clearTimeout(toastTimer); toastTimer = setTimeout(() => t.className = "", bad ? 6000 : 2500);
+  const el = $("#toast"); el.textContent = msg; el.className = "on" + (bad ? " bad" : "");
+  clearTimeout(toastTimer); toastTimer = setTimeout(() => el.className = "", bad ? 6000 : 2500);
 }
 const fail = (e) => toast(String((e && e.message) || e), true);
 function ask(title, value = null) {
   return new Promise((resolve) => {
     const d = $("#dlg2");
     d.innerHTML = `<b>${esc(title)}</b>${value !== null ? `<input id="v" value="${esc(value)}">` : ""}
-      <div class="row"><button id="no">取消</button><button id="ok" class="primary">确定</button></div>`;
+      <div class="row"><button id="no">${t("取消")}</button><button id="ok" class="primary">${t("确定")}</button></div>`;
     const done = (v) => { d.close(); resolve(v); };
     d.querySelector("#no").onclick = () => done(null);
     d.querySelector("#ok").onclick = () => done(value !== null ? d.querySelector("#v").value.trim() : true);
@@ -245,12 +248,12 @@ function applyTheme(theme) {
 
 function renderList() {
   const local = prefixes.filter((p) => p.source === "local");
-  $("#list").innerHTML = `<div class="group">本地 prefix</div>` +
+  $("#list").innerHTML = `<div class="group">${t("本地 prefix")}</div>` +
     (local.map((p) => `<div class="item ${p.name === sel ? "sel" : ""}" data-n="${esc(p.name)}">
-      <span>${esc(p.name)}</span><small class="s-${p.state}">●</small></div>`).join("") || `<div class="empty item">还没有 prefix</div>`) +
-    `<div class="item" id="new"><small>＋ 新建 prefix</small></div>` +
-    (`<div class="item ${sel === IMPORT ? "sel" : ""}" id="imp"><small>⇣ 从 Bottles 导入${bottles.some((b) => !b.imported) ? `（${bottles.filter((b) => !b.imported).length}）` : ""}</small></div>`);
-  $("#sys").innerHTML = `<div class="item ${sel === SETTINGS ? "sel" : ""}" id="settingsitem"><span class="withico"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>设置</span></div>`;
+      <span>${esc(p.name)}</span><small class="s-${p.state}">●</small></div>`).join("") || `<div class="empty item">${t("还没有 prefix")}</div>`) +
+    `<div class="item" id="new"><small class="withico"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>${t("新建 prefix")}</small></div>` +
+    (`<div class="item ${sel === IMPORT ? "sel" : ""}" id="imp"><small class="withico"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>${t("从 Bottles 导入")}${bottles.some((b) => !b.imported) ? t("（{0}）", bottles.filter((b) => !b.imported).length) : ""}</small></div>`);
+  $("#sys").innerHTML = `<div class="item ${sel === SETTINGS ? "sel" : ""}" id="settingsitem"><span class="withico"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>${t("设置")}</span></div>`;
   document.querySelectorAll(".item[data-n]").forEach((el) => {
     el.onclick = () => { sel = el.dataset.n; renderList(); renderMain(); };
   });
@@ -259,16 +262,16 @@ function renderList() {
   if ($("#imp")) $("#imp").onclick = () => { sel = IMPORT; renderList(); renderMain(); };
 }
 
-const noWine = () => env.runners.length ? "" : `<div class="banner"><div><b>没有找到 Wine</b><div class="meta">${env.flatpak
-  ? "这个 Flatpak 应自带 Wine，构建可能不完整。" : "系统里没有安装 wine。可以用发行版的包，或下载一个社区构建（推荐 WoW64 版，不需要 32 位系统库）。"}</div></div>
-  <button class="primary" id="getwine">下载推荐的 Wine</button></div>`;
+const noWine = () => env.runners.length ? "" : `<div class="banner"><div><b>${t("没有找到 Wine")}</b><div class="meta">${env.flatpak
+  ? t("这个 Flatpak 应自带 Wine，构建可能不完整。") : t("没有安装 Wine。可以装发行版的包，或在这里下载一个。")}</div></div>
+  <button class="primary" id="getwine">${t("下载推荐的 Wine")}</button></div>`;
 
 function wireNoWine() {
   const b = $("#getwine"); if (!b) return;
   b.onclick = async () => {
-    b.disabled = true; b.textContent = "下载中…";
+    b.disabled = true; b.textContent = t("下载中…");
     try { const cat = await call("Available"); const rec = (cat.releases || []).find((r) => r.default);
-      if (!rec) throw new Error("没有找到推荐的版本：" + (cat.warnings || []).join("；"));
+      if (!rec) throw new Error(t("没有找到推荐的版本：{0}", (cat.warnings || []).join(t("；"))));
       await call("InstallRunner", rec.id); } catch (e) { fail(e); }
     await load();
   };
@@ -278,24 +281,24 @@ async function renderMain() {
   if (sel === SETTINGS) return renderSettings();
   if (sel === IMPORT) return renderImport();
   const p = prefixes.find((x) => x.name === sel);
-  if (!p) { $("#main").innerHTML = noWine() + `<div class="welcome">新建一个 prefix 开始</div>`; wireNoWine(); return; }
+  if (!p) { $("#main").innerHTML = noWine() + `<div class="welcome">${t("新建一个 prefix 开始")}</div>`; wireNoWine(); return; }
   $("#main").innerHTML = `
     <div class="head">
       <div><h1>${esc(p.name)}</h1>
-        <div class="meta"><span class="badge s-${p.state}">${stateText[p.state]}</span>
-          <span>runner：${esc(p.runner)}</span><span>区域：${p.locale ? esc(localeName(p.locale)) : "未设置"}</span>
-          ${(p.font_sets || []).length ? `<span>字体：${esc(p.font_sets.map(fontSetName).join("、"))}</span>` : ""}</div></div>
-      <button id="pmenu" class="more" title="更多操作">⋯</button>
+        <div class="meta"><span class="badge s-${p.state}">${stateText(p.state)}</span>
+          <span>${t("runner：{0}", esc(p.runner))}</span><span>${t("区域：{0}", p.locale ? esc(localeName(p.locale)) : t("未设置"))}</span>
+          ${(p.font_sets || []).length ? `<span>${t("字体：{0}", esc(p.font_sets.map(fontSetName).join(t("、"))))}</span>` : ""}</div></div>
+      <button id="pmenu" class="more" title="${t("更多操作")}">⋯</button>
     </div>
     ${noWine()}${p.error ? `<section><div class="err">${esc(p.error)}</div></section>` : ""}
-    <section><div class="sechead"><h2>应用</h2><div class="actions"><button id="install">运行程序</button><button id="addapp">添加应用</button></div></div><div class="apps">${p.apps.map((a) => `
+    <section><div class="sechead"><h2>${t("应用")}</h2><div class="actions"><button id="install">${t("运行程序")}</button><button id="addapp">${t("添加应用")}</button></div></div><div class="apps">${p.apps.map((a) => `
       <div class="app"><div class="top">${a.icon ? `<img src="${a.icon}">` : ""}<b title="${esc(a.name)}">${esc(a.name)}</b>
-        <button class="dots" data-appmenu="${esc(a.id)}" title="改名、删除">⋯</button></div>
+        <button class="dots" data-appmenu="${esc(a.id)}" title="${t("改名、删除")}">⋯</button></div>
       <code title="${esc(a.exe)}">${esc(a.exe)}</code>
-      <div class="btns"><button data-app="${esc(a.id)}">启动</button>
-      <button data-desk="${esc(a.id)}" data-on="${a.desktop ? 1 : ""}" title="${a.desktop ? "从应用菜单移除" : "在应用菜单里创建快捷方式"}">${a.desktop ? "移除快捷方式" : "快捷方式"}</button></div></div>`).join("") || `<div class="empty">还没有应用。先点“运行程序”装好软件，再点“添加应用”。</div>`}</div></section>
+      <div class="btns"><button data-app="${esc(a.id)}">${t("启动")}</button>
+      <button data-desk="${esc(a.id)}" data-on="${a.desktop ? 1 : ""}" title="${a.desktop ? t("从应用菜单移除") : t("在应用菜单里创建快捷方式")}">${a.desktop ? t("移除快捷方式") : t("快捷方式")}</button></div></div>`).join("") || `<div class="empty">${t("还没有应用。先运行安装程序，再添加应用。")}</div>`}</div></section>
     <div id="plan"></div>
-    <section><div class="sechead"><h2>运行记录</h2><button id="clearruns" hidden>清除</button></div><div id="runs" class="empty">读取中…</div></section>
+    <section><div class="sechead"><h2>${t("运行记录")}</h2><button id="clearruns" hidden>${t("清除")}</button></div><div id="runs" class="empty">${t("读取中…")}</div></section>
     <div id="task"></div>`;
   $("#pmenu").onclick = (ev) => {
     const r = ev.currentTarget.getBoundingClientRect();
@@ -314,14 +317,14 @@ async function renderMain() {
     const r = b.getBoundingClientRect();
     ev.stopPropagation();
     openMenu([
-      ["改名", async () => {
-        const label = await ask("应用名称（菜单里显示的名字）", a.name);
+      [t("改名"), async () => {
+        const label = await ask(t("应用名称（菜单里显示的名字）"), a.name);
         if (!label || label === a.name) return;
         try { await call("RenameApp", p.name, a.id, label); } catch (e) { fail(e); }
         await load();
       }],
-      ["删除", async () => {
-        if (!await ask(`删除应用 ${a.name}？只是从 Cellar 里移除，程序文件保留，菜单快捷方式会删掉。`)) return;
+      [t("删除"), async () => {
+        if (!await ask(t("删除应用 {0}？程序文件会保留。", a.name))) return;
         try { await call("RemoveApp", p.name, a.id); } catch (e) { fail(e); }
         await load();
       }, "danger"],
@@ -339,16 +342,16 @@ const refreshRuns = (name, ms) => setTimeout(() => { if (sel === name) showRuns(
 function prefixMenu(name) {
   const tool = (x) => async () => { try { await call("Launch", name, "", x); } catch (e) { fail(e); } refreshRuns(name, 3000); };
   return [
-    ["设置", () => settings(name)], ["编辑 cellar.toml", () => edit(name)], ["依赖", () => deps(name)], null,
-    ["Wine 设置", tool("winecfg")], ["控制面板", tool("control")], ["注册表", tool("regedit")], ["文件管理器", tool("explorer")],
-    ["命令行", tool("wineconsole")], ["任务管理器", tool("taskmgr")], ["内置程序", () => runExe(name)], null,
-    ["结束所有进程", async () => { await call("Kill", name); refreshRuns(name, 1500); }],
-    ["删除 prefix", async () => {
-      if (!await ask(`删除 prefix ${name}？会结束它里面的程序、移除菜单快捷方式，并删掉整个目录（包括装在里面的 Windows 程序和它们的数据），无法恢复。`)) return;
+    [t("设置"), () => settings(name)], [t("编辑 cellar.toml"), () => edit(name)], [t("依赖"), () => deps(name)], null,
+    [t("Wine 设置"), tool("winecfg")], [t("控制面板"), tool("control")], [t("注册表"), tool("regedit")], [t("文件管理器"), tool("explorer")],
+    [t("命令行"), tool("wineconsole")], [t("任务管理器"), tool("taskmgr")], [t("内置程序"), () => runExe(name)], null,
+    [t("结束所有进程"), async () => { await call("Kill", name); refreshRuns(name, 1500); }],
+    [t("删除 prefix"), async () => {
+      if (!await ask(t("删除 prefix {0}？里面的程序和数据会一并删除，无法恢复。", name))) return;
       try {
         await call("Delete", name);
         if (sel === name) { sel = null; history.replaceState(null, "", "#"); }
-        toast(`已删除 ${name}`); await load();
+        toast(t("已删除 {0}", name)); await load();
       } catch (e) { fail(e); }
     }, "danger"],
   ];
@@ -387,8 +390,8 @@ async function watchTask(name, id) {
   watching = id;
   for (;;) {
     if (watching !== id || sel !== name || !$("#task")) return;
-    let t;
-    try { t = await call("Task", id); } catch { return; }
+    let task;
+    try { task = await call("Task", id); } catch { return; }
     // Update the panel in place: rebuilding it every poll would reset the
     // log's scroll. The log follows new output only while scrolled to the end.
     let pre = $("#task pre");
@@ -397,22 +400,22 @@ async function watchTask(name, id) {
       pre = $("#task pre");
     }
     const box = $("#task .task");
-    box.classList.toggle("err", !!t.error);
-    box.querySelector("b").innerHTML = `${t.done ? (t.error ? "失败：" : "完成：") : `<span class="spin"></span>`}${esc(t.title)}`;
+    box.classList.toggle("err", !!task.error);
+    box.querySelector("b").innerHTML = task.done ? esc(task.error ? t("失败：{0}", task.title) : t("完成：{0}", task.title)) : `<span class="spin"></span>${esc(task.title)}`;
     const errEl = box.querySelector("div.err");
-    errEl.hidden = !t.error; errEl.textContent = t.error ? t.error.split("\n")[0] : "";
-    const text = t.lines.slice(-200).join("\n");
+    errEl.hidden = !task.error; errEl.textContent = task.error ? task.error.split("\n")[0] : "";
+    const text = task.lines.slice(-200).join("\n");
     if (pre.textContent !== text) {
       const atEnd = pre.scrollHeight - pre.scrollTop - pre.clientHeight < 8;
       pre.textContent = text;
       if (atEnd) pre.scrollTop = pre.scrollHeight;
     }
-    if (t.done) {
-      if (t.error) { // keep the panel up so the error and log stay readable
-        toast("失败：" + t.title, true);
+    if (task.done) {
+      if (task.error) { // keep the panel up so the error and log stay readable
+        toast(t("失败：{0}", task.title), true);
         prefixes = await call("Prefixes"); renderList(); showPlan(name);
       } else {
-        toast("完成：" + t.title);
+        toast(t("完成：{0}", task.title));
         await load(true);
       }
       return;
@@ -420,21 +423,20 @@ async function watchTask(name, id) {
     await new Promise((r) => setTimeout(r, 700));
   }
 }
-const kindText = { wow64: "WoW64", legacy: "传统 32 位" };
+const kindText = (kind) => kind === "legacy" ? t("传统 32 位") : "WoW64";
 
 function renderImport() {
-  $("#main").innerHTML = `<div class="head"><div><h1>从 Bottles 导入</h1>
-      <div class="meta">从 Bottles 导入应用到 Cellar（只读复制），不影响原 Bottles 数据。</div></div>
-      <div class="actions"><button id="pickb">选择目录</button></div></div>
+  $("#main").innerHTML = `<div class="head"><div><h1>${t("从 Bottles 导入")}</h1>
+      <div class="meta">${t("从 Bottles 复制导入，不影响原数据。")}</div></div>
+      <div class="actions"><button id="pickb">${t("选择目录")}</button></div></div>
     <section><div class="rlist">${bottles.map((b) => `
       <div class="rrow"><div class="grow"><b>${esc(b.name)}</b>
-        ${b.imported ? `<span class="tag">已导入为 ${esc(b.prefix)}</span>` : ""} ${b.runner ? `<span class="tag">${esc(b.runner)}</span>` : ""}
-        <div class="sub">${(b.apps || []).length ? esc(b.apps.join("、")) : "没有登记的程序"} · ${esc(b.dir)}</div>
+        ${b.imported ? `<span class="tag">${t("已导入为 {0}", esc(b.prefix))}</span>` : ""} ${b.runner ? `<span class="tag">${esc(b.runner)}</span>` : ""}
+        <div class="sub">${(b.apps || []).length ? esc(b.apps.join(t("、"))) : t("没有登记的程序")} · ${esc(b.dir)}</div>
         ${b.error ? `<div class="warn">⚠ ${esc(b.error)}</div>` : ""}</div>
-        ${b.imported ? `<button data-open="${esc(b.prefix)}">查看</button>`
-          : `<button data-bdir="${esc(b.dir)}" class="primary" ${b.error ? "disabled" : ""}>导入</button>`}</div>`).join("")
-      || `<div class="empty">没找到 Bottles 的数据。装过 Bottles 的话，点“选择目录”选它的 bottles 目录
-        （默认是 ~/.var/app/com.usebottles.bottles/data/bottles/bottles），也可以只选其中一个 bottle。</div>`}</div></section>`;
+        ${b.imported ? `<button data-open="${esc(b.prefix)}">${t("查看")}</button>`
+          : `<button data-bdir="${esc(b.dir)}" class="primary" ${b.error ? "disabled" : ""}>${t("导入")}</button>`}</div>`).join("")
+      || `<div class="empty">${t("没找到 Bottles 数据。可以点“选择目录”，选 bottles 目录或单个 bottle。")}</div>`}</div></section>`;
   $("#pickb").onclick = async () => {
     let dir;
     try { dir = await call("PickBottles"); } catch (e) { fail(e); return; }
@@ -443,28 +445,28 @@ function renderImport() {
   document.querySelectorAll("[data-open]").forEach((b) => b.onclick = () => { sel = b.dataset.open; renderList(); renderMain(); });
   document.querySelectorAll("[data-bdir]").forEach((b) => b.onclick = async () => {
     document.querySelectorAll("[data-bdir]").forEach((x) => x.disabled = true);
-    b.textContent = "导入中…";
+    b.textContent = t("导入中…");
     let res;
     try { res = await call("ImportBottle", b.dataset.bdir); } catch (e) { fail(e); await load(); return; }
     sel = res.prefix; await load();
     if ((res.notes || []).length) {
-      dialog(`<b>已导入 ${esc(res.prefix)}，有几点要看一下</b><ul>${res.notes.map((n) => `<li>${esc(n)}</li>`).join("")}</ul>
-        <div class="row"><button id="c" class="primary">知道了</button></div>`, (d) => d.querySelector("#c").onclick = () => d.close());
-    } else toast(`已导入 ${res.prefix}`);
+      dialog(`<b>${t("已导入 {0}，有几点要看一下", esc(res.prefix))}</b><ul>${res.notes.map((n) => `<li>${esc(n)}</li>`).join("")}</ul>
+        <div class="row"><button id="c" class="primary">${t("知道了")}</button></div>`, (d) => d.querySelector("#c").onclick = () => d.close());
+    } else toast(t("已导入 {0}", res.prefix));
   });
 }
 
 // ── settings page: cellar's own settings, starting with fonts ─────────────
-const FONT_SOURCES = [
-  ["host-first", "本机优先", "用本机装好的字体，本机没有的用下面已下载的。"],
-  ["library-only", "只用 Cellar 下载的", "不用本机字体，只用下面下载的字体包：每台机器效果一样。"],
+const fontSources = () => [
+  ["host-first", t("优先使用本机已安装"), t("需要本机装有对应的 Noto 字体，缺的再用字体库。")],
+  ["library-only", t("仅使用 Cellar 字体库"), t("不用本机字体，每台机器效果一致。")],
 ];
 
-const SETTING_TABS = [["general", "通用"], ["fonts", "字体"], ["runner", "Runner"]];
+const settingTabs = () => [["general", t("通用")], ["fonts", t("字体")], ["runner", "Runner"]];
 
 function renderSettings() {
-  $("#main").innerHTML = `<div class="head"><div><h1>设置</h1><div class="meta">Cellar 自己的设置，对所有 prefix 生效。</div></div></div>
-    <div class="tabs">${SETTING_TABS.map(([k, t]) => `<button data-tab="${k}" class="${setTab === k ? "on" : ""}">${t}</button>`).join("")}</div>
+  $("#main").innerHTML = `<div class="head"><div><h1>${t("设置")}</h1><div class="meta">${t("对所有 prefix 生效。")}</div></div></div>
+    <div class="tabs">${settingTabs().map(([k, label]) => `<button data-tab="${k}" class="${setTab === k ? "on" : ""}">${label}</button>`).join("")}</div>
     <div id="settab"></div>`;
   document.querySelectorAll("[data-tab]").forEach((b) => b.onclick = () => { setTab = b.dataset.tab; renderSettings(); });
   ({ general: renderGeneral, fonts: renderFonts, runner: renderRunners })[setTab]();
@@ -475,35 +477,35 @@ async function renderFonts() {
   const [pr, packs, running] = await Promise.all([call("Prefs"), call("FontPacks"), call("FontTask")]);
   if (!onTab("fonts")) return;
   const packState = (p) => {
-    if (p.have === p.files) return `<span class="tag rec">已下载</span>`;
-    if (p.host === p.files && pr.fonts.source !== "library-only") return `<span class="tag rec">本机已有</span>`;
+    if (p.have === p.files) return `<span class="tag rec">${t("已下载")}</span>`;
+    if (p.host === p.files && pr.fonts.source !== "library-only") return `<span class="tag rec">${t("本机已有")}</span>`;
     const parts = [];
-    if (p.have) parts.push(`已下载 ${p.have}/${p.files}`);
-    if (p.host) parts.push(p.host === p.files ? "本机已有" : `本机已有 ${p.host}/${p.files}`);
-    return parts.length ? parts.map((x) => `<span class="tag">${x}</span>`).join(" ") : `<span class="tag">未下载</span>`;
+    if (p.have) parts.push(t("已下载 {0}/{1}", p.have, p.files));
+    if (p.host) parts.push(p.host === p.files ? t("本机已有") : t("本机已有 {0}/{1}", p.host, p.files));
+    return parts.length ? parts.map((x) => `<span class="tag">${x}</span>`).join(" ") : `<span class="tag">${t("未下载")}</span>`;
   };
   $("#settab").innerHTML = `<section>
-      <div class="meta">字体来源</div>
-      <div class="radios">${FONT_SOURCES.map(([v, t, n]) => `<label><input type="radio" name="src" value="${v}" ${pr.fonts.source === v ? "checked" : ""}>
-        <span>${t}<small>${n}</small></span></label>`).join("")}</div>
-      <div class="meta" style="margin-top:14px">字体包（下载到 Cellar 的字体库，所有 prefix 共用）</div>
-      <div class="rlist">${packs.map((p) => `<div class="rrow"><div class="grow"><b>${esc(p.name)}</b> ${packState(p)}
-          <div class="sub" title="${esc(p.note)}">${esc(p.note)} · ${mb(p.size)}</div></div>
-        ${p.missing ? `<button data-get="${p.id}" title="约 ${mb(p.missing_size)}">${p.missing === p.files ? "下载" : `下载缺的 ${p.missing} 个`}</button>` : ""}
-        ${p.have ? `<button data-rmp="${p.id}">删除</button>` : ""}</div>`).join("")}</div>
+      <div class="meta">${t("字体来源")}</div>
+      <div class="radios">${fontSources().map(([v, label, note]) => `<label><input type="radio" name="src" value="${v}" ${pr.fonts.source === v ? "checked" : ""}>
+        <span>${label}<small>${note}</small></span></label>`).join("")}</div>
+      <div class="meta" style="margin-top:14px">${t("字体库（所有 prefix 都可用）")}</div>
+      <div class="rlist">${packs.map((p) => `<div class="rrow"><div class="grow"><b>${esc(t(p.name))}</b> ${packState(p)}
+          <div class="sub" title="${esc(t(p.note))}">${esc(t(p.note))} · ${mb(p.size)}</div></div>
+        ${p.missing ? `<button data-get="${p.id}" title="${t("约 {0}", mb(p.missing_size))}">${p.missing === p.files ? t("下载") : t("下载缺的 {0} 个", p.missing)}</button>` : ""}
+        ${p.have ? `<button data-rmp="${p.id}">${t("删除")}</button>` : ""}</div>`).join("")}</div>
       <div id="fonttask" class="meta"></div>
-      <div class="row" style="justify-content:flex-start"><button id="fontdir">打开字体目录</button>
-        <span class="meta">下载不下来时，可以自己下好放进这个目录。下载或删除后，各 prefix 会提示有更改未生效，应用后生效。</span></div>
+      <div class="row" style="justify-content:flex-start"><button id="fontdir">${t("打开字体目录")}</button>
+        <span class="meta">${t("下载失败时，可以手动下载后放进这个目录。")}</span></div>
     </section>`;
   document.querySelectorAll('input[name="src"]').forEach((r) => r.onchange = async () => {
-    try { await call("SavePrefs", { ...pr, fonts: { ...pr.fonts, source: r.value } }); toast("已保存"); } catch (e) { fail(e); }
+    try { await call("SavePrefs", { ...pr, fonts: { ...pr.fonts, source: r.value } }); toast(t("已保存")); } catch (e) { fail(e); }
     renderFonts();
   });
   document.querySelectorAll("[data-get]").forEach((b) => b.onclick = async () => {
     try { watchFontTask(await call("GetFontPack", b.dataset.get)); } catch (e) { fail(e); }
   });
   document.querySelectorAll("[data-rmp]").forEach((b) => b.onclick = async () => {
-    if (!await ask("删除这个字体包？已经用上它的 prefix 里有自己的副本，不受影响；应用配置时才会去掉。")) return;
+    if (!await ask(t("从字体库删除？已用上它的 prefix 在重新应用配置前不受影响。"))) return;
     try { await call("RemoveFontPack", b.dataset.rmp); } catch (e) { fail(e); }
     renderFonts();
   });
@@ -515,15 +517,15 @@ async function renderFonts() {
 async function watchFontTask(id) {
   document.querySelectorAll("[data-get],[data-rmp]").forEach((b) => b.disabled = true);
   for (;;) {
-    let t;
-    try { t = await call("Task", id); } catch { return; }
+    let task;
+    try { task = await call("Task", id); } catch { return; }
     const el = $("#fonttask");
     if (!el || !onTab("fonts")) return;
-    el.innerHTML = `${t.done ? "" : `<span class="spin"></span>`}${esc(t.title)}：${esc(t.lines.at(-1) || "开始…")}`;
-    if (t.done) {
-      if (t.error) { el.innerHTML = `<span class="err">${esc(t.error)}</span>`; toast("下载失败", true); }
-      else toast("完成：" + t.title);
-      return setTimeout(() => onTab("fonts") && renderFonts(), t.error ? 3000 : 0);
+    el.innerHTML = `${task.done ? "" : `<span class="spin"></span>`}${esc(task.title)}: ${esc(task.lines.at(-1) || t("开始…"))}`;
+    if (task.done) {
+      if (task.error) { el.innerHTML = `<span class="err">${esc(task.error)}</span>`; toast(t("下载失败"), true); }
+      else toast(t("完成：{0}", task.title));
+      return setTimeout(() => onTab("fonts") && renderFonts(), task.error ? 3000 : 0);
     }
     await new Promise((r) => setTimeout(r, 600));
   }
@@ -534,41 +536,37 @@ const runnerUsers = (r) => prefixes.filter((p) => p.source === "local" && (p.run
 
 async function renderRunners() {
   $("#settab").innerHTML = `${noWine()}
-    <div class="meta" style="margin:0 0 12px">${env.flatpak
-      ? "“system” 是本应用自带的 Wine（org.winehq.Wine），始终可用。" : "“system” 是系统里安装的 Wine。"}
-      新建 prefix 时可以任选一个；社区构建下载到 ${esc(env.home)}/runners。</div>
-    <section><h2>已有</h2><div class="rlist">${env.runners.map((r) => `
-      <div class="rrow"><div class="grow"><b>${esc(r.name)}</b> ${r.default ? `<span class="tag rec">默认</span>` : ""}
-        <span class="tag">${r.source === "system" ? "系统" : "已下载"}</span> <span class="tag">${kindText[r.kind]}</span>
+    <section><h2>${t("已有")}</h2><div class="rlist">${env.runners.map((r) => `
+      <div class="rrow"><div class="grow"><b>${esc(t(r.name))}</b> ${r.default ? `<span class="tag rec">${t("默认")}</span>` : ""}
+        <span class="tag">${r.source === "system" ? t("系统") : t("已下载")}</span> <span class="tag">${kindText(r.kind)}</span>
         <div class="sub">${esc(r.version)} · ${esc(r.dir)}</div>
         ${(r.problems || []).map((x) => `<div class="warn">⚠ ${esc(x)}</div>`).join("")}</div>
         ${r.source === "system" ? "" : runnerUsers(r).length
-          ? `<button disabled title="${esc(runnerUsers(r).join("、"))} 在用，先给它们换一个 runner">删除</button>`
-          : `<button data-rrm="${esc(r.name)}">删除</button>`}</div>`).join("") || `<div class="empty">还没有</div>`}</div></section>
-    <section><h2>可下载</h2><div id="avail" class="empty">正在查询 GitHub…</div></section>
-    <section><h2>自己添加</h2>
-      <div class="meta">下载不下来，或想用列表里没有的版本（比如 GE-Proton）时，自己下载解压后把整个目录放进 runner 目录，
-        目录名就是 runner 名。里面有 <code>bin/wine</code>（Proton 的是 <code>files/bin/wine</code>）就能识别，切回 Cellar 窗口会自动刷新。</div>
-      <div class="row" style="justify-content:flex-start"><button id="runnerdir">打开 runner 目录</button></div></section>`;
+          ? `<button disabled title="${esc(t("{0} 在用，先给它们换一个 runner", runnerUsers(r).join(t("、"))))}">${t("删除")}</button>`
+          : `<button data-rrm="${esc(r.name)}">${t("删除")}</button>`}</div>`).join("") || `<div class="empty">${t("还没有")}</div>`}</div></section>
+    <section><h2>${t("可下载")}</h2><div id="avail" class="empty">${t("正在查询 GitHub…")}</div></section>
+    <section><h2>${t("自己添加")}</h2>
+      <div class="meta">${t("自己下载解压后放进 runner 目录即可，目录里需要有 bin/wine 或 files/bin/wine。")}</div>
+      <div class="row" style="justify-content:flex-start"><button id="runnerdir">${t("打开 runner 目录")}</button></div></section>`;
   wireNoWine();
   $("#runnerdir").onclick = () => call("OpenRunnerDir").catch(fail);
   document.querySelectorAll("[data-rrm]").forEach((b) => b.onclick = async () => {
-    if (!await ask(`删除 runner ${b.dataset.rrm}？会删掉 ${env.home}/runners/${b.dataset.rrm}，之后可以重新下载。`)) return;
-    try { await call("RemoveRunner", b.dataset.rrm); toast(`已删除 ${b.dataset.rrm}`); } catch (e) { fail(e); }
+    if (!await ask(t("删除 runner {0}？之后可以重新下载。", b.dataset.rrm))) return;
+    try { await call("RemoveRunner", b.dataset.rrm); toast(t("已删除 {0}", b.dataset.rrm)); } catch (e) { fail(e); }
     await load();
   });
   try {
     const cat = await call("Available");
     if (!onTab("runner")) return;
     $("#avail").outerHTML = `<div id="avail" class="rlist">${(cat.warnings || []).map((w) => `<div class="warn">⚠ ${esc(w)}</div>`).join("")}
-      ${(cat.releases || []).map((r) => `<div class="rrow"><div class="grow"><b>${esc(r.name)}</b> <span class="mono">${esc(r.version)}</span>
-        ${r.default ? `<span class="tag rec">推荐</span>` : ""} <span class="tag">${kindText[r.kind]}</span>
-        <div class="sub">${esc(r.note)}${r.size ? ` · ${(r.size / 1048576).toFixed(0)} MB` : ""}</div>
-        ${r.usable ? "" : `<div class="warn">⚠ 当前环境缺 32 位支持，装上也跑不起来</div>`}</div>
-        <button data-rid="${esc(r.id)}" ${r.installed ? "disabled" : ""}>${r.installed ? "已安装" : "下载"}</button></div>`).join("")}</div>`;
+      ${(cat.releases || []).map((r) => `<div class="rrow"><div class="grow"><b>${esc(t(r.name))}</b> <span class="mono">${esc(r.version)}</span>
+        ${r.default ? `<span class="tag rec">${t("推荐")}</span>` : ""} <span class="tag">${kindText(r.kind)}</span>
+        <div class="sub">${esc(t(r.note))}${r.size ? ` · ${(r.size / 1048576).toFixed(0)} MB` : ""}</div>
+        ${r.usable ? "" : `<div class="warn">⚠ ${t("当前环境缺 32 位支持，装上也跑不起来")}</div>`}</div>
+        <button data-rid="${esc(r.id)}" ${r.installed ? "disabled" : ""}>${r.installed ? t("已安装") : t("下载")}</button></div>`).join("")}</div>`;
     document.querySelectorAll("[data-rid]").forEach((b) => b.onclick = async () => {
-      b.disabled = true; b.textContent = "下载中…";
-      try { await call("InstallRunner", b.dataset.rid); } catch (e) { fail(e); b.disabled = false; b.textContent = "下载"; return; }
+      b.disabled = true; b.textContent = t("下载中…");
+      try { await call("InstallRunner", b.dataset.rid); } catch (e) { fail(e); b.disabled = false; b.textContent = t("下载"); return; }
       await load();
     });
   } catch (e) { if (onTab("runner")) $("#avail").innerHTML = `<div class="err">${esc(e.message || e)}</div>`; }
@@ -581,12 +579,12 @@ async function renderGeneral() {
   const rt = env.runners.find((r) => r.name === env.default_runner);
   // [label, value, extra html after the value]
   const rows = [
-    ["版本", a.version, ` · <a href="#" id="repo">${REPO.replace("https://", "")}</a>`],
-    ["安装方式", a.install === "flatpak" ? "Flatpak" : "宿主安装"],
-    ["数据目录", a.home, ` <button id="homedir">打开</button>`],
-    ["默认 runner", env.default_runner ? `${env.default_runner}（${rt ? rt.version : "?"}）` : "没有"],
-    ["系统", a.os], ...(a.runtime ? [["Flatpak 运行时", a.runtime]] : []), ["内核", `${a.kernel} · ${a.arch}`],
-    ["桌面", a.desktop], ["区域", a.locale], ["Go", a.go],
+    [t("版本"), a.version, ` · <a href="#" id="repo">${REPO.replace("https://", "")}</a>`],
+    [t("安装方式"), a.install === "flatpak" ? "Flatpak" : t("宿主安装")],
+    [t("数据目录"), a.home, ` <button id="homedir">${t("打开")}</button>`],
+    [t("默认 runner"), env.default_runner ? t("{0}（{1}）", env.default_runner, rt ? rt.version : "?") : t("没有")],
+    [t("系统"), a.os], ...(a.runtime ? [[t("Flatpak 运行时"), a.runtime]] : []), [t("内核"), `${a.kernel} · ${a.arch}`],
+    [t("桌面"), a.desktop], [t("区域"), a.locale], ["Go", a.go],
   ];
   const pr = await call("Prefs");
   if (!onTab("general")) return;
@@ -594,8 +592,8 @@ async function renderGeneral() {
   $("#settab").innerHTML = `<section><h2>${t("外观与语言")}</h2>
       <div class="pair"><label>${t("语言")}${pick("uilang", pr.ui.language, [["", t("跟随系统")], ...Object.entries(LANG_NAMES)])}</label>
         <label>${t("主题")}${pick("uitheme", pr.ui.theme, [["", t("跟随系统")], ["light", t("浅色")], ["dark", t("深色")]])}</label></div></section>
-    <section><div class="sechead"><h2>关于</h2><button id="copyinfo">复制</button></div>
-    <table class="about">${rows.map(([k, v, x]) => `<tr><th>${k}</th><td>${esc(v || "未知")}${x || ""}</td></tr>`).join("")}</table></section>`;
+    <section><div class="sechead"><h2>${t("关于")}</h2><button id="copyinfo">${t("复制")}</button></div>
+    <table class="about">${rows.map(([k, v, x]) => `<tr><th>${k}</th><td>${esc(v || t("未知"))}${x || ""}</td></tr>`).join("")}</table></section>`;
   const saveUI = async (ui) => {
     try { await call("SavePrefs", { ...pr, ui: { ...pr.ui, ...ui } }); } catch (e) { fail(e); return false; }
     return true;
@@ -606,8 +604,8 @@ async function renderGeneral() {
   $("#homedir").onclick = () => call("OpenHome").catch(fail);
   $("#repo").onclick = (ev) => { ev.preventDefault(); call("OpenURL", REPO).catch(fail); };
   $("#copyinfo").onclick = async () => {
-    const text = rows.map(([k, v]) => `${k}: ${v || "未知"}`).join("\n");
-    try { await call("CopyText", text); toast("已复制"); } catch (e) { fail(e); }
+    const text = rows.map(([k, v]) => `${k}: ${v || t("未知")}`).join("\n");
+    try { await call("CopyText", text); toast(t("已复制")); } catch (e) { fail(e); }
   };
 }
 
@@ -624,8 +622,8 @@ async function showPlan(name) {
   const n = (pl.changes || []).length;
   const warn = (pl.warnings || []).map((w) => `<div class="err">⚠ ${esc(w)}</div>`).join("");
   if (!n && !warn) return set("");
-  set(`<section>${n ? `<div class="sechead"><h2>配置有 ${n} 项更改未生效</h2>
-      <div class="actions"><button id="planview">查看</button><button id="apply" class="primary">应用</button></div></div>` : ""}${warn}</section>`);
+  set(`<section>${n ? `<div class="sechead"><h2>${t("配置有 {0} 项更改未生效", n)}</h2>
+      <div class="actions"><button id="planview">${t("查看")}</button><button id="apply" class="primary">${t("应用#apply")}</button></div></div>` : ""}${warn}</section>`);
   if (!n) return;
   const apply = () => applyNow(name);
   $("#apply").onclick = apply;
@@ -633,16 +631,16 @@ async function showPlan(name) {
   // to the same file can only be applied.
   $("#planview").onclick = async () => {
     const edited = await call("ConfigEdited", name);
-    dialog(`<b>${esc(name)}：未生效的更改</b><ul class="changes">${pl.changes.map((c) =>
+    dialog(`<b>${t("{0}：未生效的更改", esc(name))}</b><ul class="changes">${pl.changes.map((c) =>
         `<li><span class="op op-${c.op}">${c.op}</span>${esc(fmt(c))}</li>`).join("")}</ul>
-      ${edited ? "" : `<div class="meta">配置文件没改过：这些更改来自 Cellar 或 Wine 的更新，只能应用。</div>`}
-      <div class="row">${edited ? `<button id="u">撤销修改</button>` : ""}<span style="flex:1"></span>
-        <button id="c">关闭</button><button id="a" class="primary">应用</button></div>`, (d) => {
+      ${edited ? "" : `<div class="meta">${t("这些更改来自 Cellar 或 Wine 的更新，只能应用。")}</div>`}
+      <div class="row">${edited ? `<button id="u">${t("撤销修改")}</button>` : ""}<span style="flex:1"></span>
+        <button id="c">${t("关闭")}</button><button id="a" class="primary">${t("应用#apply")}</button></div>`, (d) => {
       d.querySelector("#c").onclick = () => d.close();
       d.querySelector("#a").onclick = () => { d.close(); apply(); };
       if (edited) d.querySelector("#u").onclick = async () => {
-        if (!await ask("撤销修改？cellar.toml 会恢复成上次应用时的内容，之后改的都会丢掉。")) return;
-        try { await call("RevertConfig", name); d.close(); toast("已撤销"); } catch (e) { fail(e); }
+        if (!await ask(t("撤销修改？cellar.toml 会恢复到上次应用时的内容。"))) return;
+        try { await call("RevertConfig", name); d.close(); toast(t("已撤销")); } catch (e) { fail(e); }
         await load();
       };
     });
@@ -663,8 +661,8 @@ async function showRuns(name) {
   const runs = await call("Runs", name);
   $("#runs").outerHTML = `<div id="runs">${runs.length ? `<table>${runs.map((r) => `
     <tr class="run" data-id="${esc(r.id)}"><td class="mono">${esc(r.id)}</td><td>${esc(r.app || "—")}</td>
-    <td class="${r.exit_code ? "s-error" : "s-applied"}">退出码 ${r.exit_code}</td><td>${r.seconds.toFixed(1)}s</td>
-    <td class="mono cmd" title="${esc(r.argv.slice(1).join(" "))}">${esc(r.argv.slice(1).join(" "))}</td></tr>`).join("")}</table>` : `<div class="empty">还没运行过</div>`}</div>`;
+    <td class="${r.exit_code ? "s-error" : "s-applied"}">${t("退出码 {0}", r.exit_code)}</td><td>${r.seconds.toFixed(1)}s</td>
+    <td class="mono cmd" title="${esc(r.argv.slice(1).join(" "))}">${esc(r.argv.slice(1).join(" "))}</td></tr>`).join("")}</table>` : `<div class="empty">${t("暂无运行记录")}</div>`}</div>`;
   document.querySelectorAll("tr.run").forEach((tr) => tr.onclick = () => showLog(name, tr.dataset.id));
   const b = $("#clearruns");
   b.hidden = !runs.length;
@@ -676,17 +674,17 @@ async function showRuns(name) {
 
 
 async function launch(name, app, b) {
-  b.disabled = true; b.textContent = "已启动";
+  b.disabled = true; b.textContent = t("已启动");
   try { await call("Launch", name, app, ""); } catch (e) { fail(e); }
-  setTimeout(() => { b.disabled = false; b.textContent = "启动"; showRuns(name); }, 3000);
+  setTimeout(() => { b.disabled = false; b.textContent = t("启动"); showRuns(name); }, 3000);
 }
 
 function dialog(html, wire) { const d = $("#dlg"); d.innerHTML = html; wire(d); d.showModal(); }
 
 async function edit(name) {
   const text = await call("ReadConfig", name);
-  dialog(`<b>编辑 ${esc(name)}/cellar.toml</b><textarea id="cfg" spellcheck="false">${esc(text)}</textarea>
-    <div id="cfgerr" class="err"></div><div class="row"><button id="c">取消</button><button id="s" class="primary">保存并应用</button></div>`, (d) => {
+  dialog(`<b>${t("编辑 {0}/cellar.toml", esc(name))}</b><textarea id="cfg" spellcheck="false">${esc(text)}</textarea>
+    <div id="cfgerr" class="err"></div><div class="row"><button id="c">${t("取消")}</button><button id="s" class="primary">${t("保存并应用")}</button></div>`, (d) => {
     d.querySelector("#c").onclick = () => d.close();
     d.querySelector("#s").onclick = async () => {
       try { await call("SaveConfig", name, d.querySelector("#cfg").value); d.close(); await applyNow(name); }
@@ -700,16 +698,16 @@ async function edit(name) {
 async function showLog(name, id) {
   const [text, runs] = await Promise.all([call("Log", name, id), call("Runs", name)]);
   const r = runs.find((x) => x.id === id);
-  const head = r ? `<div class="meta">${esc(r.argv.slice(1).join(" "))}<br>退出码 ${r.exit_code} · ${r.seconds.toFixed(1)}s</div>` : "";
+  const head = r ? `<div class="meta">${esc(r.argv.slice(1).join(" "))}<br>${t("退出码 {0}", r.exit_code)} · ${r.seconds.toFixed(1)}s</div>` : "";
   const body = text.trim() ? `<pre class="log">${esc(text)}</pre>`
-    : `<div class="empty" style="padding:14px 0">这次运行 Wine 没有输出。程序正常时通常就是这样：Wine 只记录错误和警告。</div>`;
-  dialog(`<b>运行 ${esc(id)}</b>${head}${body}<div class="row"><button id="c">关闭</button></div>`,
+    : `<div class="empty" style="padding:14px 0">${t("Wine 没有输出，程序正常时通常如此。")}</div>`;
+  dialog(`<b>${t("运行 {0}", esc(id))}</b>${head}${body}<div class="row"><button id="c">${t("关闭")}</button></div>`,
     (d) => d.querySelector("#c").onclick = () => d.close());
 }
 
 // Wine's own programs not already in the prefix menu.
-const BUILTINS = [["notepad", "记事本"], ["write", "写字板"], ["iexplore", "IE 浏览器"], ["msinfo32", "系统信息"],
-  ["oleview", "OLE/COM 查看器"], ["winemine", "扫雷"], ["clock", "时钟"]];
+const builtins = () => [["notepad", t("记事本")], ["write", t("写字板")], ["iexplore", t("IE 浏览器")], ["msinfo32", t("系统信息")],
+  ["oleview", t("OLE/COM 查看器")], ["winemine", t("扫雷")], ["clock", t("时钟")]];
 
 // runExe runs a built-in program, a typed command, or an exe picked from C:.
 function runExe(name) {
@@ -717,12 +715,12 @@ function runExe(name) {
     try { await call("Launch", name, "", exe); } catch (e) { fail(e); return; }
     d.close(); setTimeout(() => showRuns(name), 3000);
   };
-  dialog(`<b>在 ${esc(name)} 里运行</b>
-    <div class="tools">${BUILTINS.map(([x, t]) => `<button data-b="${x}" title="${x}">${t}</button>`).join("")}</div>
-    <div class="meta">或者输入 Windows 路径、宿主路径或内置程序名</div>
-    <div class="inline"><input id="x" placeholder="例如 C:\\Program Files\\App\\app.exe，或 regedit"><button id="r" class="primary">运行</button></div>
+  dialog(`<b>${t("在 {0} 里运行", esc(name))}</b>
+    <div class="tools">${builtins().map(([x, label]) => `<button data-b="${x}" title="${x}">${label}</button>`).join("")}</div>
+    <div class="meta">${t("或者输入 Windows 路径、宿主路径或内置程序名")}</div>
+    <div class="inline"><input id="x" placeholder="${t("例如 C:\\Program Files\\App\\app.exe 或 regedit")}"><button id="r" class="primary">${t("运行")}</button></div>
     <div class="plist" id="pl" hidden></div>
-    <div class="row"><button id="br">浏览 C 盘</button><span style="flex:1"></span><button id="c">关闭</button></div>`, (d) => {
+    <div class="row"><button id="br">${t("浏览 C 盘")}</button><span style="flex:1"></span><button id="c">${t("关闭")}</button></div>`, (d) => {
     d.querySelector("#c").onclick = () => d.close();
     d.querySelectorAll("[data-b]").forEach((b) => b.onclick = () => run(d, b.dataset.b));
     const x = d.querySelector("#x");
@@ -730,7 +728,7 @@ function runExe(name) {
     x.onkeydown = (ev) => { if (ev.key === "Enter") d.querySelector("#r").click(); };
     d.querySelector("#br").onclick = () => {
       d.querySelector("#pl").hidden = false;
-      browse(d, name, "C:\\", { label: "运行", fn: (e) => run(d, e.path) });
+      browse(d, name, "C:\\", { label: t("运行"), fn: (e) => run(d, e.path) });
     };
   });
 }
@@ -738,7 +736,7 @@ function runExe(name) {
 // Region and font sets: the locale sets the Windows UI language and code
 // page; each font set maps one script's Windows fonts to host fonts.
 const localeName = (id) => (env.locales.find((l) => l.id === id) || { name: id }).name;
-const fontSetName = (id) => (env.font_sets.find((f) => f.id === id) || { name: id }).name;
+const fontSetName = (id) => t((env.font_sets.find((f) => f.id === id) || { name: id }).name);
 // localeField is the region picker: a box that filters the list by code or
 // name as you type. It starts on the prefix's locale, else the host's,
 // marked （系统）; whatever is picked is written out, so what it shows is
@@ -746,18 +744,17 @@ const fontSetName = (id) => (env.font_sets.find((f) => f.id === id) || { name: i
 function localeField(value) {
   value = value || env.host_locale || "en_US";
   return `<div class="combo" id="loc" data-value="${esc(value)}"><input class="cq" value="${esc(localeLabel(value))}"
-    placeholder="${PICK_HINT}" autocomplete="off" spellcheck="false"><div class="clist" tabindex="-1" hidden></div></div>`;
+    placeholder="${t("输入代码或名称过滤，如 sv、svenska")}" autocomplete="off" spellcheck="false"><div class="clist" tabindex="-1" hidden></div></div>`;
 }
-const PICK_HINT = "输入代码或名称过滤，如 sv、svenska";
 function localeLabel(id) {
   const l = env.locales.find((l) => l.id === id);
-  return `${l ? l.name + " " : ""}${id}${id === env.host_locale ? "（系统）" : ""}`;
+  return `${l ? l.name + " " : ""}${id}${id === env.host_locale ? t("（系统）") : ""}`;
 }
 // fontField lists the sets with what each would use here: the font found
 // (host, runtime or library), the winetricks verb installed instead, or a
 // pointer to the settings page to download it.
 const fontField = (sets) => `<div class="fsets">${env.font_sets.map((f) =>
-  `<label><input type="checkbox" value="${f.id}" ${sets.includes(f.id) ? "checked" : ""}><span>${esc(f.name)}<small>${esc(f.note)}</small><small data-fs="${f.id}">查找字体…</small></span></label>`).join("")}</div>`;
+  `<label><input type="checkbox" value="${f.id}" ${sets.includes(f.id) ? "checked" : ""}><span>${esc(t(f.name))}<small>${esc(t(f.note))}</small><small data-fs="${f.id}">${t("查找字体…")}</small></span></label>`).join("")}</div>`;
 const mb = (n) => `${Math.max(1, Math.round(n / 1048576))} MB`;
 // wireFonts makes "all" carry the sets it includes: ticked, it ticks and
 // locks them.
@@ -777,15 +774,15 @@ async function showFontStatus(d) {
   for (const s of st) {
     const el = d.querySelector(`[data-fs="${s.id}"]`);
     if (!el) continue;
-    const where = { host: "（本机）", runtime: "（Cellar 自带）", library: "（已下载）" }[s.source];
+    const where = { host: t("（本机）"), runtime: t("（Cellar 自带）"), library: t("（已下载）") }[s.source];
     if (s.source === "scripts") {
-      el.textContent = `${s.total} 种文字里 ${s.have} 种有字体` + (s.have === s.total ? "" : "，其余可在 设置 → 字体 下载");
+      el.textContent = s.have === s.total ? t("{0} 种文字里 {1} 种有字体", s.total, s.have) : t("{0} 种文字里 {1} 种有字体，其余可在 设置 → 字体 下载", s.total, s.have);
       continue;
     }
     if (s.family) el.textContent = `→ ${s.family}${where || ""}`;
-    else if (s.deps && s.deps.length) el.textContent = `本机没有，改用 winetricks ${s.deps.join(" ")}`;
+    else if (s.deps && s.deps.length) el.textContent = t("本机没有，改用 winetricks {0}", s.deps.join(" "));
     else {
-      el.innerHTML = `⚠ 没有可用字体，<a href="#" data-goset>去 设置 → 字体 下载</a>`;
+      el.innerHTML = `⚠ ${t("没有可用字体，去 设置 → 字体 下载")}`;
       el.classList.add("warn");
       el.querySelector("[data-goset]").onclick = (ev) => { ev.preventDefault(); d.close(); openSettings("fonts"); };
     }
@@ -803,14 +800,14 @@ function wireLocale(d, onPick) {
     const f = q.value.trim().toLowerCase();
     const cur = box.dataset.value;
     let all = env.locales;
-    if (!all.some((l) => l.id === cur)) all = [{ id: cur, name: "（当前）" }, ...all];
+    if (!all.some((l) => l.id === cur)) all = [{ id: cur, name: t("（当前）") }, ...all];
     const host = all.find((l) => l.id === env.host_locale);
     if (f) shown = all.filter((l) => l.id.toLowerCase().includes(f) || l.name.toLowerCase().includes(f));
     else shown = [...(host ? [host] : []), ...all.filter((l) => l.common && l !== host), ...all.filter((l) => !l.common && l !== host)];
     // Unfiltered, Enter keeps the current choice; filtered, it takes the top match.
     at = shown.length ? Math.max(0, f ? 0 : shown.findIndex((l) => l.id === cur)) : -1;
     list.innerHTML = shown.length ? shown.map((l, i) => `<div class="copt${i === at ? " on" : ""}${l.id === cur ? " cur" : ""}" data-i="${i}">
-      <span>${esc(l.name)}</span><code>${esc(l.id)}${l.id === env.host_locale ? "（系统）" : ""}</code></div>`).join("") : `<div class="empty">没有匹配的区域</div>`;
+      <span>${esc(l.name)}</span><code>${esc(l.id)}${l.id === env.host_locale ? t("（系统）") : ""}</code></div>`).join("") : `<div class="empty">${t("没有匹配的区域")}</div>`;
     list.hidden = false;
   };
   const move = (n) => {
@@ -823,7 +820,7 @@ function wireLocale(d, onPick) {
   // typing filters at once; leaving without a pick puts the choice back.
   // The list takes focus too (dragging its scrollbar), so only focus leaving
   // the whole picker closes it.
-  const close = () => { list.hidden = true; q.value = localeLabel(box.dataset.value); q.placeholder = PICK_HINT; };
+  const close = () => { list.hidden = true; q.value = localeLabel(box.dataset.value); q.placeholder = t("输入代码或名称过滤，如 sv、svenska"); };
   q.onfocus = (ev) => {
     if (box.contains(ev.relatedTarget)) return; // back from the list
     q.placeholder = q.value; q.value = ""; render();
@@ -849,25 +846,25 @@ const readFonts = (d) => {
   const all = env.font_sets.find((f) => f.includes);
   return on.includes(all.id) ? [all.id] : on;
 };
-const LOCALE_NOTE = "Windows 界面语言与编码（老软件乱码多半是它）";
-const FONTS_NOTE = "界面里缺的字（泰文、阿拉伯文、印度文字…）会用本机或已下载的 Noto 字体补上，字体来源和下载在 设置 → 字体";
+const LOCALE_NOTE = () => t("Windows 界面语言和编码，老软件乱码时改它");
+const FONTS_NOTE = () => t("界面缺的字用 Noto 字体补齐，在 设置 → 字体 里管理");
 const WINVER = [["win11", "Windows 11"], ["win10", "Windows 10"], ["win81", "Windows 8.1"], ["win7", "Windows 7"], ["winxp", "Windows XP"]];
-const DPIS = [[0, "自动（跟随系统 Xft.dpi）"], [96, "100%"], [120, "125%"], [144, "150%"], [168, "175%"], [192, "200%"]];
+const DPIS = () => [[0, t("自动（跟随系统 Xft.dpi）")], [96, "100%"], [120, "125%"], [144, "150%"], [168, "175%"], [192, "200%"]];
 
 async function settings(name) {
   const st = await call("Settings", name);
-  dialog(`<b>${esc(name)} 设置</b>
+  dialog(`<b>${t("{0} 设置", esc(name))}</b>
     <div class="form">
-      <label>Windows 版本</label><select id="wv"><option value="">默认（Windows 10）</option>${WINVER.map(([v, t]) => `<option value="${v}" ${st.windows_version === v ? "selected" : ""}>${t}</option>`).join("")}</select>
-      <label>虚拟桌面</label><div class="inline"><input type="checkbox" id="vd" ${st.virtual_desktop ? "checked" : ""}>
-        <input id="vdres" placeholder="1920x1080" value="${esc(st.virtual_desktop || "1920x1080")}" style="width:140px"><small class="meta">程序都开在一个 Wine 桌面窗口里</small></div>
-      <label>缩放（DPI）</label><select id="dpi">${DPIS.map(([v, t]) => `<option value="${v}" ${st.dpi === v ? "selected" : ""}>${t}${v ? `（${v}）` : ""}</option>`).join("")}
-        ${st.dpi && !DPIS.some(([v]) => v === st.dpi) ? `<option value="${st.dpi}" selected>${st.dpi}</option>` : ""}</select>
-      <label>区域</label><div>${localeField(st.locale)}<small class="meta">${LOCALE_NOTE}</small></div>
-      <label>字体</label><div>${fontField(st.font_sets)}<small class="meta">${FONTS_NOTE}</small></div>
+      <label>${t("Windows 版本")}</label><select id="wv"><option value="">${t("默认（Windows 10）")}</option>${WINVER.map(([v, label]) => `<option value="${v}" ${st.windows_version === v ? "selected" : ""}>${label}</option>`).join("")}</select>
+      <label>${t("虚拟桌面")}</label><div class="inline"><input type="checkbox" id="vd" ${st.virtual_desktop ? "checked" : ""}>
+        <input id="vdres" placeholder="1920x1080" value="${esc(st.virtual_desktop || "1920x1080")}" style="width:140px"><small class="meta">${t("程序都开在一个 Wine 桌面窗口里")}</small></div>
+      <label>${t("缩放（DPI）")}</label><select id="dpi">${DPIS().map(([v, label]) => `<option value="${v}" ${st.dpi === v ? "selected" : ""}>${label}${v ? t("（{0}）", v) : ""}</option>`).join("")}
+        ${st.dpi && !DPIS().some(([v]) => v === st.dpi) ? `<option value="${st.dpi}" selected>${st.dpi}</option>` : ""}</select>
+      <label>${t("区域")}</label><div>${localeField(st.locale)}<small class="meta">${LOCALE_NOTE()}</small></div>
+      <label>${t("字体")}</label><div>${fontField(st.font_sets)}<small class="meta">${FONTS_NOTE()}</small></div>
     </div>
     <div id="e" class="err"></div>
-    <div class="row"><button id="c">取消</button><button id="s" class="primary">保存并应用</button></div>`, (d) => {
+    <div class="row"><button id="c">${t("取消")}</button><button id="s" class="primary">${t("保存并应用")}</button></div>`, (d) => {
     wireLocale(d);
     wireFonts(d);
     showFontStatus(d);
@@ -887,14 +884,13 @@ async function settings(name) {
 // what it installed.
 const WINETRICKS_URL = "https://github.com/Winetricks/winetricks";
 async function deps(name) {
-  dialog(`<b>${esc(name)} 的依赖</b>
-    <div class="meta">用 winetricks 安装，已装的跳过；装上的卸不掉，取消勾选只是以后不再要求。
-      每个 verb 的说明见 <a href="#" id="wtl">winetricks</a>。</div>
-    <input id="q" placeholder="搜索 verb 或说明，如 vcrun、d3dx9、riched、.net" autocomplete="off" spellcheck="false">
-    <div class="vlist" id="vl"><div class="empty" style="padding:10px">读取 winetricks 列表…</div></div>
-    <input id="extra" placeholder="列表里没有的 verb，空格分隔">
+  dialog(`<b>${t("{0} 的依赖", esc(name))}</b>
+    <div class="meta">${t("用 winetricks 安装，已装的会跳过，装上后无法卸载。说明见 {0}。", "winetricks")}</div>
+    <input id="q" placeholder="${t("搜索 verb 或说明")}" autocomplete="off" spellcheck="false">
+    <div class="vlist" id="vl"><div class="empty" style="padding:10px">${t("读取 winetricks 列表…")}</div></div>
+    <input id="extra" placeholder="${t("列表里没有的 verb，空格分隔")}">
     <div id="e" class="err"></div>
-    <div class="row"><span class="meta" id="cnt"></span><span style="flex:1"></span><button id="c">取消</button><button id="s" class="primary">保存并应用</button></div>`, async (d) => {
+    <div class="row"><span class="meta" id="cnt"></span><span style="flex:1"></span><button id="c">${t("取消")}</button><button id="s" class="primary">${t("保存并应用")}</button></div>`, async (d) => {
     d.querySelector("#c").onclick = () => d.close();
     d.querySelector("#wtl").onclick = (ev) => { ev.preventDefault(); call("OpenURL", WINETRICKS_URL).catch(fail); };
     let st;
@@ -907,13 +903,13 @@ async function deps(name) {
     const byVerb = Object.fromEntries(st.verbs.map((v) => [v.verb, v]));
     const row = (verb, text, by) => `<label class="vrow"><input type="checkbox" value="${esc(verb)}" ${want.has(verb) ? "checked" : ""}>
       <code>${esc(verb)}</code><span class="t" title="${esc(text)}">${esc(text)}</span>
-      ${done.has(verb) ? `<small class="ok">已安装</small>` : by ? `<small>${esc(by)}</small>` : ""}</label>`;
+      ${done.has(verb) ? `<small class="ok">${t("已安装")}</small>` : by ? `<small>${esc(by)}</small>` : ""}</label>`;
     // Groups fold; the long lists start folded. A search opens every group
     // with a match, and folding while searching is not remembered.
     const folded = new Set(["dlls", "fonts"]);
     let q = "";
     const group = (key, title, rows) => rows.length
-      ? `<details data-g="${key}" ${q || !folded.has(key) ? "open" : ""}><summary>${title}（${rows.length}）</summary>${rows.join("")}</details>` : "";
+      ? `<details data-g="${key}" ${q || !folded.has(key) ? "open" : ""}><summary>${title}${t("（{0}）", rows.length)}</summary>${rows.join("")}</details>` : "";
     d.querySelector("#vl").addEventListener("toggle", (ev) => {
       if (q) return;
       const g = ev.target.dataset.g;
@@ -923,19 +919,19 @@ async function deps(name) {
       q = d.querySelector("#q").value.trim().toLowerCase();
       const hit = (...xs) => !q || xs.some((x) => (x || "").toLowerCase().includes(q));
       const com = st.common.filter((c) => hit(c.verb, c.note, byVerb[c.verb]?.title))
-        .map((c) => row(c.verb, c.note + (c.slow ? "（慢）" : ""), ""));
+        .map((c) => row(c.verb, c.note + (c.slow ? t("（慢）") : ""), ""));
       const list = (cat) => st.verbs.filter((v) => v.category === cat && hit(v.verb, v.title, v.by)).map((v) => row(v.verb, v.title, v.by));
-      const html = (want.size && !q ? group("want", "已选", [...want].map((v) => row(v, byVerb[v].title, byVerb[v].by))) : "") +
-        group("common", "常用", com) + group("dlls", "DLL 与运行库", list("dlls")) + group("fonts", "字体", list("fonts"));
-      d.querySelector("#vl").innerHTML = html || `<div class="empty" style="padding:10px">没有匹配的 verb</div>`;
-      d.querySelector("#cnt").textContent = `已选 ${want.size} 个`;
+      const html = (want.size && !q ? group("want", t("已选"), [...want].map((v) => row(v, byVerb[v].title, byVerb[v].by))) : "") +
+        group("common", t("常用"), com) + group("dlls", t("DLL 与运行库"), list("dlls")) + group("fonts", t("字体"), list("fonts"));
+      d.querySelector("#vl").innerHTML = html || `<div class="empty" style="padding:10px">${t("没有匹配的 verb")}</div>`;
+      d.querySelector("#cnt").textContent = t("已选 {0} 个", want.size);
     };
     // A verb shows in more than one group: its boxes move together.
     d.querySelector("#vl").addEventListener("change", (ev) => {
       const v = ev.target.value;
       ev.target.checked ? want.add(v) : want.delete(v);
       d.querySelectorAll(`.vrow input[value="${CSS.escape(v)}"]`).forEach((i) => i.checked = ev.target.checked);
-      d.querySelector("#cnt").textContent = `已选 ${want.size} 个`;
+      d.querySelector("#cnt").textContent = t("已选 {0} 个", want.size);
     });
     d.querySelector("#q").oninput = render;
     render();
@@ -949,31 +945,31 @@ async function deps(name) {
 
 async function install(name) {
   const run = await call("Running", name);
-  if (run) { toast("这个 prefix 还有任务在跑，等它完成再运行。", true); return; }
+  if (run) { toast(t("这个 prefix 有任务在跑，请稍后再试。"), true); return; }
   let path;
   try { path = await call("PickInstaller"); } catch (e) { return; }
   if (!path) return;
   try { await call("RunInstaller", name, path); } catch (e) { fail(e); return; }
-  $("#task").innerHTML = `<div class="task"><b>程序已启动</b><div class="meta">${esc(path)}<br>如果是安装程序，装完后点“添加应用”选出主程序；运行记录里能看到它的日志。</div></div>`;
+  $("#task").innerHTML = `<div class="task"><b>${t("程序已启动")}</b><div class="meta">${esc(path)}<br>${t("安装完成后，点“添加应用”选择主程序。")}</div></div>`;
   setTimeout(() => showRuns(name), 3000);
 }
 
 async function addApp(name) {
-  dialog(`<b>添加应用</b><div class="meta">从开始菜单快捷方式和 drive_c 里找到的程序；主程序通常排在前面。</div>
-    <div class="plist" id="pl"><div class="empty">扫描中…</div></div>
-    <div class="row"><button id="br">浏览 drive_c</button><span style="flex:1"></span><button id="c">关闭</button></div>`, async (d) => {
+  dialog(`<b>${t("添加应用")}</b><div class="meta">${t("从开始菜单和 drive_c 找到的程序")}</div>
+    <div class="plist" id="pl"><div class="empty">${t("扫描中…")}</div></div>
+    <div class="row"><button id="br">${t("浏览 drive_c")}</button><span style="flex:1"></span><button id="c">${t("关闭")}</button></div>`, async (d) => {
     d.querySelector("#c").onclick = () => d.close();
     d.querySelector("#br").onclick = () => browse(d, name, "C:\\");
     const progs = await call("Programs", name);
     d.querySelector("#pl").innerHTML = progs.map((pr, i) => `<div class="prow">${pr.icon ? `<img src="${pr.icon}">` : `<span class="ph"></span>`}
-      <div class="grow"><b>${esc(pr.name)}</b> <span class="tag">${pr.from === "start-menu" ? "开始菜单" : "扫描"}</span><div class="sub">${esc(pr.exe)} ${esc(pr.args || "")}</div></div>
-      <button data-i="${i}">添加</button></div>`).join("") || `<div class="empty">没找到程序。用“浏览 drive_c”手动选。</div>`;
+      <div class="grow"><b>${esc(pr.name)}</b> <span class="tag">${pr.from === "start-menu" ? t("开始菜单") : t("扫描")}</span><div class="sub">${esc(pr.exe)} ${esc(pr.args || "")}</div></div>
+      <button data-i="${i}">${t("添加")}</button></div>`).join("") || `<div class="empty">${t("没找到程序。用“浏览 drive_c”手动选。")}</div>`;
     d.querySelectorAll("[data-i]").forEach((b) => b.onclick = () => doAdd(d, name, progs[+b.dataset.i]));
   });
 }
 
 async function doAdd(d, name, prog) {
-  const label = await ask("应用名称（菜单里显示的名字）", prog.name);
+  const label = await ask(t("应用名称（菜单里显示的名字）"), prog.name);
   if (!label) return;
   try { await call("AddApp", name, { name: label, exe: prog.exe, args: prog.args || "", workdir: prog.workdir || "", from: prog.from || "manual" }); d.close(); await load(); }
   catch (e) { fail(e); }
@@ -981,7 +977,7 @@ async function doAdd(d, name, prog) {
 
 // browse lists a drive_c folder in the dialog; act is what a program's
 // button does (adding it as an app, unless told otherwise).
-async function browse(d, name, path, act = { label: "添加", fn: (e) => doAdd(d, name, { name: e.name.replace(/\.exe$/i, ""), exe: e.path, from: "manual" }) }) {
+async function browse(d, name, path, act = { label: t("添加"), fn: (e) => doAdd(d, name, { name: e.name.replace(/\.exe$/i, ""), exe: e.path, from: "manual" }) }) {
   let ents;
   try { ents = await call("Browse", name, path); } catch (e) { fail(e); return; }
   const up = path.replace(/\\[^\\]+\\?$/, "") || "C:";
@@ -995,11 +991,11 @@ async function browse(d, name, path, act = { label: "添加", fn: (e) => doAdd(d
 
 function newPrefix() {
   if (!env.runners.length) { openSettings("runner"); return; }
-  dialog(`<b>新建 prefix</b><div class="meta">名称</div><input id="n" placeholder="例如 wechat">
-    <div class="meta">runner</div><select id="r">${env.runners.map((r) => `<option value="${esc(r.name)}" ${r.default ? "selected" : ""}>${esc(r.name)} — ${esc(r.version)}${r.problems && r.problems.length ? "（⚠ 缺 32 位支持）" : ""}</option>`).join("")}</select>
-    <div class="meta">区域 · ${LOCALE_NOTE}</div>${localeField(env.host_locale)}
-    <div class="meta">字体</div>${fontField(env.default_font_sets)}
-    <div id="e" class="err"></div><div class="row"><button id="c">取消</button><button id="k" class="primary">创建</button></div>`, (d) => {
+  dialog(`<b>${t("新建 prefix")}</b><div class="meta">${t("名称")}</div><input id="n" placeholder="${t("例如 wechat")}">
+    <div class="meta">runner</div><select id="r">${env.runners.map((r) => `<option value="${esc(r.name)}" ${r.default ? "selected" : ""}>${esc(r.name)} — ${esc(r.version)}${r.problems && r.problems.length ? t("（{0}）", t("⚠ 缺 32 位支持")) : ""}</option>`).join("")}</select>
+    <div class="meta">${t("区域")} · ${LOCALE_NOTE()}</div>${localeField(env.host_locale)}
+    <div class="meta">${t("字体")}</div>${fontField(env.default_font_sets)}
+    <div id="e" class="err"></div><div class="row"><button id="c">${t("取消")}</button><button id="k" class="primary">${t("创建")}</button></div>`, (d) => {
     d.querySelector("#c").onclick = () => d.close();
     // The region decides CJK until the boxes are touched.
     let touched = false;
@@ -1013,9 +1009,9 @@ function newPrefix() {
     d.querySelector("#k").onclick = async () => {
       const n = d.querySelector("#n").value.trim();
       const k = d.querySelector("#k");
-      k.disabled = true; k.textContent = "创建中…";
+      k.disabled = true; k.textContent = t("创建中…");
       try { const id = await call("Create", n, d.querySelector("#r").value, readLocale(d), readFonts(d)); sel = n; d.close(); await load(); if (id) watchTask(n, id); }
-      catch (e) { d.querySelector("#e").textContent = e.message || e; k.disabled = false; k.textContent = "创建"; }
+      catch (e) { d.querySelector("#e").textContent = e.message || e; k.disabled = false; k.textContent = t("创建"); }
     };
   });
 }
