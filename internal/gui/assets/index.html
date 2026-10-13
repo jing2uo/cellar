@@ -36,13 +36,15 @@ aside { width: 240px; background: var(--side); border-right: 1px solid var(--lin
 .brand img { width: 24px; height: 24px; }
 .list { flex: 1; overflow: auto; padding: 4px 8px; }
 .group { color: var(--mute); font-size: 12px; padding: 12px 10px 4px; }
+.group.gh { display: flex; align-items: center; justify-content: space-between; padding-right: 4px; }
+.gadd { border: none; background: none; padding: 3px; border-radius: 6px; color: var(--mute); display: flex; line-height: 0; }
+.gadd:hover { color: var(--text); background: color-mix(in srgb, var(--text) 8%, transparent); }
 .item { padding: 8px 10px; border-radius: 8px; cursor: default; display: flex; justify-content: space-between; align-items: center; gap: 8px; }
 .item:hover { background: color-mix(in srgb, var(--text) 6%, transparent); }
 .item.sel { background: var(--accent-soft); color: var(--accent); font-weight: 600; }
 .item small { color: var(--mute); font-weight: 400; }
 .withico { display: flex; align-items: center; gap: 8px; }
 .ico { width: 16px; height: 16px; flex: none; }
-small.withico .ico { width: 14px; height: 14px; }
 .sys { padding: 6px 8px; border-top: 1px solid var(--line); }
 main { flex: 1; min-width: 0; overflow: auto; padding: 28px 32px; }
 h1 { margin: 0; font-size: 22px; font-weight: 650; }
@@ -194,8 +196,8 @@ const stateText = (state) => ({
 }[state]);
 
 let env, prefixes = [], sel = null;
-const IMPORT = "\u0000import", SETTINGS = "\u0000settings";
-// setTab is the settings page's tab: general, fonts or runner.
+const SETTINGS = "\u0000settings";
+// setTab is the settings page's tab: general, fonts, runner or import.
 let setTab = "general";
 function openSettings(tab) { sel = SETTINGS; setTab = tab; renderList(); renderMain(); }
 let bottles = [];
@@ -248,18 +250,15 @@ function applyTheme(theme) {
 
 function renderList() {
   const local = prefixes.filter((p) => p.source === "local");
-  $("#list").innerHTML = `<div class="group">${t("本地 prefix")}</div>` +
+  $("#list").innerHTML = `<div class="group gh"><span>${t("本地 prefix")}</span><button id="new" class="gadd" title="${t("新建 prefix")}"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg></button></div>` +
     (local.map((p) => `<div class="item ${p.name === sel ? "sel" : ""}" data-n="${esc(p.name)}">
-      <span>${esc(p.name)}</span><small class="s-${p.state}">●</small></div>`).join("") || `<div class="empty item">${t("还没有 prefix")}</div>`) +
-    `<div class="item" id="new"><small class="withico"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>${t("新建 prefix")}</small></div>` +
-    (`<div class="item ${sel === IMPORT ? "sel" : ""}" id="imp"><small class="withico"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>${t("从 Bottles 导入")}${bottles.some((b) => !b.imported) ? t("（{0}）", bottles.filter((b) => !b.imported).length) : ""}</small></div>`);
+      <span>${esc(p.name)}</span><small class="s-${p.state}">●</small></div>`).join("") || `<div class="empty item">${t("还没有 prefix")}</div>`);
   $("#sys").innerHTML = `<div class="item ${sel === SETTINGS ? "sel" : ""}" id="settingsitem"><span class="withico"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>${t("设置")}</span></div>`;
   document.querySelectorAll(".item[data-n]").forEach((el) => {
     el.onclick = () => { sel = el.dataset.n; renderList(); renderMain(); };
   });
   $("#new").onclick = newPrefix;
   $("#settingsitem").onclick = () => { sel = SETTINGS; renderList(); renderMain(); };
-  if ($("#imp")) $("#imp").onclick = () => { sel = IMPORT; renderList(); renderMain(); };
 }
 
 const noWine = () => env.runners.length ? "" : `<div class="banner"><div><b>${t("没有找到 Wine")}</b><div class="meta">${env.flatpak
@@ -279,7 +278,6 @@ function wireNoWine() {
 
 async function renderMain() {
   if (sel === SETTINGS) return renderSettings();
-  if (sel === IMPORT) return renderImport();
   const p = prefixes.find((x) => x.name === sel);
   if (!p) { $("#main").innerHTML = noWine() + `<div class="welcome">${t("新建一个 prefix 开始")}</div>`; wireNoWine(); return; }
   $("#main").innerHTML = `
@@ -426,10 +424,9 @@ async function watchTask(name, id) {
 const kindText = (kind) => kind === "legacy" ? t("传统 32 位") : "WoW64";
 
 function renderImport() {
-  $("#main").innerHTML = `<div class="head"><div><h1>${t("从 Bottles 导入")}</h1>
-      <div class="meta">${t("从 Bottles 复制导入，不影响原数据。")}</div></div>
-      <div class="actions"><button id="pickb">${t("选择目录")}</button></div></div>
-    <section><div class="rlist">${bottles.map((b) => `
+  $("#settab").innerHTML = `<section><div class="sechead"><h2>${t("从 Bottles 导入")}</h2><button id="pickb">${t("选择目录")}</button></div>
+      <div class="meta" style="margin-bottom:8px">${t("从 Bottles 复制导入，不影响原数据。")}</div>
+      <div class="rlist">${bottles.map((b) => `
       <div class="rrow"><div class="grow"><b>${esc(b.name)}</b>
         ${b.imported ? `<span class="tag">${t("已导入为 {0}", esc(b.prefix))}</span>` : ""} ${b.runner ? `<span class="tag">${esc(b.runner)}</span>` : ""}
         <div class="sub">${(b.apps || []).length ? esc(b.apps.join(t("、"))) : t("没有登记的程序")} · ${esc(b.dir)}</div>
@@ -462,14 +459,17 @@ const fontSources = () => [
   ["library-only", t("仅使用 Cellar 字体库"), t("不用本机字体，每台机器效果一致。")],
 ];
 
-const settingTabs = () => [["general", t("通用")], ["fonts", t("字体")], ["runner", "Runner"]];
+const settingTabs = () => {
+  const n = bottles.filter((b) => !b.imported).length;
+  return [["general", t("通用")], ["fonts", t("字体")], ["runner", "Runner"], ["import", n ? t("导入（{0}）", n) : t("导入")]];
+};
 
 function renderSettings() {
   $("#main").innerHTML = `<div class="head"><div><h1>${t("设置")}</h1><div class="meta">${t("对所有 prefix 生效。")}</div></div></div>
     <div class="tabs">${settingTabs().map(([k, label]) => `<button data-tab="${k}" class="${setTab === k ? "on" : ""}">${label}</button>`).join("")}</div>
     <div id="settab"></div>`;
   document.querySelectorAll("[data-tab]").forEach((b) => b.onclick = () => { setTab = b.dataset.tab; renderSettings(); });
-  ({ general: renderGeneral, fonts: renderFonts, runner: renderRunners })[setTab]();
+  ({ general: renderGeneral, fonts: renderFonts, runner: renderRunners, import: renderImport })[setTab]();
 }
 const onTab = (tab) => sel === SETTINGS && setTab === tab && $("#settab");
 

@@ -251,4 +251,5 @@ export const EN = {
   "没有找到推荐的版本：{0}": "No recommended release found: {0}",
   "{0} 在用，先给它们换一个 runner": "In use by {0}; switch them to another runner first",
   "{0} 种文字里 {1} 种有字体，其余可在 设置 → 字体 下载": "{1} of {0} scripts have a font; download the rest in Settings → Fonts",
+  "导入（{0}）": "Import ({0})",
 };
