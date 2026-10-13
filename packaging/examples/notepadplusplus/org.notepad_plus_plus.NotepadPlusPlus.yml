@@ -1,7 +1,7 @@
 # Prototype of a FlatPark wine package: the vendor's Windows installer as
 # extra-data (unmodified), Wine from the org.winehq.Wine base, and cellar's
 # static launcher reading /app/share/cellar/cellar.toml.
-id: com.rizonesoft.Notepad3
+id: org.notepad_plus_plus.NotepadPlusPlus
 runtime: org.freedesktop.Platform
 runtime-version: '26.08'
 sdk: org.freedesktop.Sdk
@@ -24,9 +24,9 @@ modules:
       - install -Dm755 cellar /app/bin/cellar
       - install -Dm644 cellar.toml /app/share/cellar/cellar.toml
       - install -Dm755 apply_extra /app/bin/apply_extra
-      - install -Dm644 com.rizonesoft.Notepad3.desktop /app/share/applications/com.rizonesoft.Notepad3.desktop
-      - install -Dm644 com.rizonesoft.Notepad3.png /app/share/icons/hicolor/256x256/apps/com.rizonesoft.Notepad3.png
-      - install -Dm644 com.rizonesoft.Notepad3.metainfo.xml /app/share/metainfo/com.rizonesoft.Notepad3.metainfo.xml
+      - install -Dm644 org.notepad_plus_plus.NotepadPlusPlus.desktop /app/share/applications/org.notepad_plus_plus.NotepadPlusPlus.desktop
+      - install -Dm644 org.notepad_plus_plus.NotepadPlusPlus.png /app/share/icons/hicolor/256x256/apps/org.notepad_plus_plus.NotepadPlusPlus.png
+      - install -Dm644 org.notepad_plus_plus.NotepadPlusPlus.metainfo.xml /app/share/metainfo/org.notepad_plus_plus.NotepadPlusPlus.metainfo.xml
     sources:
       - type: file
         path: ../../../dist/cellar-cli
@@ -34,17 +34,17 @@ modules:
       - type: file
         path: cellar.toml
       - type: file
-        path: com.rizonesoft.Notepad3.desktop
+        path: org.notepad_plus_plus.NotepadPlusPlus.desktop
       - type: file
-        path: com.rizonesoft.Notepad3.png
+        path: org.notepad_plus_plus.NotepadPlusPlus.png
       - type: file
-        path: com.rizonesoft.Notepad3.metainfo.xml
+        path: org.notepad_plus_plus.NotepadPlusPlus.metainfo.xml
       - type: script
         dest-filename: apply_extra
         commands:
           - exec /app/bin/cellar extract
       - type: extra-data
-        filename: notepad3.zip
-        url: https://github.com/rizonesoft/Notepad3/releases/download/RELEASE_7.26.602.1/Notepad3_7.26.602.1_x64_Portable.zip
-        sha256: 4f8d02c5c1d5943cd0495c4322ee2e3d07c4734f15d29e2e24ae6f5fcbc1a9eb
-        size: 6868273
+        filename: npp-setup.exe
+        url: https://github.com/notepad-plus-plus/notepad-plus-plus/releases/download/v8.9.8.1/npp.8.9.8.1.Installer.x64.exe
+        sha256: 26f3bcced788fadbac4e7e577b430ea2ce6060cf3bcad993ef4612ecd7d743da
+        size: 6963432

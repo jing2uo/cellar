@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<component type="desktop-application">
+  <id>org.notepad_plus_plus.NotepadPlusPlus</id>
+  <name>Notepad++</name>
+  <summary>Source code editor with syntax highlighting, tabs and plugins</summary>
+  <metadata_license>CC0-1.0</metadata_license>
+  <project_license>GPL-3.0-or-later</project_license>
+  <description>
+    <p>Upstream's official Windows x64 installer of Notepad++, unmodified, run under Wine.</p>
+  </description>
+  <launchable type="desktop-id">org.notepad_plus_plus.NotepadPlusPlus.desktop</launchable>
+  <url type="homepage">https://notepad-plus-plus.org</url>
+  <content_rating type="oars-1.1"/>
+  <releases><release version="8.9.8.1" date="2026-09-24"/></releases>
+</component>
