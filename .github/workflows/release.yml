@@ -1,0 +1,75 @@
+# Cuts a GitHub Release with the two binaries, for FlatPark's extra-data to
+# fetch. Either run it from the Actions tab and pick the bump - the version is
+# the latest v* tag plus that bump, and the tag is created on the run's commit
+# - or push a vX.Y.Z tag yourself.
+name: release
+
+on:
+  workflow_dispatch:
+    inputs:
+      bump:
+        description: Version bump from the latest release
+        type: choice
+        options: [patch, minor, major]
+        default: patch
+  push:
+    tags: ['v[0-9]+.[0-9]+.[0-9]+']
+
+concurrency: release
+
+jobs:
+  version:
+    runs-on: ubuntu-latest
+    outputs:
+      tag: ${{ steps.v.outputs.tag }}
+      version: ${{ steps.v.outputs.version }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - id: v
+        env:
+          BUMP: ${{ inputs.bump }}
+        run: |
+          if [ "$GITHUB_EVENT_NAME" = push ]; then
+            tag=$GITHUB_REF_NAME
+          else
+            tag=$(scripts/version.sh next "$BUMP")
+            if git tag --points-at HEAD | grep -q '^v'; then
+              echo "::error::$GITHUB_SHA is already released as $(git tag --points-at HEAD | grep '^v')"
+              exit 1
+            fi
+          fi
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+          echo "version=${tag#v}" >> "$GITHUB_OUTPUT"
+          echo "Releasing $tag" >> "$GITHUB_STEP_SUMMARY"
+
+  build:
+    needs: version
+    uses: ./.github/workflows/build.yml
+    with:
+      version: ${{ needs.version.outputs.version }}
+
+  release:
+    needs: [version, build]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v7
+        with:
+          name: cellar-linux-x86_64
+          path: dist
+      - name: Publish
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ needs.version.outputs.tag }}
+        run: |
+          cd dist
+          mv cellar cellar-x86_64
+          mv cellar-cli cellar-cli-x86_64
+          sha256sum cellar-x86_64 cellar-cli-x86_64 > SHA256SUMS
+          # Creates the tag on this commit when the run was a manual one.
+          gh release create "$TAG" --repo "$GITHUB_REPOSITORY" \
+            --target "$GITHUB_SHA" --title "$TAG" --generate-notes \
+            cellar-x86_64 cellar-cli-x86_64 SHA256SUMS

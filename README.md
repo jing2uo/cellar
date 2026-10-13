@@ -33,11 +33,14 @@ vendor's installer, and cellar builds and maintains each user's prefix from it.
 
 ## Install
 
-Builds of every commit are attached to the
-[CI runs](https://github.com/jing2uo/cellar/actions/workflows/build.yml):
+[Releases](https://github.com/jing2uo/cellar/releases) carry two x86_64
+binaries, with their `SHA256SUMS`:
 
-- `cellar`: the GUI (Wails v3, GTK 4 / WebKitGTK 6) plus the full CLI
-- `cellar-cli`: a static, GUI-less build of the CLI
+- `cellar-x86_64`: the GUI (Wails v3, GTK 4 / WebKitGTK 6) plus the full CLI
+- `cellar-cli-x86_64`: a static, GUI-less build of the CLI
+
+Builds of every commit are attached to the
+[CI runs](https://github.com/jing2uo/cellar/actions/workflows/build.yml).
 
 A Flatpak (`org.flatpark.Cellar`, on the `org.winehq.Wine` base) is planned for
 FlatPark.
@@ -114,6 +117,12 @@ make image && make gui  # dist/cellar: built in a podman container with the
 make test
 make flatpak          # build and install the local Flatpak
 ```
+
+Versions come from the `vX.Y.Z` tags (`scripts/version.sh`): a build after a
+release reports e.g. `0.1.0-3-gabc1234`. To cut a release, run the
+[release workflow](https://github.com/jing2uo/cellar/actions/workflows/release.yml)
+and pick patch, minor or major; it tags the next version, builds and publishes
+it. Pushing a `vX.Y.Z` tag does the same.
 
 ## License
 

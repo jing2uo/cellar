@@ -6,7 +6,7 @@
 IMAGE   ?= cellar-build
 GOROOT  := $(shell go env GOROOT)
 MODCACHE:= $(shell go env GOMODCACHE)
-VERSION ?= $(or $(shell git describe --tags --always --dirty 2>/dev/null),dev)
+VERSION ?= $(or $(shell scripts/version.sh 2>/dev/null),dev)
 LDFLAGS := -s -w -X main.version=$(VERSION)
 
 # --user keeps target files owned by us (rootful podman). The host Go

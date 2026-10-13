@@ -2,14 +2,20 @@
 #   cellar      GUI (Wails v3, GTK 4 / WebKitGTK 6), built on debian:sid so it
 #               links nothing newer than org.gnome.Platform//51 provides
 #   cellar-cli  static nogui launcher, the one FlatPark wine packages ship
+# release.yml calls it with the version of the release being cut; otherwise
+# the version comes from scripts/version.sh.
 name: build
 
 on:
   push:
     branches: [main]
-    tags: ['v*']
   pull_request:
   workflow_dispatch:
+  workflow_call:
+    inputs:
+      version:
+        type: string
+        required: false
 
 jobs:
   build:
@@ -25,23 +31,27 @@ jobs:
 
       - uses: actions/checkout@v7
         with:
-          fetch-depth: 0  # git describe for the version string
+          fetch-depth: 0  # the tags, for scripts/version.sh
 
       - uses: actions/setup-go@v7
         with:
           go-version-file: go.mod
 
-      - name: Test
+      - name: Version
+        env:
+          VERSION: ${{ inputs.version }}
         run: |
           git config --global --add safe.directory "$GITHUB_WORKSPACE"
-          make test
+          echo "VERSION=${VERSION:-$(scripts/version.sh)}" >> "$GITHUB_ENV"
+
+      - name: Test
+        run: make test
 
       - name: Build CLI
         run: make cli
 
       - name: Build GUI
         run: |
-          VERSION=$(git describe --tags --always --dirty)
           go build -tags production -trimpath \
             -ldflags="-s -w -X main.version=$VERSION" -o dist/cellar .
 
