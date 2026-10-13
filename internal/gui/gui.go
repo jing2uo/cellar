@@ -188,6 +188,14 @@ func (s *Service) CopyText(text string) error {
 	return nil
 }
 
+// OpenRunnerDir opens runners/, where a Wine unpacked by hand is picked up.
+func (s *Service) OpenRunnerDir() error {
+	if err := os.MkdirAll(store.RunnersDir(), 0o755); err != nil {
+		return err
+	}
+	return s.app.Browser.OpenURL("file://" + store.RunnersDir())
+}
+
 // OpenHome opens cellar's data directory (prefixes, runners, fonts).
 func (s *Service) OpenHome() error {
 	if err := os.MkdirAll(store.Home(), 0o755); err != nil {

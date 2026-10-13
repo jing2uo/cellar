@@ -72,7 +72,19 @@ func Resolve(name string) (*Runner, error) {
 	return at(name, filepath.Join(store.RunnersDir(), name))
 }
 
+// wineRoot is where a runner's bin/wine is: the directory itself, or its
+// files/ in Proton's layout (GE-Proton, a Steam Proton copied over).
+func wineRoot(dir string) string {
+	if _, err := os.Stat(filepath.Join(dir, "bin", "wine")); err != nil {
+		if _, err := os.Stat(filepath.Join(dir, "files", "bin", "wine")); err == nil {
+			return filepath.Join(dir, "files")
+		}
+	}
+	return dir
+}
+
 func at(name, dir string) (*Runner, error) {
+	dir = wineRoot(dir)
 	r := &Runner{Name: name, Dir: dir, Wine: filepath.Join(dir, "bin", "wine"), Wineserver: wineserver(dir)}
 	if _, err := os.Stat(r.Wine); err != nil {
 		return nil, fmt.Errorf("runner %q: %s missing (have: %s)", name, r.Wine, strings.Join(Names(), ", "))
@@ -107,7 +119,7 @@ func List() []string {
 	ents, _ := os.ReadDir(store.RunnersDir())
 	var out []string
 	for _, e := range ents {
-		if _, err := os.Stat(filepath.Join(store.RunnersDir(), e.Name(), "bin", "wine")); err == nil {
+		if _, err := os.Stat(filepath.Join(wineRoot(filepath.Join(store.RunnersDir(), e.Name())), "bin", "wine")); err == nil {
 			out = append(out, e.Name())
 		}
 	}

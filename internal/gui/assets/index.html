@@ -527,8 +527,13 @@ async function renderRunners() {
         ${r.source === "system" ? "" : runnerUsers(r).length
           ? `<button disabled title="${esc(runnerUsers(r).join("、"))} 在用，先给它们换一个 runner">删除</button>`
           : `<button data-rrm="${esc(r.name)}">删除</button>`}</div>`).join("") || `<div class="empty">还没有</div>`}</div></section>
-    <section><h2>可下载</h2><div id="avail" class="empty">正在查询 GitHub…</div></section>`;
+    <section><h2>可下载</h2><div id="avail" class="empty">正在查询 GitHub…</div></section>
+    <section><h2>自己添加</h2>
+      <div class="meta">下载不下来，或想用列表里没有的版本（比如 GE-Proton）时，自己下载解压后把整个目录放进 runner 目录，
+        目录名就是 runner 名。里面有 <code>bin/wine</code>（Proton 的是 <code>files/bin/wine</code>）就能识别，切回 Cellar 窗口会自动刷新。</div>
+      <div class="row" style="justify-content:flex-start"><button id="runnerdir">打开 runner 目录</button></div></section>`;
   wireNoWine();
+  $("#runnerdir").onclick = () => call("OpenRunnerDir").catch(fail);
   document.querySelectorAll("[data-rrm]").forEach((b) => b.onclick = async () => {
     if (!await ask(`删除 runner ${b.dataset.rrm}？会删掉 ${env.home}/runners/${b.dataset.rrm}，之后可以重新下载。`)) return;
     try { await call("RemoveRunner", b.dataset.rrm); toast(`已删除 ${b.dataset.rrm}`); } catch (e) { fail(e); }
