@@ -32,6 +32,8 @@ aside { width: 240px; background: var(--side); border-right: 1px solid var(--lin
 .item:hover { background: color-mix(in srgb, var(--text) 6%, transparent); }
 .item.sel { background: var(--accent-soft); color: var(--accent); font-weight: 600; }
 .item small { color: var(--mute); font-weight: 400; }
+.withico { display: flex; align-items: center; gap: 8px; }
+.ico { width: 16px; height: 16px; flex: none; }
 .sys { padding: 6px 8px; border-top: 1px solid var(--line); }
 main { flex: 1; min-width: 0; overflow: auto; padding: 28px 32px; }
 h1 { margin: 0; font-size: 22px; font-weight: 650; }
@@ -125,6 +127,13 @@ select { font: inherit; padding: 6px 10px; border: 1px solid var(--line); border
 .fsets input { width: auto; margin: 3px 0 0; }
 .fsets small { color: var(--mute); display: block; }
 .fsets small.warn { color: var(--err); }
+.tabs { display: flex; gap: 4px; margin: -8px 0 16px; border-bottom: 1px solid var(--line); }
+.tabs button { border: none; background: none; border-radius: 0; padding: 8px 14px; color: var(--mute); border-bottom: 2px solid transparent; margin-bottom: -1px; }
+.tabs button.on { color: var(--accent); border-bottom-color: var(--accent); font-weight: 600; }
+table.about { border-collapse: collapse; -webkit-user-select: text; user-select: text; }
+table.about th { text-align: left; font-weight: 400; color: var(--mute); padding: 4px 24px 4px 0; white-space: nowrap; vertical-align: top; }
+table.about td { padding: 4px 0; word-break: break-all; }
+table.about td button { padding: 2px 10px; margin-left: 8px; font-size: 12px; }
 .radios { display: flex; flex-direction: column; gap: 8px; margin: 6px 0; }
 .radios label { display: flex; gap: 8px; align-items: flex-start; }
 .radios input { width: auto; margin: 3px 0 0; }
@@ -172,7 +181,10 @@ const esc = (s) => String(s ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<
 const stateText = { applied: "已就绪", changed: "配置已改", new: "待应用", error: "错误" };
 
 let env, prefixes = [], sel = null;
-const RUNNERS = "\u0000runners", IMPORT = "\u0000import", SETTINGS = "\u0000settings";
+const IMPORT = "\u0000import", SETTINGS = "\u0000settings";
+// setTab is the settings page's tab: general, fonts or runner.
+let setTab = "general";
+function openSettings(tab) { sel = SETTINGS; setTab = tab; renderList(); renderMain(); }
 let bottles = [];
 
 // load refreshes the data; it re-renders only when something changed and no
@@ -207,7 +219,7 @@ async function load(force = true) {
   if (!force && (sig === lastSig || $("#dlg").open)) return;
   lastSig = sig;
   env = e; prefixes = ps; bottles = bs;
-  if (!sel && location.hash.length > 1) sel = location.hash.slice(1) === "runners" ? RUNNERS : decodeURIComponent(location.hash.slice(1));
+  if (!sel && location.hash.length > 1) { sel = decodeURIComponent(location.hash.slice(1)); if (sel === "runners") { sel = SETTINGS; setTab = "runner"; } }
   if (!sel && prefixes.length) sel = prefixes[0].name;
   renderList();
   renderMain();
@@ -220,13 +232,11 @@ function renderList() {
       <span>${esc(p.name)}</span><small class="s-${p.state}">●</small></div>`).join("") || `<div class="empty item">还没有 prefix</div>`) +
     `<div class="item" id="new"><small>＋ 新建 prefix</small></div>` +
     (`<div class="item ${sel === IMPORT ? "sel" : ""}" id="imp"><small>⇣ 从 Bottles 导入${bottles.some((b) => !b.imported) ? `（${bottles.filter((b) => !b.imported).length}）` : ""}</small></div>`);
-  $("#sys").innerHTML = `<div class="item ${sel === SETTINGS ? "sel" : ""}" id="settingsitem"><span>设置</span></div>` +
-    `<div class="item ${sel === RUNNERS ? "sel" : ""}" id="runners"><span>Runner</span><small>${env.runners.length}</small></div>`;
+  $("#sys").innerHTML = `<div class="item ${sel === SETTINGS ? "sel" : ""}" id="settingsitem"><span class="withico"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>设置</span></div>`;
   document.querySelectorAll(".item[data-n]").forEach((el) => {
     el.onclick = () => { sel = el.dataset.n; renderList(); renderMain(); };
   });
   $("#new").onclick = newPrefix;
-  $("#runners").onclick = () => { sel = RUNNERS; renderList(); renderMain(); };
   $("#settingsitem").onclick = () => { sel = SETTINGS; renderList(); renderMain(); };
   if ($("#imp")) $("#imp").onclick = () => { sel = IMPORT; renderList(); renderMain(); };
 }
@@ -247,7 +257,6 @@ function wireNoWine() {
 }
 
 async function renderMain() {
-  if (sel === RUNNERS) return renderRunners();
   if (sel === SETTINGS) return renderSettings();
   if (sel === IMPORT) return renderImport();
   const p = prefixes.find((x) => x.name === sel);
@@ -433,9 +442,20 @@ const FONT_SOURCES = [
   ["library-only", "只用 Cellar 下载的", "不用本机字体，只用下面下载的字体包：每台机器效果一样。"],
 ];
 
-async function renderSettings() {
+const SETTING_TABS = [["general", "通用"], ["fonts", "字体"], ["runner", "Runner"]];
+
+function renderSettings() {
+  $("#main").innerHTML = `<div class="head"><div><h1>设置</h1><div class="meta">Cellar 自己的设置，对所有 prefix 生效。</div></div></div>
+    <div class="tabs">${SETTING_TABS.map(([k, t]) => `<button data-tab="${k}" class="${setTab === k ? "on" : ""}">${t}</button>`).join("")}</div>
+    <div id="settab"></div>`;
+  document.querySelectorAll("[data-tab]").forEach((b) => b.onclick = () => { setTab = b.dataset.tab; renderSettings(); });
+  ({ general: renderGeneral, fonts: renderFonts, runner: renderRunners })[setTab]();
+}
+const onTab = (tab) => sel === SETTINGS && setTab === tab && $("#settab");
+
+async function renderFonts() {
   const [pr, packs, running] = await Promise.all([call("Prefs"), call("FontPacks"), call("FontTask")]);
-  if (sel !== SETTINGS) return;
+  if (!onTab("fonts")) return;
   const packState = (p) => {
     if (p.have === p.files) return `<span class="tag rec">已下载</span>`;
     if (p.host === p.files && pr.fonts.source !== "library-only") return `<span class="tag rec">本机已有</span>`;
@@ -444,8 +464,7 @@ async function renderSettings() {
     if (p.host) parts.push(p.host === p.files ? "本机已有" : `本机已有 ${p.host}/${p.files}`);
     return parts.length ? parts.map((x) => `<span class="tag">${x}</span>`).join(" ") : `<span class="tag">未下载</span>`;
   };
-  $("#main").innerHTML = `<div class="head"><div><h1>设置</h1><div class="meta">Cellar 自己的设置，对所有 prefix 生效。</div></div></div>
-    <section><h2>字体</h2>
+  $("#settab").innerHTML = `<section>
       <div class="meta">字体来源</div>
       <div class="radios">${FONT_SOURCES.map(([v, t, n]) => `<label><input type="radio" name="src" value="${v}" ${pr.fonts.source === v ? "checked" : ""}>
         <span>${t}<small>${n}</small></span></label>`).join("")}</div>
@@ -460,7 +479,7 @@ async function renderSettings() {
     </section>`;
   document.querySelectorAll('input[name="src"]').forEach((r) => r.onchange = async () => {
     try { await call("SavePrefs", { ...pr, fonts: { ...pr.fonts, source: r.value } }); toast("已保存"); } catch (e) { fail(e); }
-    renderSettings();
+    renderFonts();
   });
   document.querySelectorAll("[data-get]").forEach((b) => b.onclick = async () => {
     try { watchFontTask(await call("GetFontPack", b.dataset.get)); } catch (e) { fail(e); }
@@ -468,7 +487,7 @@ async function renderSettings() {
   document.querySelectorAll("[data-rmp]").forEach((b) => b.onclick = async () => {
     if (!await ask("删除这个字体包？已经用上它的 prefix 里有自己的副本，不受影响；应用配置时才会去掉。")) return;
     try { await call("RemoveFontPack", b.dataset.rmp); } catch (e) { fail(e); }
-    renderSettings();
+    renderFonts();
   });
   $("#fontdir").onclick = () => call("OpenFontDir").catch(fail);
   if (running) watchFontTask(running);
@@ -481,12 +500,12 @@ async function watchFontTask(id) {
     let t;
     try { t = await call("Task", id); } catch { return; }
     const el = $("#fonttask");
-    if (!el || sel !== SETTINGS) return;
+    if (!el || !onTab("fonts")) return;
     el.innerHTML = `${t.done ? "" : `<span class="spin"></span>`}${esc(t.title)}：${esc(t.lines.at(-1) || "开始…")}`;
     if (t.done) {
       if (t.error) { el.innerHTML = `<span class="err">${esc(t.error)}</span>`; toast("下载失败", true); }
       else toast("完成：" + t.title);
-      return setTimeout(renderSettings, t.error ? 3000 : 0);
+      return setTimeout(() => onTab("fonts") && renderFonts(), t.error ? 3000 : 0);
     }
     await new Promise((r) => setTimeout(r, 600));
   }
@@ -496,10 +515,10 @@ async function watchFontTask(id) {
 const runnerUsers = (r) => prefixes.filter((p) => p.source === "local" && (p.runner === r.name || !p.runner && r.default)).map((p) => p.name);
 
 async function renderRunners() {
-  $("#main").innerHTML = `<div class="head"><div><h1>Runner</h1><div class="meta">${env.flatpak
+  $("#settab").innerHTML = `${noWine()}
+    <div class="meta" style="margin:0 0 12px">${env.flatpak
       ? "“system” 是本应用自带的 Wine（org.winehq.Wine），始终可用。" : "“system” 是系统里安装的 Wine。"}
-      新建 prefix 时可以任选一个；社区构建下载到 ${esc(env.home)}/runners。</div></div></div>
-    ${noWine()}
+      新建 prefix 时可以任选一个；社区构建下载到 ${esc(env.home)}/runners。</div>
     <section><h2>已有</h2><div class="rlist">${env.runners.map((r) => `
       <div class="rrow"><div class="grow"><b>${esc(r.name)}</b> ${r.default ? `<span class="tag rec">默认</span>` : ""}
         <span class="tag">${r.source === "system" ? "系统" : "已下载"}</span> <span class="tag">${kindText[r.kind]}</span>
@@ -517,6 +536,7 @@ async function renderRunners() {
   });
   try {
     const cat = await call("Available");
+    if (!onTab("runner")) return;
     $("#avail").outerHTML = `<div id="avail" class="rlist">${(cat.warnings || []).map((w) => `<div class="warn">⚠ ${esc(w)}</div>`).join("")}
       ${(cat.releases || []).map((r) => `<div class="rrow"><div class="grow"><b>${esc(r.name)}</b> <span class="mono">${esc(r.version)}</span>
         ${r.default ? `<span class="tag rec">推荐</span>` : ""} <span class="tag">${kindText[r.kind]}</span>
@@ -528,7 +548,31 @@ async function renderRunners() {
       try { await call("InstallRunner", b.dataset.rid); } catch (e) { fail(e); b.disabled = false; b.textContent = "下载"; return; }
       await load();
     });
-  } catch (e) { $("#avail").innerHTML = `<div class="err">${esc(e.message || e)}</div>`; }
+  } catch (e) { if (onTab("runner")) $("#avail").innerHTML = `<div class="err">${esc(e.message || e)}</div>`; }
+}
+
+async function renderGeneral() {
+  const a = await call("About");
+  if (!onTab("general")) return;
+  const REPO = "https://github.com/jing2uo/cellar";
+  const rt = env.runners.find((r) => r.name === env.default_runner);
+  // [label, value, extra html after the value]
+  const rows = [
+    ["版本", a.version, ` · <a href="#" id="repo">${REPO.replace("https://", "")}</a>`],
+    ["安装方式", a.install === "flatpak" ? "Flatpak" : "宿主安装"],
+    ["数据目录", a.home, ` <button id="homedir">打开</button>`],
+    ["默认 runner", env.default_runner ? `${env.default_runner}（${rt ? rt.version : "?"}）` : "没有"],
+    ["系统", a.os], ...(a.runtime ? [["Flatpak 运行时", a.runtime]] : []), ["内核", `${a.kernel} · ${a.arch}`],
+    ["桌面", a.desktop], ["区域", a.locale], ["Go", a.go],
+  ];
+  $("#settab").innerHTML = `<section><div class="sechead"><h2>关于</h2><button id="copyinfo">复制</button></div>
+    <table class="about">${rows.map(([k, v, x]) => `<tr><th>${k}</th><td>${esc(v || "未知")}${x || ""}</td></tr>`).join("")}</table></section>`;
+  $("#homedir").onclick = () => call("OpenHome").catch(fail);
+  $("#repo").onclick = (ev) => { ev.preventDefault(); call("OpenURL", REPO).catch(fail); };
+  $("#copyinfo").onclick = async () => {
+    const text = rows.map(([k, v]) => `${k}: ${v || "未知"}`).join("\n");
+    try { await call("CopyText", text); toast("已复制"); } catch (e) { fail(e); }
+  };
 }
 
 // showPlan shows a notice only when the prefix is behind its cellar.toml:
@@ -707,7 +751,7 @@ async function showFontStatus(d) {
     else {
       el.innerHTML = `⚠ 没有可用字体，<a href="#" data-goset>去 设置 → 字体 下载</a>`;
       el.classList.add("warn");
-      el.querySelector("[data-goset]").onclick = (ev) => { ev.preventDefault(); d.close(); sel = SETTINGS; renderList(); renderMain(); };
+      el.querySelector("[data-goset]").onclick = (ev) => { ev.preventDefault(); d.close(); openSettings("fonts"); };
     }
   }
 }
@@ -914,7 +958,7 @@ async function browse(d, name, path, act = { label: "添加", fn: (e) => doAdd(d
 }
 
 function newPrefix() {
-  if (!env.runners.length) { sel = RUNNERS; renderList(); renderMain(); return; }
+  if (!env.runners.length) { openSettings("runner"); return; }
   dialog(`<b>新建 prefix</b><div class="meta">名称</div><input id="n" placeholder="例如 wechat">
     <div class="meta">runner</div><select id="r">${env.runners.map((r) => `<option value="${esc(r.name)}" ${r.default ? "selected" : ""}>${esc(r.name)} — ${esc(r.version)}${r.problems && r.problems.length ? "（⚠ 缺 32 位支持）" : ""}</option>`).join("")}</select>
     <div class="meta">区域 · ${LOCALE_NOTE}</div>${localeField(env.host_locale)}

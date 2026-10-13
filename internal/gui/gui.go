@@ -13,6 +13,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"slices"
 	"sort"
 	"strings"
@@ -177,6 +178,65 @@ func (s *Service) OpenFontDir() error {
 		return err
 	}
 	return s.app.Browser.OpenURL("file://" + fonts.LibraryDir())
+}
+
+// CopyText puts text on the clipboard.
+func (s *Service) CopyText(text string) error {
+	if !s.app.Clipboard.SetText(text) {
+		return errors.New("clipboard unavailable")
+	}
+	return nil
+}
+
+// OpenHome opens cellar's data directory (prefixes, runners, fonts).
+func (s *Service) OpenHome() error {
+	if err := os.MkdirAll(store.Home(), 0o755); err != nil {
+		return err
+	}
+	return s.app.Browser.OpenURL("file://" + store.Home())
+}
+
+// About is what the settings' General tab shows: cellar and the system
+// it runs on, for a bug report.
+type About struct {
+	Version string `json:"version"`
+	Install string `json:"install"` // flatpak | host
+	Home    string `json:"home"`
+	OS      string `json:"os"`
+	Runtime string `json:"runtime,omitempty"` // the flatpak runtime
+	Kernel  string `json:"kernel"`
+	Arch    string `json:"arch"`
+	Desktop string `json:"desktop"`
+	Locale  string `json:"locale"`
+	Go      string `json:"go"`
+}
+
+func (s *Service) About() About {
+	a := About{Version: s.version, Install: "host", Home: store.Home(), Arch: runtime.GOARCH, Go: runtime.Version(),
+		Locale: config.HostLocale()}
+	a.OS = osName("/etc/os-release")
+	if runner.InFlatpak() {
+		a.Install, a.Runtime, a.OS = "flatpak", a.OS, osName("/run/host/os-release")
+	}
+	if b, err := os.ReadFile("/proc/sys/kernel/osrelease"); err == nil {
+		a.Kernel = strings.TrimSpace(string(b))
+	}
+	a.Desktop = strings.TrimSpace(os.Getenv("XDG_CURRENT_DESKTOP") + " " + os.Getenv("XDG_SESSION_TYPE"))
+	return a
+}
+
+// osName is an os-release file's PRETTY_NAME.
+func osName(path string) string {
+	b, err := os.ReadFile(path)
+	if err != nil {
+		return ""
+	}
+	for _, l := range strings.Split(string(b), "\n") {
+		if v, ok := strings.CutPrefix(l, "PRETTY_NAME="); ok {
+			return strings.Trim(v, `"'`)
+		}
+	}
+	return ""
 }
 
 // RemoveRunner deletes a downloaded runner that no prefix uses.
