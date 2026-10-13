@@ -262,7 +262,6 @@ async function renderMain() {
       <button id="pmenu" class="more" title="更多操作">⋯</button>
     </div>
     ${noWine()}${p.error ? `<section><div class="err">${esc(p.error)}</div></section>` : ""}
-    <div id="task"></div>
     <section><div class="sechead"><h2>应用</h2><div class="actions"><button id="install">运行程序</button><button id="addapp">添加应用</button></div></div><div class="apps">${p.apps.map((a) => `
       <div class="app"><div class="top">${a.icon ? `<img src="${a.icon}">` : ""}<b title="${esc(a.name)}">${esc(a.name)}</b>
         <button class="dots" data-appmenu="${esc(a.id)}" title="改名、删除">⋯</button></div>
@@ -270,7 +269,8 @@ async function renderMain() {
       <div class="btns"><button data-app="${esc(a.id)}">启动</button>
       <button data-desk="${esc(a.id)}" data-on="${a.desktop ? 1 : ""}" title="${a.desktop ? "从应用菜单移除" : "在应用菜单里创建快捷方式"}">${a.desktop ? "移除快捷方式" : "快捷方式"}</button></div></div>`).join("") || `<div class="empty">还没有应用。先点“运行程序”装好软件，再点“添加应用”。</div>`}</div></section>
     <div id="plan"></div>
-    <section><div class="sechead"><h2>运行记录</h2><button id="clearruns" hidden>清除</button></div><div id="runs" class="empty">读取中…</div></section>`;
+    <section><div class="sechead"><h2>运行记录</h2><button id="clearruns" hidden>清除</button></div><div id="runs" class="empty">读取中…</div></section>
+    <div id="task"></div>`;
   $("#pmenu").onclick = (ev) => {
     const r = ev.currentTarget.getBoundingClientRect();
     openMenu(prefixMenu(p.name), r.left, r.bottom + 4);
