@@ -18,7 +18,7 @@ vendor's installer, and cellar builds and maintains each user's prefix from it.
   `plan` shows what would change, `apply` makes it so, and `run` applies first
   whenever the file changed. Registry values cellar did not set are left alone.
 - **Runners**: the system Wine, or community builds downloaded on demand
-  (Kron4ek vanilla / staging / staging-tkg / proton, Bottles' vaniglia).
+  (Kron4ek vanilla / proton, Bottles' vaniglia).
   WoW64 builds run 32-bit programs with no 32-bit host libraries.
 - **Fonts**: core and CJK font sets copied into the prefix and wired up with
   font links and substitutes, so CJK text renders without manual registry work.
