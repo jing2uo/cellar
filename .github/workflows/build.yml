@@ -1,4 +1,4 @@
-# Builds the two binaries (see Makefile / docs/design.md):
+# Builds the two binaries (see Makefile / README.md):
 #   cellar      GUI (Wails v3, GTK 4 / WebKitGTK 6), built on debian:sid so it
 #               links nothing newer than org.gnome.Platform//51 provides
 #   cellar-cli  static nogui launcher, the one FlatPark wine packages ship

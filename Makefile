@@ -1,4 +1,4 @@
-# cellar has two builds (see docs/design.md):
+# cellar has two builds (see README.md):
 #   make cli   static nogui binary, on the host (pure Go, no cgo)
 #   make gui   GUI binary, in a podman container holding the GTK/WebKit -dev
 #              packages, so the host needs none of them.
