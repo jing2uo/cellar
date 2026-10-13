@@ -32,7 +32,7 @@ aside { width: 240px; background: var(--side); border-right: 1px solid var(--lin
 .item:hover { background: color-mix(in srgb, var(--text) 6%, transparent); }
 .item.sel { background: var(--accent-soft); color: var(--accent); font-weight: 600; }
 .item small { color: var(--mute); font-weight: 400; }
-.foot { padding: 10px 12px; border-top: 1px solid var(--line); color: var(--mute); font-size: 12px; }
+.sys { padding: 6px 8px; border-top: 1px solid var(--line); }
 main { flex: 1; min-width: 0; overflow: auto; padding: 28px 32px; }
 h1 { margin: 0; font-size: 22px; font-weight: 650; }
 .meta { color: var(--mute); margin-top: 4px; word-break: break-all; display: flex; gap: 14px; flex-wrap: wrap; }
@@ -154,7 +154,7 @@ select { font: inherit; padding: 6px 10px; border: 1px solid var(--line); border
 <aside>
   <div class="brand"><img src="logo.svg" alt="">Cellar</div>
   <div class="list" id="list"></div>
-  <div class="foot" id="foot"></div>
+  <div class="sys" id="sys"></div>
 </aside>
 <main id="main"><div class="welcome">加载中…</div></main>
 
@@ -209,7 +209,6 @@ async function load(force = true) {
   env = e; prefixes = ps; bottles = bs;
   if (!sel && location.hash.length > 1) sel = location.hash.slice(1) === "runners" ? RUNNERS : decodeURIComponent(location.hash.slice(1));
   if (!sel && prefixes.length) sel = prefixes[0].name;
-  $("#foot").textContent = `${env.flatpak ? "Flatpak" : "宿主安装"} · ${env.version}`;
   renderList();
   renderMain();
 }
@@ -220,8 +219,8 @@ function renderList() {
     (local.map((p) => `<div class="item ${p.name === sel ? "sel" : ""}" data-n="${esc(p.name)}">
       <span>${esc(p.name)}</span><small class="s-${p.state}">●</small></div>`).join("") || `<div class="empty item">还没有 prefix</div>`) +
     `<div class="item" id="new"><small>＋ 新建 prefix</small></div>` +
-    (`<div class="item ${sel === IMPORT ? "sel" : ""}" id="imp"><small>⇣ 从 Bottles 导入${bottles.some((b) => !b.imported) ? `（${bottles.filter((b) => !b.imported).length}）` : ""}</small></div>`) +
-    `<div class="group">Cellar</div><div class="item ${sel === SETTINGS ? "sel" : ""}" id="settingsitem"><span>设置</span></div>` +
+    (`<div class="item ${sel === IMPORT ? "sel" : ""}" id="imp"><small>⇣ 从 Bottles 导入${bottles.some((b) => !b.imported) ? `（${bottles.filter((b) => !b.imported).length}）` : ""}</small></div>`);
+  $("#sys").innerHTML = `<div class="item ${sel === SETTINGS ? "sel" : ""}" id="settingsitem"><span>设置</span></div>` +
     `<div class="item ${sel === RUNNERS ? "sel" : ""}" id="runners"><span>Runner</span><small>${env.runners.length}</small></div>`;
   document.querySelectorAll(".item[data-n]").forEach((el) => {
     el.onclick = () => { sel = el.dataset.n; renderList(); renderMain(); };
