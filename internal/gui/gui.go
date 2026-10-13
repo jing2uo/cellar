@@ -238,6 +238,15 @@ func (s *Service) OpenHome() error {
 	return s.app.Browser.OpenURL("file://" + store.Home())
 }
 
+// OpenPrefixDir opens the prefix's own directory: cellar.toml, pfx/, runs/.
+func (s *Service) OpenPrefixDir(name string) error {
+	p, err := store.Open(name)
+	if err != nil {
+		return err
+	}
+	return s.app.Browser.OpenURL("file://" + p.Dir)
+}
+
 // About is what the settings' General tab shows: cellar and the system
 // it runs on, for a bug report.
 func (s *Service) About() about.Info { return about.Get(s.version) }

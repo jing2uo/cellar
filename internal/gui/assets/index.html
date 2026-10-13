@@ -346,7 +346,8 @@ const refreshRuns = (name, ms) => setTimeout(() => { if (sel === name) showRuns(
 function prefixMenu(name) {
   const tool = (x) => async () => { try { await call("Launch", name, "", x); } catch (e) { fail(e); } refreshRuns(name, 3000); };
   return [
-    [t("设置"), () => settings(name)], [t("编辑 cellar.toml"), () => edit(name)], [t("依赖"), () => deps(name)], null,
+    [t("设置"), () => settings(name)], [t("打开数据目录"), () => call("OpenPrefixDir", name).catch(fail)],
+    [t("编辑 cellar.toml"), () => edit(name)], [t("依赖"), () => deps(name)], null,
     [t("Wine 设置"), tool("winecfg")], [t("控制面板"), tool("control")], [t("注册表"), tool("regedit")], [t("文件管理器"), tool("explorer")],
     [t("命令行"), tool("wineconsole")], [t("任务管理器"), tool("taskmgr")], [t("内置程序"), () => runExe(name)], null,
     [t("结束所有进程"), async () => { await call("Kill", name); refreshRuns(name, 1500); }],
@@ -964,15 +965,15 @@ async function install(name) {
 }
 
 async function addApp(name) {
-  dialog(`<b>${t("添加应用")}</b><div class="meta">${t("从开始菜单和 drive_c 找到的程序")}</div>
+  dialog(`<b>${t("添加应用")}</b><div class="meta">${t("从开始菜单和 C 盘找到的程序")}</div>
     <div class="plist" id="pl"><div class="empty">${t("扫描中…")}</div></div>
-    <div class="row"><button id="br">${t("浏览 drive_c")}</button><span style="flex:1"></span><button id="c">${t("关闭")}</button></div>`, async (d) => {
+    <div class="row"><button id="br">${t("浏览 C 盘")}</button><span style="flex:1"></span><button id="c">${t("关闭")}</button></div>`, async (d) => {
     d.querySelector("#c").onclick = () => d.close();
     d.querySelector("#br").onclick = () => browse(d, name, "C:\\");
     const progs = await call("Programs", name);
     d.querySelector("#pl").innerHTML = progs.map((pr, i) => `<div class="prow">${pr.icon ? `<img src="${pr.icon}">` : `<span class="ph"></span>`}
       <div class="grow"><b>${esc(pr.name)}</b> <span class="tag">${pr.from === "start-menu" ? t("开始菜单") : t("扫描")}</span><div class="sub">${esc(pr.exe)} ${esc(pr.args || "")}</div></div>
-      <button data-i="${i}">${t("添加")}</button></div>`).join("") || `<div class="empty">${t("没找到程序。用“浏览 drive_c”手动选。")}</div>`;
+      <button data-i="${i}">${t("添加")}</button></div>`).join("") || `<div class="empty">${t("没找到程序。用“浏览 C 盘”手动选。")}</div>`;
     d.querySelectorAll("[data-i]").forEach((b) => b.onclick = () => doAdd(d, name, progs[+b.dataset.i]));
   });
 }
