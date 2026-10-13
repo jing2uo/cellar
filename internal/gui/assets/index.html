@@ -25,7 +25,7 @@ body {
 }
 aside { width: 240px; background: var(--side); border-right: 1px solid var(--line); display: flex; flex-direction: column; }
 .brand { padding: 18px 18px 10px; font-weight: 650; font-size: 16px; letter-spacing: .2px; display: flex; gap: 8px; align-items: center; }
-.brand .dot { width: 10px; height: 10px; border-radius: 50%; background: var(--accent); }
+.brand img { width: 24px; height: 24px; }
 .list { flex: 1; overflow: auto; padding: 4px 8px; }
 .group { color: var(--mute); font-size: 12px; padding: 12px 10px 4px; }
 .item { padding: 8px 10px; border-radius: 8px; cursor: default; display: flex; justify-content: space-between; align-items: center; gap: 8px; }
@@ -152,7 +152,7 @@ select { font: inherit; padding: 6px 10px; border: 1px solid var(--line); border
 </head>
 <body>
 <aside>
-  <div class="brand"><span class="dot"></span>Cellar</div>
+  <div class="brand"><img src="logo.svg" alt="">Cellar</div>
   <div class="list" id="list"></div>
   <div class="foot" id="foot"></div>
 </aside>
