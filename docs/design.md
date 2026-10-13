@@ -48,8 +48,9 @@ GUI 既能宿主直接安装，也能作为 Flatpak 运行；同一份二进制�
 - 新建 prefix 默认用 `system`，没有就用最新下载的；`cellar.toml` 的 `runner` 可任选，也可以是绝对目录。
 - runner 分 `wow64` / `legacy`（看有没有 `i386-unix` 等 32 位 unix 侧），legacy 缺 32 位 loader
   （`/lib/ld-linux.so.2` 解析不到）时在列表和下载页给出对应环境的修法。
-- 下载目录参照 Bottles：Kron4ek（vanilla / staging / staging-tkg，WoW64 与传统版）、bottlesdevs 的
-  soda / caffe / vaniglia。Proton 系（GE-Proton 等）等接入 umu 再加。
+- 下载目录：Kron4ek（vanilla / staging / staging-tkg / proton，WoW64 与传统版）、bottlesdevs 的
+  vaniglia。proton 是 Kron4ek 打包的 Valve Proton Wine，当普通 runner 用，不走 umu。
+  也可以自己把解压好的 Wine 目录放进 runners/（里面有 bin/wine 即可）。
 - GitHub API 匿名配额按 IP 计（共享代理常被耗尽）：先用 `GITHUB_TOKEN` / `GH_TOKEN` / `gh auth token`，
   失败退到 `releases.atom`（最近 10 个 release，按 tag 规则拼 asset，无大小信息），单个仓库失败只记警告。
 

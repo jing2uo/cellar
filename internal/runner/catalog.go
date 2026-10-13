@@ -18,8 +18,9 @@ import (
 )
 
 // A Source is a family of downloadable Wine builds published as GitHub
-// release assets. The list follows what Bottles offers; Proton builds are
-// left out until umu is supported.
+// release assets: Kron4ek's Wine and Proton builds, and Bottles' vaniglia.
+// The Proton build is Valve's Wine as a plain runner, without umu or the
+// Steam runtime.
 type Source struct {
 	ID    string // family id, e.g. kron4ek-staging-wow64
 	Name  string
@@ -48,21 +49,17 @@ var Sources = []Source{
 		Asset: regexp.MustCompile(`^wine-([0-9.]+(?:-rc[0-9]+)?)-staging-tkg-amd64-wow64\.tar\.xz$`), Kind: "wow64",
 		Tag: kronTag, AssetFor: func(t string) string { return "wine-" + t + "-staging-tkg-amd64-wow64.tar.xz" },
 		Note: "Staging 加 TkG 补丁集"},
+	{ID: "kron4ek-proton-wow64", Name: "Proton (Kron4ek, WoW64)", Repo: "Kron4ek/Wine-Builds",
+		Asset: regexp.MustCompile(`^wine-proton-([0-9][0-9.]*-[0-9]+)-amd64-wow64\.tar\.xz$`), Kind: "wow64",
+		Tag: regexp.MustCompile(`^proton-[0-9][0-9.]*-[0-9]+$`), AssetFor: func(t string) string { return "wine-" + t + "-amd64-wow64.tar.xz" },
+		Note: "Valve Proton 的 Wine，带游戏相关补丁；不含 DXVK，需要时用 winetricks 装"},
 	{ID: "kron4ek-staging", Name: "Wine Staging (Kron4ek, 传统 32 位)", Repo: "Kron4ek/Wine-Builds",
 		Asset: regexp.MustCompile(`^wine-([0-9.]+(?:-rc[0-9]+)?)-staging-amd64\.tar\.xz$`), Kind: "legacy",
 		Tag: kronTag, AssetFor: func(t string) string { return "wine-" + t + "-staging-amd64.tar.xz" },
 		Note: "老式 WoW，需要 32 位系统库"},
-	{ID: "soda", Name: "Soda (Bottles)", Repo: "bottlesdevs/wine",
-		Tag: bottlesTag("soda"), AssetFor: bottlesAsset,
-		Asset: regexp.MustCompile(`^soda-([0-9][0-9.]*-[0-9]+)-x86_64\.tar\.xz$`), Kind: "legacy",
-		Note: "Bottles 默认 runner，需要 32 位系统库"},
-	{ID: "caffe", Name: "Caffe (Bottles)", Repo: "bottlesdevs/wine",
-		Tag: bottlesTag("caffe"), AssetFor: bottlesAsset,
-		Asset: regexp.MustCompile(`^caffe-([0-9][0-9.]*)-x86_64\.tar\.xz$`), Kind: "legacy",
-		Note: "Bottles 的 Staging 系 runner，需要 32 位系统库"},
 	{ID: "vaniglia", Name: "Vaniglia (Bottles)", Repo: "bottlesdevs/wine",
-		Tag: bottlesTag("vaniglia"), AssetFor: bottlesAsset,
-		Asset: regexp.MustCompile(`^vaniglia-([0-9][0-9.]*)-x86_64\.tar\.xz$`), Kind: "legacy",
+		Tag: bottlesTag("vaniglia"), AssetFor: func(t string) string { return t + "-x86_64.tar.gz" },
+		Asset: regexp.MustCompile(`^vaniglia-([0-9][0-9.]*)-x86_64\.tar\.gz$`), Kind: "legacy",
 		Note: "Bottles 打包的原版 Wine，需要 32 位系统库"},
 }
 
@@ -71,8 +68,6 @@ var kronTag = regexp.MustCompile(`^[0-9]+\.[0-9]+(?:-rc[0-9]+)?$`)
 func bottlesTag(family string) *regexp.Regexp {
 	return regexp.MustCompile(`^` + family + `-[0-9][0-9.]*(?:-[0-9]+)?$`)
 }
-
-func bottlesAsset(tag string) string { return tag + "-x86_64.tar.xz" }
 
 func source(id string) (*Source, error) {
 	for i := range Sources {
