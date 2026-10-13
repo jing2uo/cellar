@@ -93,7 +93,6 @@ type desired struct {
 	reg    map[string]map[string]value
 	fonts  map[string]string // file name -> host path
 	drives map[string]string
-	deps   []string // font sets' winetricks verbs, when their fonts are missing
 }
 
 // errUnresolved marks a font role reference nothing installed fills: the
@@ -210,7 +209,7 @@ func (pl *Plan) diff(force bool) {
 	}
 	pl.deps = nil
 	done := winetricksDone(pl.p.Pfx)
-	for _, v := range append(slices.Clone(pl.c.Dependencies), pl.want.deps...) {
+	for _, v := range pl.c.Dependencies {
 		if !done[v] && !slices.Contains(pl.deps, v) {
 			pl.deps = append(pl.deps, v)
 			pl.Changes = append(pl.Changes, Change{Op: "install", Name: v})
@@ -259,7 +258,7 @@ func want(c *config.Config) (*desired, []string, error) {
 	// resolve finds a family's file, or what a font role reference
 	// (@cjk.SC) stands for. A role with no font gives errUnresolved: what
 	// uses it drops out quietly. Only a chosen set's Primary is warned about
-	// (below), and brings in its Deps.
+	// (below).
 	resolved := map[string]fonts.Face{}
 	failed := map[string]error{}
 	resolve := func(name string) (fonts.Face, error) {
@@ -311,8 +310,6 @@ func want(c *config.Config) (*desired, []string, error) {
 			continue
 		}
 		switch pack := fs.Roles[fs.Primary].Pack; {
-		case len(fs.Deps) > 0:
-			d.deps = append(d.deps, fs.Deps...)
 		case pack != "":
 			warns = append(warns, fmt.Sprintf("font set %s: its fonts are not here; download them in Settings > Fonts or with `cellar fonts get %s`", fs.Name, pack))
 		default:

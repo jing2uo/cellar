@@ -300,8 +300,6 @@ func cmdFonts(args []string) error {
 		for _, s := range sets {
 			use := s.Family + " (" + s.Source + ")"
 			switch {
-			case s.Source == "missing" && len(s.Deps) > 0:
-				use = "missing: winetricks " + strings.Join(s.Deps, " ") + " instead"
 			case s.Source == "missing":
 				use = "missing: cellar fonts get " + s.Pack
 			case s.Source == "scripts":

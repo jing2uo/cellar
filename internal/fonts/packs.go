@@ -88,7 +88,45 @@ func GetPack(id string, progress func(done, total int, file string)) error {
 	done := 0
 	var wg sync.WaitGroup
 	sem := make(chan struct{}, 6)
+	// Faces packed in one archive come out of a single download.
+	archives := map[string][]config.Face{}
 	for _, f := range faces {
+		if f.Member != "" {
+			archives[f.URL] = append(archives[f.URL], f)
+		}
+	}
+	for url, group := range archives {
+		want := map[string]string{}
+		for _, f := range group {
+			want[f.Member] = filepath.Join(LibraryDir(), f.File)
+		}
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			sem <- struct{}{}
+			defer func() { <-sem }()
+			err := downloadArchive(url, want)
+			mu.Lock()
+			defer mu.Unlock()
+			for _, f := range group {
+				if err != nil {
+					failed = append(failed, f.File)
+					continue
+				}
+				done++
+				if progress != nil {
+					progress(done, len(faces), f.File)
+				}
+			}
+			if err != nil && firstErr == nil {
+				firstErr = err
+			}
+		}()
+	}
+	for _, f := range faces {
+		if f.Member != "" {
+			continue
+		}
 		path := filepath.Join(LibraryDir(), f.File)
 		if _, err := os.Stat(path); err == nil {
 			mu.Lock()

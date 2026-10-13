@@ -458,7 +458,7 @@ function renderImport() {
 
 // ── settings page: cellar's own settings, starting with fonts ─────────────
 const fontSources = () => [
-  ["host-first", t("优先使用本机已安装"), t("需要本机装有对应的 Noto 字体，缺的再用字体库。")],
+  ["host-first", t("优先使用本机已安装"), t("需要本机装有对应的 Noto 或 Liberation 字体，缺的再用字体库。")],
   ["library-only", t("仅使用 Cellar 字体库"), t("不用本机字体，每台机器效果一致。")],
 ];
 
@@ -782,13 +782,11 @@ async function showFontStatus(d) {
       el.textContent = s.have === s.total ? t("{0} 种文字里 {1} 种有字体", s.total, s.have) : t("{0} 种文字里 {1} 种有字体，其余可在 设置 → 字体 下载", s.total, s.have);
       continue;
     }
-    if (s.family) el.textContent = `→ ${s.family}${where || ""}`;
-    else if (s.deps && s.deps.length) el.textContent = t("本机没有，改用 winetricks {0}", s.deps.join(" "));
-    else {
-      el.innerHTML = `⚠ ${t("没有可用字体，去 设置 → 字体 下载")}`;
-      el.classList.add("warn");
-      el.querySelector("[data-goset]").onclick = (ev) => { ev.preventDefault(); d.close(); openSettings("fonts"); };
-    }
+    if (s.family) { el.textContent = `→ ${s.family}${where || ""}`; continue; }
+    // Missing: the set's fonts have to be downloaded into the library.
+    el.innerHTML = "⚠ " + t("没有可用字体，去 {0} 下载", `<a href="#" data-goset>${t("设置 → 字体")}</a>`);
+    el.classList.add("warn");
+    el.querySelector("[data-goset]").onclick = (ev) => { ev.preventDefault(); d.close(); openSettings("fonts"); };
   }
 }
 // wireLocale runs the picker; onPick gets the locale picked.

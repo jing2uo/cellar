@@ -5,6 +5,8 @@
 package fonts
 
 import (
+	"archive/tar"
+	"compress/gzip"
 	"errors"
 	"fmt"
 	"io"
@@ -148,16 +150,72 @@ func Download(f Face, log func(string)) error {
 	return os.Rename(tmp, f.Path)
 }
 
+// downloadArchive fetches a .tar.gz once and puts the members it wants
+// (member -> library path) into the library, each atomically.
+func downloadArchive(url string, want map[string]string) error {
+	resp, err := http.Get(url)
+	if err != nil {
+		return fmt.Errorf("download %s: %w", filepath.Base(url), err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != 200 {
+		return fmt.Errorf("download %s: %s", filepath.Base(url), resp.Status)
+	}
+	gz, err := gzip.NewReader(resp.Body)
+	if err != nil {
+		return fmt.Errorf("download %s: %w", filepath.Base(url), err)
+	}
+	tr := tar.NewReader(gz)
+	left := len(want)
+	for left > 0 {
+		hdr, err := tr.Next()
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			return fmt.Errorf("download %s: %w", filepath.Base(url), err)
+		}
+		dest, ok := want[hdr.Name]
+		if !ok {
+			continue
+		}
+		if err := os.MkdirAll(filepath.Dir(dest), 0o755); err != nil {
+			return err
+		}
+		tmp := dest + ".part"
+		out, err := os.Create(tmp)
+		if err != nil {
+			return err
+		}
+		if _, err := io.Copy(out, tr); err != nil {
+			out.Close()
+			os.Remove(tmp)
+			return fmt.Errorf("download %s: %w", filepath.Base(dest), err)
+		}
+		if err := out.Close(); err != nil {
+			os.Remove(tmp)
+			return err
+		}
+		if err := os.Rename(tmp, dest); err != nil {
+			return err
+		}
+		left--
+	}
+	if left > 0 {
+		return fmt.Errorf("download %s: %d file(s) not in the archive", filepath.Base(url), left)
+	}
+	return nil
+}
+
 // Status is what a font set uses on this machine. For all it is how many
 // of the scripts have a font (Have of Total), the rest as for the others.
 type Status struct {
-	ID     string   `json:"id"`
-	Family string   `json:"family,omitempty"`
-	Source string   `json:"source"`         // host | runtime | library | missing | scripts
-	Pack   string   `json:"pack,omitempty"` // the library pack that would fill it
-	Deps   []string `json:"deps,omitempty"` // installed instead, when missing
-	Have   int      `json:"have,omitempty"`
-	Total  int      `json:"total,omitempty"`
+	ID     string `json:"id"`
+	Family string `json:"family,omitempty"`
+	Source string `json:"source"`         // host | runtime | library | missing | scripts
+	Pack   string `json:"pack,omitempty"` // the library pack that would fill it
+	Have   int    `json:"have,omitempty"`
+	Total  int    `json:"total,omitempty"`
 }
 
 // Statuses resolves each choosable set's Primary.
@@ -179,7 +237,7 @@ func Statuses() []Status {
 		f, err := Resolve(fs.ID + "." + fs.Primary)
 		switch {
 		case err != nil:
-			st.Source, st.Deps = "missing", fs.Deps
+			st.Source = "missing"
 		default:
 			st.Family, st.Source = f.Family, source(f.Path)
 		}

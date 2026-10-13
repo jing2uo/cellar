@@ -13,8 +13,7 @@ import (
 // Liberation fonts), cjk (every region's Windows CJK fonts to that region's
 // Noto Sans CJK, all in one collection file, and the CJK UI fallback), and
 // all: core and cjk, plus every script's Noto Sans in the UI fallback (the
-// hidden scripts set). Deps are winetricks verbs installed when Primary has
-// no font.
+// hidden scripts set).
 type FontSet struct {
 	ID       string            `json:"id"`
 	Name     string            `json:"name"`
@@ -23,7 +22,6 @@ type FontSet struct {
 	Primary  string            `json:"-"`
 	Roles    map[string]Face   `json:"-"`
 	Subst    map[string]string `json:"-"` // Windows family -> role; "a|b": the first there is
-	Deps     []string          `json:"-"`
 }
 
 // Face is a role's font: the host's copy (any of Host, by family name),
@@ -34,6 +32,7 @@ type Face struct {
 	Family string
 	File   string
 	URL    string
+	Member string // set when URL is a .tar.gz: File's path in it
 	Size   int64
 	Pack   string
 }
@@ -47,6 +46,7 @@ type Pack struct {
 }
 
 var Packs = []Pack{
+	{"liberation", "英文", "Liberation Sans、Serif、Mono：Arial、Times New Roman、Courier New 的替代"},
 	{"cjk", "CJK", "Noto Sans CJK：简体、繁体、日文、韩文都在这一个文件里"},
 	{"cjk-serif", "CJK 衬线", "Noto Serif CJK：给要用仿宋、楷体等衬线字体的程序"},
 	{"scripts", "全语种", "150 种文字的 Noto Sans，补齐泰文、阿拉伯文、印度文字等（字体选“全部”时用）"},
@@ -63,6 +63,19 @@ func PackByID(id string) *Pack {
 }
 
 const notoCJK = "https://github.com/notofonts/noto-cjk/raw/main/"
+
+// Liberation is released only as a tarball of all its styles; the library
+// takes the Regular of each family from it.
+const (
+	liberationURL = "https://github.com/liberationfonts/liberation-fonts/files/7261482/liberation-fonts-ttf-2.1.5.tar.gz"
+	liberationDir = "liberation-fonts-ttf-2.1.5/"
+)
+
+func liberationFace(style string, size int64) Face {
+	file := "Liberation" + style + "-Regular.ttf"
+	return Face{Host: []string{"Liberation " + style}, Family: "Liberation " + style, File: file,
+		URL: liberationURL, Member: liberationDir + file, Size: size, Pack: "liberation"}
+}
 
 // cjkFace is one region of a Noto CJK collection (Sans or Serif).
 func cjkFace(style, region string) Face {
@@ -104,12 +117,12 @@ type scriptFace struct {
 //go:generate go run ./genscripts
 
 var FontSets = []FontSet{
-	{ID: "core", Name: "英文", Primary: "sans", Deps: []string{"corefonts"},
-		Note: "Arial、Times New Roman、Courier New 换成 Liberation，缺少时装 corefonts",
+	{ID: "core", Name: "英文", Primary: "sans",
+		Note: "Arial、Times New Roman、Courier New 换成 Liberation",
 		Roles: map[string]Face{
-			"sans":  {Host: []string{"Liberation Sans"}},
-			"serif": {Host: []string{"Liberation Serif"}},
-			"mono":  {Host: []string{"Liberation Mono"}},
+			"sans":  liberationFace("Sans", 410712),
+			"serif": liberationFace("Serif", 393576),
+			"mono":  liberationFace("Mono", 319508),
 		},
 		Subst: map[string]string{"Arial": "sans", "Times New Roman": "serif", "Courier New": "mono"},
 	},
@@ -398,8 +411,7 @@ func localeLayer(locale string, sets []string) map[string]any {
 }
 
 // applyFontSets adds what the sets and the fallback chain use to
-// fonts.link; reconcile copies in whatever of it is here. A set's Deps are
-// added by reconcile, which knows whether its Primary is.
+// fonts.link; reconcile copies in whatever of it is here.
 func (c *Config) applyFontSets() {
 	eff, _ := EffectiveFontSets(c.FontSets)
 	for _, id := range eff {

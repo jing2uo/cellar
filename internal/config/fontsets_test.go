@@ -87,7 +87,7 @@ LC_ALL = "C.UTF-8"
 	if c.Registry[substKey]["Arial"] != "{family:@core.sans}" {
 		t.Errorf("subst %v", c.Registry[substKey])
 	}
-	// corefonts is reconcile's call: only when no Liberation is installed.
+	// No winetricks fallback: Liberation comes from the host or the library.
 	if slices.Contains(c.Dependencies, "corefonts") || !slices.Contains(c.Fonts.Link, "@core.mono") {
 		t.Errorf("deps %v fonts %v", c.Dependencies, c.Fonts.Link)
 	}
