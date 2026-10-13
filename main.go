@@ -546,7 +546,7 @@ func cmdKill(args []string) error {
 	if err != nil {
 		return err
 	}
-	r.Server(p.Pfx, "-k") // fails when no server runs, which is the goal anyway
+	r.Kill(p.Pfx)
 	return nil
 }
 

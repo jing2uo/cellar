@@ -189,8 +189,7 @@ func DeletePrefix(p *store.Prefix) error {
 	}
 	if c, err := p.Load(); err == nil {
 		if r, err := runner.Resolve(c.Runner); err == nil {
-			r.Server(p.Pfx, "-k") // fails when no server runs
-			r.Server(p.Pfx, "-w")
+			r.Kill(p.Pfx)
 		}
 		for _, a := range c.Apps {
 			desktop.Remove(p, a.ID)

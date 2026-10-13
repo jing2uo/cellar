@@ -24,6 +24,7 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+	"syscall"
 
 	"github.com/jing2uo/cellar/internal/store"
 	"github.com/ulikunitz/xz"
@@ -310,6 +311,32 @@ func (r *Runner) Server(prefix string, args ...string) error {
 	cmd := exec.Command(r.Wineserver, args...)
 	cmd.Env = Environ(prefix, nil)
 	return cmd.Run()
+}
+
+// Kill ends every process in the prefix and waits for its wineserver to go.
+// wineserver -k signals the pid holding the server's lock, which a server
+// started from another flatpak instance (another pid namespace: a desktop
+// launcher, say) keeps out of sight; wineboot -k asks the server itself
+// (-s: the desktop process too).
+func (r *Runner) Kill(prefix string) {
+	if !ServerUp(prefix) {
+		return
+	}
+	r.Command(prefix, nil, "wineboot", "-k", "-s").Run()
+	r.Server(prefix, "-k")
+	r.Server(prefix, "-w")
+}
+
+// ServerUp tells whether a wineserver serves the prefix: its socket is in
+// /tmp/.wine-<uid>/server-<dev>-<inode>, as Wine names it.
+func ServerUp(prefix string) bool {
+	var st syscall.Stat_t
+	if syscall.Stat(prefix, &st) != nil {
+		return false
+	}
+	dir := filepath.Join("/tmp", fmt.Sprintf(".wine-%d", os.Getuid()), fmt.Sprintf("server-%x-%x", st.Dev, st.Ino))
+	_, err := os.Stat(filepath.Join(dir, "socket"))
+	return err == nil
 }
 
 func Environ(prefix string, env map[string]string) []string {

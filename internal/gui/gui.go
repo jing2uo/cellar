@@ -806,6 +806,6 @@ func (s *Service) Kill(name string) error {
 	if err != nil {
 		return err
 	}
-	r.Server(p.Pfx, "-k")
+	r.Kill(p.Pfx)
 	return nil
 }
