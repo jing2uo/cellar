@@ -429,8 +429,7 @@ function renderImport() {
 
 // ── settings page: cellar's own settings, starting with fonts ─────────────
 const FONT_SOURCES = [
-  ["host-first", "本机优先", "用本机装好的字体，本机没有的用下面已下载的；不会自动下载。"],
-  ["auto", "本机优先，缺了自动下载", "同上，另外应用配置时自动下载缺的 CJK 字体。"],
+  ["host-first", "本机优先", "用本机装好的字体，本机没有的用下面已下载的。"],
   ["library-only", "只用 Cellar 下载的", "不用本机字体，只用下面下载的字体包：每台机器效果一样。"],
 ];
 
@@ -700,11 +699,10 @@ async function showFontStatus(d) {
     if (!el) continue;
     const where = { host: "（本机）", runtime: "（Cellar 自带）", library: "（已下载）" }[s.source];
     if (s.source === "scripts") {
-      el.textContent = `${s.total} 种文字里 ${s.have} 种有字体` + (s.have === s.total ? "" : s.size ? `，其余应用时自动下载（约 ${mb(s.size)}）` : "，其余可在 设置 → 字体 下载");
+      el.textContent = `${s.total} 种文字里 ${s.have} 种有字体` + (s.have === s.total ? "" : "，其余可在 设置 → 字体 下载");
       continue;
     }
-    if (s.source === "download") el.textContent = `→ ${s.family}：还没下载，应用时自动下载（约 ${mb(s.size)}）`;
-    else if (s.family) el.textContent = `→ ${s.family}${where || ""}`;
+    if (s.family) el.textContent = `→ ${s.family}${where || ""}`;
     else if (s.deps && s.deps.length) el.textContent = `本机没有，改用 winetricks ${s.deps.join(" ")}`;
     else {
       el.innerHTML = `⚠ 没有可用字体，<a href="#" data-goset>去 设置 → 字体 下载</a>`;

@@ -15,9 +15,8 @@ import (
 
 // Font sources: where the font sets' fonts may come from.
 const (
-	HostFirst   = "host-first"   // the host's, else the library's; nothing downloaded
+	HostFirst   = "host-first"   // the host's, else the library's
 	LibraryOnly = "library-only" // only the library's: the same on every machine
-	Auto        = "auto"         // as host-first, and an apply downloads what is missing
 )
 
 type Prefs struct {
@@ -30,29 +29,26 @@ type Fonts struct {
 
 func path() string { return filepath.Join(store.Home(), "settings.toml") }
 
-// Load reads the settings, filling in defaults. A package downloads what it
-// misses on its own: nobody is there to do it on its first launch.
+// Load reads the settings, filling in defaults. Nothing is ever downloaded
+// on its own: the library is filled in the settings or with cellar fonts get.
 func Load() Prefs {
 	p := Prefs{}
 	if b, err := os.ReadFile(path()); err == nil {
 		toml.Unmarshal(b, &p)
 	}
 	switch p.Fonts.Source {
-	case HostFirst, LibraryOnly, Auto:
+	case HostFirst, LibraryOnly:
 	default:
 		p.Fonts.Source = HostFirst
-		if store.Packaged() {
-			p.Fonts.Source = Auto
-		}
 	}
 	return p
 }
 
 func Save(p Prefs) error {
 	switch p.Fonts.Source {
-	case HostFirst, LibraryOnly, Auto:
+	case HostFirst, LibraryOnly:
 	default:
-		return fmt.Errorf("font source %q (want %s, %s or %s)", p.Fonts.Source, HostFirst, LibraryOnly, Auto)
+		return fmt.Errorf("font source %q (want %s or %s)", p.Fonts.Source, HostFirst, LibraryOnly)
 	}
 	b, err := toml.Marshal(p)
 	if err != nil {

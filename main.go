@@ -43,7 +43,7 @@ const usage = `cellar - Wine prefixes from cellar.toml
                                      runner locale fonts=core,cjk|all|none winver desktop=WxH|off dpi=N|auto
   cellar deps <prefix> [add|rm <verb>...]  winetricks verbs (dlls, fonts); add installs at once
   cellar deps search <word>...       find winetricks verbs
-  cellar fonts [list] | get <pack> | rm <pack> | policy [host-first|auto|library-only]
+  cellar fonts [list] | get <pack> | rm <pack> | policy [host-first|library-only]
                                      the font library (packs: cjk cjk-serif scripts)
   cellar logs <prefix> [--run ID] [--tail N] [--clear]
   cellar kill <prefix>

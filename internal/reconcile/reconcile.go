@@ -48,8 +48,6 @@ func (c Change) String() string {
 		return fmt.Sprintf("delete %s\\%s  (was %s)", c.Key, c.Name, c.Old)
 	case "link", "unlink":
 		return fmt.Sprintf("%-6s font    %s <- %s", c.Op, c.Name, c.Value)
-	case "download":
-		return fmt.Sprintf("download font %s <- %s", c.Name, c.Value)
 	case "map", "unmap":
 		return fmt.Sprintf("%-6s drive   %s: -> %s", c.Op, c.Name, c.Value)
 	case "install":
@@ -96,8 +94,6 @@ type desired struct {
 	fonts  map[string]string // file name -> host path
 	drives map[string]string
 	deps   []string // font sets' winetricks verbs, when their fonts are missing
-	// downloads are the fonts to fetch into the cache before copying.
-	downloads map[string]fonts.Face // path -> face
 }
 
 // errUnresolved marks a font role reference nothing installed fills: the
@@ -184,9 +180,6 @@ func (pl *Plan) diff(force bool) {
 	}
 
 	fontsDir := filepath.Join(pl.p.Pfx, "drive_c", "windows", "Fonts")
-	for _, path := range slices.Sorted(maps.Keys(pl.want.downloads)) {
-		pl.Changes = append(pl.Changes, Change{Op: "download", Name: filepath.Base(path), Value: pl.want.downloads[path].URL})
-	}
 	pl.links, pl.unlink = map[string]string{}, nil
 	for f, src := range pl.want.fonts {
 		if !sameFile(filepath.Join(fontsDir, f), src) {
@@ -305,12 +298,6 @@ func want(c *config.Config) (*desired, []string, error) {
 		}
 		file := filepath.Base(f.Path)
 		d.fonts[file] = f.Path
-		if f.URL != "" {
-			if d.downloads == nil {
-				d.downloads = map[string]fonts.Face{}
-			}
-			d.downloads[f.Path] = f
-		}
 		put(d.reg, normKey(`HKLM\Software\Microsoft\Windows NT\CurrentVersion\Fonts`), f.Family+" (TrueType)", value("sz:"+file))
 	}
 	eff, _ := config.EffectiveFontSets(c.FontSets)
@@ -468,16 +455,6 @@ func (pl *Plan) Apply(log func(string)) error {
 	// partial, so the failed steps stay in the next plan.
 	var failed []string
 	var details []string
-	for _, path := range slices.Sorted(maps.Keys(pl.want.downloads)) {
-		if err := fonts.Download(pl.want.downloads[path], log); err != nil {
-			name := filepath.Base(path)
-			log("  ✗ " + name + " failed, skipped")
-			failed = append(failed, name)
-			details = append(details, err.Error())
-			delete(pl.links, name)
-			delete(pl.want.fonts, name)
-		}
-	}
 
 	fontsDir := filepath.Join(pl.p.Pfx, "drive_c", "windows", "Fonts")
 	for _, f := range pl.unlink {

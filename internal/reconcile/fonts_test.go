@@ -76,35 +76,26 @@ func TestAllFromHost(t *testing.T) {
 		t.Errorf("SystemLink %v", link)
 	}
 	// all brings in core, which, missing Liberation here, installs corefonts.
-	if len(d.downloads) != 0 || len(warns) != 0 || !slices.Equal(d.deps, []string{"corefonts"}) {
-		t.Errorf("downloads %v warns %v deps %v", d.downloads, warns, d.deps)
+	if len(warns) != 0 || !slices.Equal(d.deps, []string{"corefonts"}) {
+		t.Errorf("warns %v deps %v", warns, d.deps)
 	}
 }
 
 func TestCJKMissing(t *testing.T) {
-	// host-first: nothing downloaded, one warning saying how to get it.
-	home(t, "")
+	// Nothing on the host or in the library: one warning saying how to get it.
+	h := home(t, "")
 	fakeFcList(t, map[string]string{"WenQuanYi Zen Hei": "/f/wqy-zenhei.ttc"})
 	d, warns, _ := want(loadSets(t, `"cjk"`))
-	if len(d.downloads) != 0 || d.reg[normKey(substK)]["SimSun"] != "" || len(warns) != 1 || !strings.Contains(warns[0], "cellar fonts get cjk") {
-		t.Errorf("downloads %v subst %v warns %v", d.downloads, d.reg[normKey(substK)], warns)
+	if len(d.fonts) != 0 || d.reg[normKey(substK)]["SimSun"] != "" || len(warns) != 1 || !strings.Contains(warns[0], "cellar fonts get cjk") {
+		t.Errorf("fonts %v subst %v warns %v", d.fonts, d.reg[normKey(substK)], warns)
 	}
-
-	// auto: the collection is downloaded into the library, once for all regions.
-	h := home(t, "auto")
-	d, warns, _ = want(loadSets(t, `"cjk"`))
+	// Once downloaded into the library, it is used, for all regions.
 	lib := filepath.Join(h, "fonts", "NotoSansCJK-Regular.ttc")
-	if len(d.downloads) != 1 || !strings.HasSuffix(d.downloads[lib].URL, "/Sans/OTC/NotoSansCJK-Regular.ttc") || len(warns) != 0 {
-		t.Errorf("downloads %v warns %v", d.downloads, warns)
-	}
-	if d.reg[normKey(substK)]["SimSun"] != "sz:Noto Sans CJK SC" || d.fonts["NotoSansCJK-Regular.ttc"] != lib {
-		t.Errorf("subst %v fonts %v", d.reg[normKey(substK)], d.fonts)
-	}
-	// Once there, it is used as is.
 	os.MkdirAll(filepath.Dir(lib), 0o755)
 	os.WriteFile(lib, []byte("otc"), 0o644)
-	if d, _, _ = want(loadSets(t, `"cjk"`)); len(d.downloads) != 0 || d.fonts["NotoSansCJK-Regular.ttc"] != lib {
-		t.Errorf("downloads %v fonts %v", d.downloads, d.fonts)
+	d, warns, _ = want(loadSets(t, `"cjk"`))
+	if d.reg[normKey(substK)]["SimSun"] != "sz:Noto Sans CJK SC" || d.fonts["NotoSansCJK-Regular.ttc"] != lib || len(warns) != 0 {
+		t.Errorf("subst %v fonts %v warns %v", d.reg[normKey(substK)], d.fonts, warns)
 	}
 }
 
@@ -173,9 +164,16 @@ func TestPackNeeds(t *testing.T) {
 }
 
 func TestLongChainFitsWine(t *testing.T) {
-	// auto: the whole chain resolves, far more than one entry holds.
-	home(t, "auto")
+	// Every pack downloaded: the whole chain resolves, far more than one
+	// entry holds.
+	h := home(t, "")
 	fakeFcList(t, nil)
+	os.MkdirAll(filepath.Join(h, "fonts"), 0o755)
+	for _, pack := range []string{"cjk", "cjk-serif", "scripts"} {
+		for _, f := range config.PackFaces(pack) {
+			os.WriteFile(filepath.Join(h, "fonts", f.File), []byte("font"), 0o644)
+		}
+	}
 	d, warns, _ := want(loadSets(t, `"all"`))
 	sl := d.reg[normKey(linkK)]
 	if len(sl) < 3 || len(warns) != 0 {

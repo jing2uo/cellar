@@ -39,20 +39,17 @@ type Face struct {
 }
 
 // A Pack is a download into the font library, done in the settings (or
-// with cellar fonts get), not when a prefix is created.
-// Auto packs are the ones the auto policy downloads when a chosen set
-// needs them; the others only when asked for.
+// with cellar fonts get), never on its own.
 type Pack struct {
 	ID   string `json:"id"`
 	Name string `json:"name"`
 	Note string `json:"note"`
-	Auto bool   `json:"auto,omitempty"`
 }
 
 var Packs = []Pack{
-	{"cjk", "CJK", "Noto Sans CJK：简体、繁体、日文、韩文都在这一个文件里", true},
-	{"cjk-serif", "CJK 衬线", "Noto Serif CJK：给点名要仿宋、楷体这类衬线字体的程序；没有它就用 CJK 的无衬线字体", false},
-	{"scripts", "全语种", "150 种文字的 Noto Sans，补齐阿拉伯文、希伯来文、泰文、印度各文字等界面里缺的字（字体选“全部”时用）", true},
+	{"cjk", "CJK", "Noto Sans CJK：简体、繁体、日文、韩文都在这一个文件里"},
+	{"cjk-serif", "CJK 衬线", "Noto Serif CJK：给点名要仿宋、楷体这类衬线字体的程序；没有它就用 CJK 的无衬线字体"},
+	{"scripts", "全语种", "150 种文字的 Noto Sans，补齐阿拉伯文、希伯来文、泰文、印度各文字等界面里缺的字（字体选“全部”时用）"},
 }
 
 // PackByID returns the pack, or nil.

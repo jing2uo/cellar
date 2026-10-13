@@ -279,7 +279,7 @@ func cmdFonts(args []string) error {
 			emit(map[string]any{"source": pr.Fonts.Source, "packs": packs, "sets": sets, "library": fonts.LibraryDir()})
 			return nil
 		}
-		fmt.Printf("source: %s   (cellar fonts policy host-first|auto|library-only)\n\n", pr.Fonts.Source)
+		fmt.Printf("source: %s   (cellar fonts policy host-first|library-only)\n\n", pr.Fonts.Source)
 		for _, p := range packs {
 			state := "not downloaded"
 			switch {
@@ -300,8 +300,6 @@ func cmdFonts(args []string) error {
 		for _, s := range sets {
 			use := s.Family + " (" + s.Source + ")"
 			switch {
-			case s.Source == "download":
-				use = s.Family + " (downloaded at the next apply)"
 			case s.Source == "missing" && len(s.Deps) > 0:
 				use = "missing: winetricks " + strings.Join(s.Deps, " ") + " instead"
 			case s.Source == "missing":

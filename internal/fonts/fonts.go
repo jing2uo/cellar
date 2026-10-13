@@ -22,8 +22,7 @@ import (
 	"github.com/jing2uo/cellar/internal/store"
 )
 
-// Face is a resolved font. URL is set when the file is not there yet and
-// an apply downloads it to Path first (the auto policy).
+// Face is a resolved font. URL and Size are where Download fetches it from.
 type Face struct {
 	Family string `json:"family"`
 	Path   string `json:"path"`
@@ -112,10 +111,6 @@ func Resolve(ref string) (Face, error) {
 		if _, err := os.Stat(f.Path); err == nil {
 			return f, nil
 		}
-		if p := config.PackByID(want.Pack); src == prefs.Auto && want.URL != "" && p != nil && p.Auto {
-			f.URL, f.Size = want.URL, want.Size
-			return f, nil
-		}
 	}
 	return Face{}, fmt.Errorf("%s: %w", strings.Join(want.Host, ", "), ErrMissing)
 }
@@ -158,8 +153,7 @@ func Download(f Face, log func(string)) error {
 type Status struct {
 	ID     string   `json:"id"`
 	Family string   `json:"family,omitempty"`
-	Source string   `json:"source"`         // host | runtime | library | download | missing | scripts
-	Size   int64    `json:"size,omitempty"` // to download, for "download"
+	Source string   `json:"source"`         // host | runtime | library | missing | scripts
 	Pack   string   `json:"pack,omitempty"` // the library pack that would fill it
 	Deps   []string `json:"deps,omitempty"` // installed instead, when missing
 	Have   int      `json:"have,omitempty"`
@@ -174,11 +168,8 @@ func Statuses() []Status {
 			st := Status{ID: fs.ID, Source: "scripts", Pack: "scripts"}
 			for _, f := range config.PackFaces("scripts") {
 				st.Total++
-				r, err := Resolve("scripts." + strings.TrimSuffix(f.File, "-Regular.ttf"))
-				if err == nil && r.URL == "" {
+				if _, err := Resolve("scripts." + strings.TrimSuffix(f.File, "-Regular.ttf")); err == nil {
 					st.Have++
-				} else if err == nil {
-					st.Size += r.Size
 				}
 			}
 			out = append(out, st)
@@ -189,8 +180,6 @@ func Statuses() []Status {
 		switch {
 		case err != nil:
 			st.Source, st.Deps = "missing", fs.Deps
-		case f.URL != "":
-			st.Family, st.Source, st.Size = f.Family, "download", f.Size
 		default:
 			st.Family, st.Source = f.Family, source(f.Path)
 		}
