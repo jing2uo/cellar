@@ -908,13 +908,39 @@ const FONTS_NOTE = () => t("界面缺的字用 Noto 字体补齐，在 设置 �
 const WINVER = [["win11", "Windows 11"], ["win10", "Windows 10"], ["win81", "Windows 8.1"], ["win7", "Windows 7"], ["winxp", "Windows XP"]];
 const DPIS = () => [[0, t("自动（跟随系统 Xft.dpi）")], [96, "100%"], [120, "125%"], [144, "150%"], [168, "175%"], [192, "200%"]];
 
+// sizeField offers the virtual desktop sizes Wine takes on this screen, and
+// any other size typed in (cellar makes Wine take that one too).
+function sizeField(cur, ds) {
+  const def = ds.sizes.includes("1920x1080") ? "1920x1080" : ds.screen || ds.sizes[ds.sizes.length - 1];
+  const custom = !!cur && !ds.sizes.includes(cur);
+  const pick = custom ? "custom" : cur || def;
+  return `<select id="vdsize" style="width:auto;margin:0">${ds.sizes.map((v) => `<option value="${v}" ${v === pick ? "selected" : ""}>${v}${v === ds.screen ? t("（屏幕大小）") : ""}</option>`).join("")}
+      <option value="custom" ${custom ? "selected" : ""}>${t("自定义")}</option></select>
+    <input id="vdres" placeholder="1600x1000" value="${esc(custom ? cur : "")}" style="width:120px;margin:0" ${custom ? "" : "hidden"}>`;
+}
+function wireSize(d) {
+  const on = d.querySelector("#vd"), size = d.querySelector("#vdsize"), res = d.querySelector("#vdres");
+  const sync = () => { size.disabled = res.disabled = !on.checked; res.hidden = size.value !== "custom"; };
+  on.onchange = size.onchange = () => { sync(); if (!res.hidden) res.focus(); };
+  sync();
+}
+// readSize is "" (off), the size, or throws on a custom one that is no WxH.
+function readSize(d) {
+  if (!d.querySelector("#vd").checked) return "";
+  const v = d.querySelector("#vdsize").value;
+  if (v !== "custom") return v;
+  const c = d.querySelector("#vdres").value.trim().toLowerCase();
+  if (!/^[1-9]\d*x[1-9]\d*$/.test(c)) throw new Error(t("虚拟桌面大小要写成 宽x高，比如 1600x1000"));
+  return c;
+}
+
 async function settings(name) {
-  const st = await call("Settings", name);
+  const [st, ds] = await Promise.all([call("Settings", name), call("DesktopSizes")]);
   dialog(`<b>${t("{0} 设置", esc(name))}</b>
     <div class="form">
       <label>${t("Windows 版本")}</label><select id="wv"><option value="">${t("默认（Windows 10）")}</option>${WINVER.map(([v, label]) => `<option value="${v}" ${st.windows_version === v ? "selected" : ""}>${label}</option>`).join("")}</select>
       <label>${t("虚拟桌面")}</label><div class="inline"><input type="checkbox" id="vd" ${st.virtual_desktop ? "checked" : ""}>
-        <input id="vdres" placeholder="1920x1080" value="${esc(st.virtual_desktop || "1920x1080")}" style="width:140px"><small class="meta">${t("程序都开在一个 Wine 桌面窗口里")}</small></div>
+        ${sizeField(st.virtual_desktop, ds)}<small class="meta">${t("程序都开在一个 Wine 桌面窗口里")}</small></div>
       <label>${t("缩放（DPI）")}</label><select id="dpi">${DPIS().map(([v, label]) => `<option value="${v}" ${st.dpi === v ? "selected" : ""}>${label}${v ? t("（{0}）", v) : ""}</option>`).join("")}
         ${st.dpi && !DPIS().some(([v]) => v === st.dpi) ? `<option value="${st.dpi}" selected>${st.dpi}</option>` : ""}</select>
       <label>${t("区域")}</label><div>${localeField(st.locale)}<small class="meta">${LOCALE_NOTE()}</small></div>
@@ -924,13 +950,15 @@ async function settings(name) {
     <div class="row"><button id="c">${t("取消")}</button><button id="s" class="primary">${t("保存并应用")}</button></div>`, (d) => {
     wireLocale(d);
     wireFonts(d);
+    wireSize(d);
     showFontStatus(d);
     d.querySelector("#c").onclick = () => d.close();
     d.querySelector("#s").onclick = async () => {
-      const next = { ...st, locale: readLocale(d), font_sets: readFonts(d), windows_version: d.querySelector("#wv").value,
-        virtual_desktop: d.querySelector("#vd").checked ? d.querySelector("#vdres").value.trim() : "",
-        dpi: +d.querySelector("#dpi").value };
-      try { await call("SaveSettings", name, next); d.close(); await applyNow(name); }
+      try {
+        const next = { ...st, locale: readLocale(d), font_sets: readFonts(d), windows_version: d.querySelector("#wv").value,
+          virtual_desktop: readSize(d), dpi: +d.querySelector("#dpi").value };
+        await call("SaveSettings", name, next); d.close(); await applyNow(name);
+      }
       catch (e) { d.querySelector("#e").textContent = e.message || e; }
     };
   });

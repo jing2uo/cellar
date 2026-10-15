@@ -25,6 +25,7 @@ import (
 	"github.com/jing2uo/cellar/internal/appmgr"
 	"github.com/jing2uo/cellar/internal/config"
 	"github.com/jing2uo/cellar/internal/desktop"
+	"github.com/jing2uo/cellar/internal/display"
 	"github.com/jing2uo/cellar/internal/fonts"
 	"github.com/jing2uo/cellar/internal/importer"
 	"github.com/jing2uo/cellar/internal/launch"
@@ -838,6 +839,22 @@ func (s *Service) RemoveApp(name, id string) error {
 		return err
 	}
 	return appmgr.Remove(p, id)
+}
+
+// DesktopSizes are the virtual desktop sizes to offer: Wine's own for this
+// screen (internal/display); Screen is the screen's, "" with no display.
+type DesktopSizes struct {
+	Screen string   `json:"screen"`
+	Sizes  []string `json:"sizes"`
+}
+
+func (s *Service) DesktopSizes() DesktopSizes {
+	w, h := display.Screen()
+	ds := DesktopSizes{Sizes: display.Sizes(w, h)}
+	if w > 0 {
+		ds.Screen = display.Format(w, h)
+	}
+	return ds
 }
 
 // ApplyBusy tells the page, before it applies, that the plan needs what

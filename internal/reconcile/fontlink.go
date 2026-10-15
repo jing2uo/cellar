@@ -11,7 +11,7 @@ import (
 	"unicode/utf16"
 
 	"github.com/jing2uo/cellar/internal/config"
-	"github.com/jing2uo/cellar/internal/fontreg"
+	"github.com/jing2uo/cellar/internal/regfile"
 )
 
 const linkKey = `HKEY_LOCAL_MACHINE\Software\Microsoft\Windows NT\CurrentVersion\FontLink\SystemLink`
@@ -125,12 +125,12 @@ func linkDrift(pfx string, applied map[string]string) map[string]bool {
 			continue
 		}
 		var entries []string
-		for _, e := range strings.Split(fontreg.Unescape(strings.TrimSuffix(rest, `"`)), "\x00") {
+		for _, e := range strings.Split(regfile.Unescape(strings.TrimSuffix(rest, `"`)), "\x00") {
 			if e != "" {
 				entries = append(entries, e)
 			}
 		}
-		have[fontreg.Unescape(name)] = entries
+		have[regfile.Unescape(name)] = entries
 	}
 	drift := map[string]bool{}
 	for n, v := range applied {

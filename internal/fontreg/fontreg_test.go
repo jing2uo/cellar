@@ -88,9 +88,3 @@ func TestRegFile(t *testing.T) {
 		}
 	}
 }
-
-func TestUnescape(t *testing.T) {
-	if s := Unescape(`a\\b\"c\x4e2d\0`); s != "a\\b\"c中\x00" {
-		t.Errorf("got %q", s)
-	}
-}

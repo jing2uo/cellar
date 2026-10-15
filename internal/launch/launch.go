@@ -24,6 +24,7 @@ import (
 
 	"github.com/jing2uo/cellar/internal/config"
 	"github.com/jing2uo/cellar/internal/fontreg"
+	"github.com/jing2uo/cellar/internal/regfile"
 	"github.com/jing2uo/cellar/internal/runner"
 	"github.com/jing2uo/cellar/internal/store"
 )
@@ -127,6 +128,9 @@ func Run(p *store.Prefix, c *config.Config, r *runner.Runner, o Options) (*Meta,
 
 	argv := append([]string{exe}, args...)
 	if vd != "" && vd != "off" {
+		if err := desktopSize(r, p.Pfx, env, vd); err != nil {
+			fmt.Fprintf(logf, "cellar: virtual desktop size: %v\n", err)
+		}
 		// One named desktop per app, so launching it again joins the window
 		// already open (Bottles makes a new one every launch).
 		name := p.Name
@@ -177,6 +181,24 @@ func Run(p *store.Prefix, c *config.Config, r *runner.Runner, o Options) (*Meta,
 	}
 	prune(p.RunsDir())
 	return m, nil
+}
+
+// desktopSize makes Wine take the virtual desktop's size. Wine sizes it by
+// switching to that display mode, and its modes are a list of common sizes
+// up to the screen's (internal/display) plus the Desktops "Default" size:
+// any other size is refused and the desktop keeps Default's. Default is set
+// to the size every time it differs, so one an app overrides works too.
+func desktopSize(r *runner.Runner, pfx string, env map[string]string, size string) error {
+	cur, err := regfile.Values(filepath.Join(pfx, "user.reg"), `Software\Wine\Explorer\Desktops`)
+	if err != nil || cur["Default"] == size {
+		return err
+	}
+	out, err := r.Command(pfx, env, "reg", "add", `HKCU\Software\Wine\Explorer\Desktops`,
+		"/v", "Default", "/t", "REG_SZ", "/d", size, "/f").CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("reg add: %v\n%s", err, strings.TrimSpace(string(out)))
+	}
+	return nil
 }
 
 // InstallDrive is the drive letter cellar points at the folder of a program
