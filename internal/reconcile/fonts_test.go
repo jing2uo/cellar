@@ -218,9 +218,6 @@ func TestLinkDrift(t *testing.T) {
 	if d := linkDrift(pfx, applied); d["Microsoft Sans Serif"] || !d["Tahoma"] || !d["Segoe UI"] {
 		t.Errorf("drift %v", d)
 	}
-	if s := unescapeReg(`a\\b\"c\x4e2d\0`); s != "a\\b\"c中\x00" {
-		t.Errorf("unescape %q", s)
-	}
 }
 
 func TestCoreFromLibrary(t *testing.T) {

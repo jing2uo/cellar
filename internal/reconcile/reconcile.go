@@ -20,6 +20,7 @@ import (
 	"time"
 
 	"github.com/jing2uo/cellar/internal/config"
+	"github.com/jing2uo/cellar/internal/fontreg"
 	"github.com/jing2uo/cellar/internal/fonts"
 	"github.com/jing2uo/cellar/internal/launch"
 	"github.com/jing2uo/cellar/internal/runner"
@@ -295,9 +296,9 @@ func want(c *config.Config) (*desired, []string, error) {
 		if err != nil {
 			continue
 		}
-		file := filepath.Base(f.Path)
-		d.fonts[file] = f.Path
-		put(d.reg, normKey(`HKLM\Software\Microsoft\Windows NT\CurrentVersion\Fonts`), f.Family+" (TrueType)", value("sz:"+file))
+		// Listed in the Fonts key by fontreg at the end of Apply, with the
+		// fonts put there any other way.
+		d.fonts[filepath.Base(f.Path)] = f.Path
 	}
 	eff, _ := config.EffectiveFontSets(c.FontSets)
 	for _, id := range eff {
@@ -507,6 +508,13 @@ func (pl *Plan) Apply(log func(string)) error {
 			return fmt.Errorf("install: %w", err)
 		}
 		installFP = fp
+	}
+
+	// The fonts just copied, and any winetricks or the installer added.
+	if ch, err := fontreg.Sync(pl.r, pl.p.Pfx, pl.c.Env); err != nil {
+		return fmt.Errorf("fonts registry: %w", err)
+	} else if !ch.Empty() {
+		log(ch.String())
 	}
 
 	// Make wineserver flush the registry before we record success.

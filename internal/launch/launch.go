@@ -23,6 +23,7 @@ import (
 	"golang.org/x/text/encoding/simplifiedchinese"
 
 	"github.com/jing2uo/cellar/internal/config"
+	"github.com/jing2uo/cellar/internal/fontreg"
 	"github.com/jing2uo/cellar/internal/runner"
 	"github.com/jing2uo/cellar/internal/store"
 )
@@ -115,6 +116,14 @@ func Run(p *store.Prefix, c *config.Config, r *runner.Runner, o Options) (*Meta,
 		return nil, err
 	}
 	defer logf.Close()
+
+	// Fonts added to or deleted from C:\windows\Fonts since the last run,
+	// by hand or by a program, get listed for DirectWrite.
+	if ch, err := fontreg.Sync(r, p.Pfx, env); err != nil {
+		fmt.Fprintf(logf, "cellar: fonts registry: %v\n", err)
+	} else if !ch.Empty() {
+		fmt.Fprintf(logf, "cellar: %s\n", ch)
+	}
 
 	argv := append([]string{exe}, args...)
 	if vd != "" && vd != "off" {

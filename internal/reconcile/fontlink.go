@@ -7,11 +7,11 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
-	"strconv"
 	"strings"
 	"unicode/utf16"
 
 	"github.com/jing2uo/cellar/internal/config"
+	"github.com/jing2uo/cellar/internal/fontreg"
 )
 
 const linkKey = `HKEY_LOCAL_MACHINE\Software\Microsoft\Windows NT\CurrentVersion\FontLink\SystemLink`
@@ -125,12 +125,12 @@ func linkDrift(pfx string, applied map[string]string) map[string]bool {
 			continue
 		}
 		var entries []string
-		for _, e := range strings.Split(unescapeReg(strings.TrimSuffix(rest, `"`)), "\x00") {
+		for _, e := range strings.Split(fontreg.Unescape(strings.TrimSuffix(rest, `"`)), "\x00") {
 			if e != "" {
 				entries = append(entries, e)
 			}
 		}
-		have[unescapeReg(name)] = entries
+		have[fontreg.Unescape(name)] = entries
 	}
 	drift := map[string]bool{}
 	for n, v := range applied {
@@ -143,38 +143,4 @@ func linkDrift(pfx string, applied map[string]string) map[string]bool {
 		}
 	}
 	return drift
-}
-
-// unescapeReg undoes the escapes of a Wine .reg string: \\ \" \0 \n
-// \r \t and \x followed by up to four hex digits.
-func unescapeReg(s string) string {
-	var b strings.Builder
-	for i := 0; i < len(s); i++ {
-		if s[i] != '\\' || i+1 == len(s) {
-			b.WriteByte(s[i])
-			continue
-		}
-		i++
-		switch c := s[i]; c {
-		case '0':
-			b.WriteByte(0)
-		case 'n':
-			b.WriteByte('\n')
-		case 'r':
-			b.WriteByte('\r')
-		case 't':
-			b.WriteByte('\t')
-		case 'x':
-			j := i + 1
-			for j < len(s) && j < i+5 && strings.IndexByte("0123456789abcdefABCDEF", s[j]) >= 0 {
-				j++
-			}
-			n, _ := strconv.ParseUint(s[i+1:j], 16, 16)
-			b.WriteString(string(utf16.Decode([]uint16{uint16(n)})))
-			i = j - 1
-		default:
-			b.WriteByte(c)
-		}
-	}
-	return b.String()
 }
