@@ -38,7 +38,7 @@ const usage = `cellar - Wine prefixes from cellar.toml
   cellar rm <prefix> [--yes]         delete it and everything installed in it
   cellar inspect <prefix>            effective config, defaults merged in
   cellar plan <prefix> [--force]     what apply would change
-  cellar apply <prefix> [--force]
+  cellar apply <prefix> [--force] [--kill]   --kill: end what runs in it first, if a step needs that
   cellar edit <prefix>               edit cellar.toml in $EDITOR, then apply
   cellar revert <prefix>             undo cellar.toml edits made since the last apply
   cellar run <prefix>[/<app>] [--exe X] [--trace +chan] [-- args]
@@ -52,7 +52,10 @@ const usage = `cellar - Wine prefixes from cellar.toml
   cellar fonts [list] | get <pack> | rm <pack> | policy [host-first|library-only]
                                      the font library (packs: ` + "PACKS" + `)
   cellar logs <prefix> [--run ID] [--tail N] [--clear]
-  cellar kill <prefix>
+  cellar ps <prefix> [--all]         what runs in it (--all: Wine's own processes too)
+  cellar kill <prefix> [<pid>|<name.exe>...]   end everything, or those
+  cellar block <prefix> [<name.exe>...] [--rm]   keep programs from running (ending them now);
+                                     --rm lets them run again; no names: list the blocked
   cellar desktop <prefix>[/<app>] [--remove]
   cellar app discover <prefix>       programs installed but not added yet
   cellar app add <prefix> <C:\path.exe> [--name N] [--args "..."] [--no-desktop]
@@ -83,7 +86,7 @@ func main() {
 	}
 	cmds := map[string]func([]string) error{
 		"new": cmdNew, "create": cmdNew, "rm": cmdRm, "list": cmdList, "inspect": cmdInspect, "plan": cmdPlan,
-		"apply": cmdApply, "config": cmdConfig, "deps": cmdDeps, "fonts": cmdFonts, "revert": cmdRevert, "run": cmdRun, "logs": cmdLogs, "kill": cmdKill,
+		"apply": cmdApply, "config": cmdConfig, "deps": cmdDeps, "fonts": cmdFonts, "revert": cmdRevert, "run": cmdRun, "logs": cmdLogs, "kill": cmdKill, "ps": cmdPs, "block": cmdBlock,
 		"desktop": cmdDesktop, "import": cmdImport, "app": cmdApp, "runner": cmdRunner,
 		"gui": func(a []string) error {
 			view := ""
@@ -329,7 +332,7 @@ func cmdList(args []string) error {
 			if c, err = p.Load(); err == nil {
 				st, _ := p.State()
 				r.Runner, r.Locale, r.Fonts, r.Applied = c.Runner, c.Locale, c.FontSets, st.Hash != ""
-				r.Dirty = r.Applied && st.Hash != c.Hash()
+				r.Dirty = r.Applied && (st.Hash != c.Hash() || reconcile.Drifted(p, st))
 				for _, a := range c.Apps {
 					r.Apps = append(r.Apps, a.ID)
 				}
@@ -445,9 +448,25 @@ func cmdRevert(args []string) error {
 }
 
 func cmdApply(args []string) error {
-	pl, err := plan(args, "apply")
+	fs := flag.NewFlagSet("apply", flag.ContinueOnError)
+	force := fs.Bool("force", false, "rewrite every managed value")
+	kill := fs.Bool("kill", false, "end the prefix's programs first if a step needs that")
+	pos, _, err := parse(fs, args)
 	if err != nil {
 		return err
+	}
+	p, c, _, err := open(pos)
+	if err != nil {
+		return err
+	}
+	pl, err := reconcile.Compute(p, c, *force)
+	if err != nil {
+		return err
+	}
+	if *kill && pl.NeedsIdle() {
+		if r, err := runner.Resolve(c.Runner); err == nil {
+			r.Kill(p.Pfx, c.Env)
+		}
 	}
 	logf := func(s string) {
 		if !jsonOut {
@@ -458,7 +477,7 @@ func cmdApply(args []string) error {
 		printPlan(pl)
 	}
 	if err := pl.Apply(logf); err != nil {
-		return err
+		return busyHint(err, pl.Prefix)
 	}
 	// cellar.toml may have been edited by hand: launchers follow its apps.
 	if p, err := store.Open(pl.Prefix); err == nil {
@@ -582,23 +601,6 @@ func cmdLogs(args []string) error {
 	}
 	fmt.Println(launch.FormatMeta(m))
 	fmt.Println(strings.Join(lines, "\n"))
-	return nil
-}
-
-func cmdKill(args []string) error {
-	pos, _, err := parse(flag.NewFlagSet("kill", flag.ContinueOnError), args)
-	if err != nil {
-		return err
-	}
-	p, c, _, err := open(pos)
-	if err != nil {
-		return err
-	}
-	r, err := runner.Resolve(c.Runner)
-	if err != nil {
-		return err
-	}
-	r.Kill(p.Pfx, c.Env)
 	return nil
 }
 

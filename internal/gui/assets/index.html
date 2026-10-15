@@ -1020,7 +1020,7 @@ function procs(name) {
         `<span class="tag">${esc(n)} <a href="#" data-ub="${esc(n)}" title="${t("允许运行")}">×</a></span>`).join("")}</div>` : "";
       d.querySelectorAll("[data-ub]").forEach((a) => a.onclick = async (ev) => {
         ev.preventDefault();
-        try { await call("Block", name, [a.dataset.ub], [], false); toast(t("已允许 {0} 运行", a.dataset.ub)); } catch (e) { fail(e); }
+        try { await call("Block", name, [a.dataset.ub], false); toast(t("已允许 {0} 运行", a.dataset.ub)); } catch (e) { fail(e); }
         blocked();
       });
     };
@@ -1035,7 +1035,7 @@ function procs(name) {
       const s = chosen();
       const names = [...new Set(s.map((p) => p.name.toLowerCase()))];
       if (!await ask(t("禁止 {0} 运行？正在运行的会被结束，以后也不会再启动。可以在这里恢复。", names.join(t("、"))))) return;
-      try { await call("Block", name, names, s.map((p) => p.pid), true); toast(t("已禁止 {0}", names.join(t("、")))); } catch (e) { fail(e); }
+      try { await call("Block", name, names, true); toast(t("已禁止 {0}", names.join(t("、")))); } catch (e) { fail(e); }
       picked.clear(); refresh(500); blocked();
     };
     refresh(); blocked();

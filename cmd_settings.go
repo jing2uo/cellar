@@ -14,6 +14,7 @@ import (
 	"github.com/jing2uo/cellar/internal/about"
 	"github.com/jing2uo/cellar/internal/appmgr"
 	"github.com/jing2uo/cellar/internal/config"
+	"github.com/jing2uo/cellar/internal/display"
 	"github.com/jing2uo/cellar/internal/fonts"
 	"github.com/jing2uo/cellar/internal/prefs"
 	"github.com/jing2uo/cellar/internal/reconcile"
@@ -61,11 +62,11 @@ func applyNow(p *store.Prefix) error {
 	if len(pl.Changes) == 0 {
 		return nil
 	}
-	return pl.Apply(func(s string) {
+	return busyHint(pl.Apply(func(s string) {
 		if !jsonOut {
 			fmt.Println("·", s)
 		}
-	})
+	}), p.Name)
 }
 
 // cmdConfig shows or changes a prefix's settings: what the GUI's settings
@@ -101,7 +102,11 @@ func cmdConfig(args []string) error {
 		show("locale", loc, "")
 		show("fonts", or(strings.Join(st.FontSets, ","), "none"), "core cjk all (all includes the other two)")
 		show("winver", or(st.WindowsVersion, "(win10)"), "win11 win10 win81 win7 winxp")
-		show("desktop", or(st.VirtualDesktop, "off"), "WxH or off")
+		desk := "WxH or off"
+		if w, h := display.Screen(); w > 0 {
+			desk += fmt.Sprintf(" (screen %s: Wine lists %s; any other size works too)", display.Format(w, h), strings.Join(display.Sizes(w, h), " "))
+		}
+		show("desktop", or(st.VirtualDesktop, "off"), desk)
 		dpi := "auto"
 		if st.DPI > 0 {
 			dpi = strconv.Itoa(st.DPI)
@@ -138,8 +143,10 @@ func cmdConfig(args []string) error {
 		case "desktop":
 			if v == "off" {
 				v = ""
+			} else if _, _, ok := display.Parse(v); !ok {
+				return fmt.Errorf("desktop %q: WxH (1920x1080), or off", v)
 			}
-			st.VirtualDesktop = v
+			st.VirtualDesktop = strings.ToLower(v)
 		case "dpi":
 			if v == "auto" || v == "" {
 				st.DPI = 0

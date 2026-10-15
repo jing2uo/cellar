@@ -904,25 +904,20 @@ func (s *Service) Blocked(name string) ([]string, error) {
 	return config.ReadBlocked(p.Config)
 }
 
-// Block keeps programs from running: they go into cellar.toml's
-// dll_overrides as disabled, which applies at once (live, with programs
-// running), and then the running ones (pids) are ended. Unblock (block
-// false) lets them run again.
-func (s *Service) Block(name string, names []string, pids []int, block bool) error {
+// Block keeps programs from running and ends their running copies, or
+// (block false) lets them run again: appmgr.Block.
+func (s *Service) Block(name string, names []string, block bool) error {
 	p, err := store.Open(name)
 	if err != nil {
 		return err
 	}
-	if err := config.SetBlocked(p.Config, names, block); err != nil {
-		return err
-	}
-	if _, err := s.Apply(name); errors.Is(err, reconcile.ErrBusy) {
+	if err := appmgr.Block(p, names, block); errors.Is(err, reconcile.ErrBusy) {
 		return errors.New(tr("已写入 cellar.toml，但还有其他改动要等程序都结束后才能应用",
 			"Written to cellar.toml, but other pending changes can be applied only once the programs end"))
 	} else if err != nil {
 		return err
 	}
-	return s.EndProcesses(name, pids)
+	return nil
 }
 
 // Kill ends every process in the prefix (wineserver -k).
