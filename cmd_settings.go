@@ -314,10 +314,12 @@ func cmdFonts(args []string) error {
 	case "list":
 		pr, packs, sets := prefs.Load(), fonts.Packs(), fonts.Statuses()
 		if jsonOut {
-			emit(map[string]any{"source": pr.Fonts.Source, "packs": packs, "sets": sets, "library": fonts.LibraryDir()})
+			emit(map[string]any{"source": pr.Fonts.Source, "core": pr.Fonts.Core, "packs": packs, "sets": sets,
+				"library": fonts.LibraryDir(), "windows": fonts.WindowsFonts(), "extras": fonts.Extras()})
 			return nil
 		}
-		fmt.Printf("source: %s   (cellar fonts policy host-first|library-only)\n\n", pr.Fonts.Source)
+		fmt.Printf("source: %s   (cellar fonts policy host-first|library-only)\n", pr.Fonts.Source)
+		fmt.Printf("core:   %s   (cellar fonts core liberation|microsoft)\n\n", pr.Fonts.Core)
 		for _, p := range packs {
 			state := "not downloaded"
 			switch {
@@ -345,7 +347,18 @@ func cmdFonts(args []string) error {
 			}
 			fmt.Printf("set %-6s -> %s\n", s.ID, use)
 		}
-		fmt.Println("\nlibrary:", fonts.LibraryDir())
+		fmt.Println()
+		for _, w := range fonts.WindowsFonts() {
+			state := "in the library: " + w.File
+			if w.File == "" {
+				state = "not found: Noto Sans CJK stands in (put the font file into the library to use it)"
+			}
+			fmt.Printf("%-16s %s\n", w.Families[0], state)
+		}
+		for _, x := range fonts.Extras() {
+			fmt.Printf("extra: %s  %s\n", x.File, strings.Join(x.Families, ", "))
+		}
+		fmt.Println("\nlibrary:", fonts.LibraryDir(), "(fonts put here go to every prefix with font sets)")
 		return nil
 	case "get", "rm":
 		if len(pos) != 2 || config.PackByID(pos[1]) == nil {
@@ -371,8 +384,24 @@ func cmdFonts(args []string) error {
 		}
 		pr.Fonts.Source = pos[1]
 		return prefs.Save(pr)
+	case "core":
+		pr := prefs.Load()
+		if len(pos) == 1 {
+			fmt.Println(pr.Fonts.Core)
+			return nil
+		}
+		pr.Fonts.Core = pos[1]
+		if err := prefs.Save(pr); err != nil {
+			return err
+		}
+		for _, st := range fonts.Statuses() {
+			if st.ID == "core" && st.Source == "missing" && !jsonOut {
+				fmt.Println("not here yet: cellar fonts get " + st.Pack)
+			}
+		}
+		return nil
 	}
-	return fmt.Errorf("unknown fonts command %q (list, get, rm, policy)", pos[0])
+	return fmt.Errorf("unknown fonts command %q (list, get, rm, policy, core)", pos[0])
 }
 
 func or(s, def string) string {

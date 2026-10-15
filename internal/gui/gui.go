@@ -220,6 +220,22 @@ func (s *Service) GetFontPack(id string) (string, error) {
 // FontTask is the library download running now, if any.
 func (s *Service) FontTask() string { return s.tasks.running(fontTask) }
 
+// LibraryFonts is what the font settings show of the library beyond its
+// packs: Microsoft YaHei and SimSun, found or not, and every font dropped
+// in by hand (all of which every prefix with a font set gets).
+type LibraryFonts struct {
+	Windows []fonts.WindowsFont `json:"windows"`
+	Extras  []fonts.Extra       `json:"extras"`
+}
+
+func (s *Service) LibraryFonts() LibraryFonts {
+	lf := LibraryFonts{Windows: fonts.WindowsFonts(), Extras: fonts.Extras()}
+	if lf.Extras == nil {
+		lf.Extras = []fonts.Extra{}
+	}
+	return lf
+}
+
 func (s *Service) RemoveFontPack(id string) error { return fonts.RemovePack(id) }
 
 // OpenFontDir shows the font library in the file manager, to put fonts in

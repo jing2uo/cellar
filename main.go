@@ -49,8 +49,9 @@ const usage = `cellar - Wine prefixes from cellar.toml
   cellar deps <prefix> [add|rm <verb>...]  winetricks verbs (dlls, fonts); add installs at once
   cellar deps common                 the verbs most programs need
   cellar deps search <word>...       find winetricks verbs
-  cellar fonts [list] | get <pack> | rm <pack> | policy [host-first|library-only]
-                                     the font library (packs: ` + "PACKS" + `)
+  cellar fonts [list] | get <pack> | rm <pack> | policy [host-first|library-only] | core [liberation|microsoft]
+                                     the font library (packs: ` + "PACKS" + `); fonts put into it by hand
+                                     go to every prefix with font sets
   cellar logs <prefix> [--run ID] [--tail N] [--clear]
   cellar ps <prefix> [--all]         what runs in it (--all: Wine's own processes too)
   cellar kill <prefix> [<pid>|<name.exe>...]   end everything, or those

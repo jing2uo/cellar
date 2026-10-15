@@ -32,7 +32,8 @@ type Face struct {
 	Family string
 	File   string
 	URL    string
-	Member string // set when URL is a .tar.gz: File's path in it
+	Member string // set when URL is an archive (.tar.gz, .exe cabinet): File's path in it
+	Sum    string // the archive's sha256, when known
 	Size   int64
 	Pack   string
 }
@@ -47,6 +48,7 @@ type Pack struct {
 
 var Packs = []Pack{
 	{"liberation", "英文", "Liberation Sans、Serif、Mono：Arial、Times New Roman、Courier New 的替代"},
+	{"mscore", "微软核心字体", "Arial、Times New Roman、Courier New、Verdana 等原版英文字体（微软 Core fonts for the Web）"},
 	{"cjk", "CJK", "Noto Sans CJK：简体、繁体、日文、韩文都在这一个文件里"},
 	{"cjk-serif", "CJK 衬线", "Noto Serif CJK：给要用仿宋、楷体等衬线字体的程序"},
 	{"scripts", "全语种", "150 种文字的 Noto Sans，补齐泰文、阿拉伯文、印度文字等（字体选“全部”时用）"},
@@ -118,7 +120,7 @@ type scriptFace struct {
 
 var FontSets = []FontSet{
 	{ID: "core", Name: "英文", Primary: "sans",
-		Note: "Arial、Times New Roman、Courier New 换成 Liberation",
+		Note: "Arial、Times New Roman、Courier New 用 设置 → 字体 里选的英文核心字体",
 		Roles: map[string]Face{
 			"sans":  liberationFace("Sans", 410712),
 			"serif": liberationFace("Serif", 393576),
@@ -191,11 +193,68 @@ var scripts = func() FontSet {
 	return fs
 }()
 
+// mscore is the hidden set of Microsoft's core fonts, a role per file:
+// what core uses in place of Liberation when the settings say so (the
+// roles MSCoreFor names), and all of it is copied in then. They come as
+// the self-extracting cabinets of Core fonts for the Web, which may be
+// passed on unmodified; winetricks' corefonts takes them from the same
+// mirror.
+var mscore = func() FontSet {
+	fs := FontSet{ID: "mscore", Name: "微软核心字体", Roles: map[string]Face{}}
+	const mirror = "https://github.com/pushcx/corefonts/raw/master/"
+	cabs := []struct {
+		exe, sum string
+		files    map[string]string // file (lower case) -> family
+	}{
+		{"andale32.exe", "0524fe42951adc3a7eb870e32f0920313c71f170c859b5f770d82b4ee111e970", map[string]string{"andalemo.ttf": "Andale Mono"}},
+		{"arial32.exe", "85297a4d146e9c87ac6f74822734bdee5f4b2a722d7eaa584b7f2cbf76f478f6", map[string]string{
+			"arial.ttf": "Arial", "arialbd.ttf": "Arial", "ariali.ttf": "Arial", "arialbi.ttf": "Arial"}},
+		{"arialb32.exe", "a425f0ffb6a1a5ede5b979ed6177f4f4f4fdef6ae7c302a7b7720ef332fec0a8", map[string]string{"ariblk.ttf": "Arial Black"}},
+		{"comic32.exe", "9c6df3feefde26d4e41d4a4fe5db2a89f9123a772594d7f59afd062625cd204e", map[string]string{
+			"comic.ttf": "Comic Sans MS", "comicbd.ttf": "Comic Sans MS"}},
+		{"courie32.exe", "bb511d861655dde879ae552eb86b134d6fae67cb58502e6ff73ec5d9151f3384", map[string]string{
+			"cour.ttf": "Courier New", "courbd.ttf": "Courier New", "couri.ttf": "Courier New", "courbi.ttf": "Courier New"}},
+		{"georgi32.exe", "2c2c7dcda6606ea5cf08918fb7cd3f3359e9e84338dc690013f20cd42e930301", map[string]string{
+			"georgia.ttf": "Georgia", "georgiab.ttf": "Georgia", "georgiai.ttf": "Georgia", "georgiaz.ttf": "Georgia"}},
+		{"impact32.exe", "6061ef3b7401d9642f5dfdb5f2b376aa14663f6275e60a51207ad4facf2fccfb", map[string]string{"impact.ttf": "Impact"}},
+		{"times32.exe", "db56595ec6ef5d3de5c24994f001f03b2a13e37cee27bc25c58f6f43e8f807ab", map[string]string{
+			"times.ttf": "Times New Roman", "timesbd.ttf": "Times New Roman", "timesi.ttf": "Times New Roman", "timesbi.ttf": "Times New Roman"}},
+		{"trebuc32.exe", "5a690d9bb8510be1b8b4fe49f1f2319651fe51bbe54775ddddd8ef0bd07fdac9", map[string]string{
+			"trebuc.ttf": "Trebuchet MS", "trebucbd.ttf": "Trebuchet MS", "trebucit.ttf": "Trebuchet MS", "trebucbi.ttf": "Trebuchet MS"}},
+		{"verdan32.exe", "c1cb61255e363166794e47664e2f21af8e3a26cb6346eb8d2ae2fa85dd5aad96", map[string]string{
+			"verdana.ttf": "Verdana", "verdanab.ttf": "Verdana", "verdanai.ttf": "Verdana", "verdanaz.ttf": "Verdana"}},
+		{"webdin32.exe", "64595b5abc1080fba8610c5c34fab5863408e806aafe84653ca8575bed17d75a", map[string]string{"webdings.ttf": "Webdings"}},
+	}
+	// A family's Regular file is what the host's copy of the family stands
+	// in for; the other styles come with the pack only.
+	regular := map[string]bool{"andalemo.ttf": true, "arial.ttf": true, "ariblk.ttf": true, "comic.ttf": true,
+		"cour.ttf": true, "georgia.ttf": true, "impact.ttf": true, "times.ttf": true, "trebuc.ttf": true,
+		"verdana.ttf": true, "webdings.ttf": true}
+	for _, c := range cabs {
+		for file, family := range c.files {
+			var host []string
+			if regular[file] {
+				host = []string{family}
+			}
+			fs.Roles[strings.TrimSuffix(file, ".ttf")] = Face{Host: host, Family: family, File: file,
+				URL: mirror + c.exe, Member: file, Sum: c.sum, Pack: "mscore"}
+		}
+	}
+	return fs
+}()
+
+// MSCoreFor maps core's roles to the mscore roles that fill them when
+// Microsoft's fonts are chosen.
+var MSCoreFor = map[string]string{"sans": "arial", "serif": "times", "mono": "cour"}
+
+// MSCoreRoles are mscore's roles, sorted.
+func MSCoreRoles() []string { return sortedKeys(roleSet(mscore.Roles)) }
+
 // FileFamilies are the families each pack file holds (a CJK collection
 // holds a region each): having any of them means having the file.
 func FileFamilies() map[string][]string {
 	out := map[string][]string{}
-	for _, fs := range append(slices.Clone(FontSets), scripts) {
+	for _, fs := range append(slices.Clone(FontSets), scripts, mscore) {
 		for _, r := range sortedKeys(roleSet(fs.Roles)) {
 			if f := fs.Roles[r]; f.File != "" {
 				out[f.File] = appendNew(out[f.File], f.Family)
@@ -209,7 +268,7 @@ func FileFamilies() map[string][]string {
 func PackFaces(pack string) []Face {
 	var out []Face
 	seen := map[string]bool{}
-	for _, fs := range append(slices.Clone(FontSets), scripts) {
+	for _, fs := range append(slices.Clone(FontSets), scripts, mscore) {
 		for _, r := range sortedKeys(roleSet(fs.Roles)) {
 			f := fs.Roles[r]
 			if f.Pack == pack && !seen[f.File] {
@@ -231,8 +290,11 @@ func roleSet(m map[string]Face) map[string]bool {
 
 // FontSetByID returns the set, or nil.
 func FontSetByID(id string) *FontSet {
-	if id == scripts.ID {
+	switch id {
+	case scripts.ID:
 		return &scripts
+	case mscore.ID:
+		return &mscore
 	}
 	for i := range FontSets {
 		if FontSets[i].ID == id {

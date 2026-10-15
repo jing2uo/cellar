@@ -301,6 +301,25 @@ func want(c *config.Config) (*desired, []string, error) {
 		d.fonts[filepath.Base(f.Path)] = f.Path
 	}
 	eff, _ := config.EffectiveFontSets(c.FontSets)
+	// Microsoft's core fonts, when chosen, come in whole, styles too.
+	if slices.Contains(eff, "core") && fonts.CorePack() == "mscore" {
+		for _, r := range config.MSCoreRoles() {
+			if f, err := resolve(config.RoleRef("mscore", r)); err == nil {
+				d.fonts[filepath.Base(f.Path)] = f.Path
+			}
+		}
+	}
+	// Fonts dropped into the library go to every prefix with a font set,
+	// and their families are no longer substituted.
+	provided := map[string]bool{}
+	if len(eff) > 0 {
+		for _, x := range fonts.Extras() {
+			d.fonts[x.File] = x.Path
+			for _, fam := range x.Families {
+				provided[strings.ToLower(fam)] = true
+			}
+		}
+	}
 	for _, id := range eff {
 		fs := config.FontSetByID(id)
 		if fs == nil {
@@ -310,7 +329,11 @@ func want(c *config.Config) (*desired, []string, error) {
 		if _, err := resolve(config.RoleRef(id, fs.Primary)); err == nil {
 			continue
 		}
-		switch pack := fs.Roles[fs.Primary].Pack; {
+		pack := fs.Roles[fs.Primary].Pack
+		if id == "core" {
+			pack = fonts.CorePack()
+		}
+		switch {
 		case pack != "":
 			warns = append(warns, fmt.Sprintf("font set %s: its fonts are not here; download them in Settings > Fonts or with `cellar fonts get %s`", fs.Name, pack))
 		default:
@@ -344,9 +367,13 @@ func want(c *config.Config) (*desired, []string, error) {
 		return out, ferr
 	}
 
+	substKey := normKey(`HKLM\Software\Microsoft\Windows NT\CurrentVersion\FontSubstitutes`)
 	for key, vals := range c.Registry {
 		nk := normKey(key)
 		for n, raw := range vals {
+			if nk == substKey && provided[strings.ToLower(n)] {
+				continue // the real font is here
+			}
 			v, err := parseValue(raw, expand)
 			if errors.Is(err, errUnresolved) {
 				continue
@@ -354,6 +381,9 @@ func want(c *config.Config) (*desired, []string, error) {
 			if err != nil {
 				warns = append(warns, fmt.Sprintf("skip %s\\%s: %v", key, n, err))
 				continue
+			}
+			if nk == substKey && v == value("sz:"+n) {
+				continue // Arial to Arial: Microsoft's own core fonts
 			}
 			put(d.reg, nk, n, v)
 		}

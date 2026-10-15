@@ -110,6 +110,8 @@ input { font: inherit; padding: 6px 10px; border: 1px solid var(--line); border-
 .rrow .sub { color: var(--mute); font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .tag { font-size: 11px; padding: 0 7px; border-radius: 99px; background: color-mix(in srgb, var(--text) 8%, transparent); color: var(--mute); }
 .tag.rec { background: var(--accent-soft); color: var(--accent); }
+.tag.ok { background: color-mix(in srgb, var(--ok) 15%, transparent); color: var(--ok); }
+.tag.warn { background: color-mix(in srgb, var(--warn) 15%, transparent); color: var(--warn); }
 .warn { color: var(--warn); font-size: 12px; }
 select { font: inherit; padding: 6px 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--bg); color: var(--text); width: 100%; margin: 4px 0 10px; }
 .head .more { font-size: 18px; line-height: 1; padding: 4px 12px; }
@@ -494,9 +496,30 @@ function renderSettings() {
 }
 const onTab = (tab) => sel === SETTINGS && setTab === tab && $("#settab");
 
+// The English core fonts: one or the other, the one chosen used alone.
+const coreChoices = () => [
+  ["microsoft", t("微软核心字体"), t("Arial、Times New Roman、Verdana 等原版，WPF 程序需要真 Arial")],
+  ["liberation", t("Liberation（开源替代）"), t("开源，字宽与 Arial、Times New Roman、Courier New 相同，按名字替换它们")],
+];
+
 async function renderFonts() {
-  const [pr, packs, running] = await Promise.all([call("Prefs"), call("FontPacks"), call("FontTask")]);
+  const [pr, allPacks, running, lib] = await Promise.all([call("Prefs"), call("FontPacks"), call("FontTask"), call("LibraryFonts")]);
   if (!onTab("fonts")) return;
+  // The English core fonts are a choice of two packs, shown with the
+  // choice rather than in the library list.
+  const corePack = { liberation: allPacks.find((p) => p.id === "liberation"), microsoft: allPacks.find((p) => p.id === "mscore") };
+  const packs = allPacks.filter((p) => p.id !== "liberation" && p.id !== "mscore");
+  const packButtons = (p) => `${p.missing ? `<button data-get="${p.id}" title="${t("约 {0}", mb(p.missing_size))}">${p.missing === p.files ? t("下载") : t("下载缺的 {0} 个", p.missing)}</button>` : ""}
+        ${p.have ? `<button data-rmp="${p.id}">${t("删除")}</button>` : ""}`;
+  // Microsoft YaHei and SimSun: no pack brings them; one dropped into the
+  // folder is found by its name, whatever the file is called.
+  const winNote = lib.windows.every((w) => w.file) ? t("用字体目录里的原版字体")
+    : t("没找到的用 Noto Sans CJK 代替，个别严格检查字体的程序可能显示异常");
+  const winRow = `<div class="rrow"><div class="grow"><b>${t("微软雅黑 / 宋体")}</b>
+      ${lib.windows.map((w) => w.file ? `<span class="tag ok" title="${esc(w.families.join(t("、")))}">${esc(t(w.name))}：${esc(w.file)}</span>`
+        : `<span class="tag warn" title="${esc(w.families.join(t("、")))}">${t("{0} 未找到", esc(t(w.name)))}</span>`).join(" ")}
+      <div class="sub" title="${esc(winNote)}">${winNote}</div></div><button id="wincheck">${t("检查")}</button></div>`;
+  const others = lib.extras.filter((x) => !lib.windows.some((w) => w.file === x.file));
   const packState = (p) => {
     if (p.have === p.files) return `<span class="tag rec">${t("已下载")}</span>`;
     if (p.host === p.files && pr.fonts.source !== "library-only") return `<span class="tag rec">${t("本机已有")}</span>`;
@@ -509,19 +532,29 @@ async function renderFonts() {
       <div class="meta">${t("字体来源")}</div>
       <div class="radios">${fontSources().map(([v, label, note]) => `<label><input type="radio" name="src" value="${v}" ${pr.fonts.source === v ? "checked" : ""}>
         <span>${label}<small>${note}</small></span></label>`).join("")}</div>
-      <div class="meta" style="margin-top:14px">${t("字体库（所有 prefix 都可用）")}</div>
+      <div class="meta" style="margin-top:14px">${t("英文核心字体")}</div>
+      <div class="rlist" style="margin-top:6px">${coreChoices().map(([v, label, note]) => { const p = corePack[v]; return `<div class="rrow">
+        <input type="radio" name="core" id="core-${v}" value="${v}" ${pr.fonts.core === v ? "checked" : ""} style="width:auto;margin:0">
+        <label class="grow" for="core-${v}"><b>${label}</b> ${p ? packState(p) : ""}
+          <div class="sub" title="${esc(note)}">${note}${p ? ` · ${mb(p.size)}` : ""}</div></label>${p ? packButtons(p) : ""}</div>`; }).join("")}</div>
+      <div class="meta" style="margin-top:14px">${t("补充字体")}</div>
       <div class="rlist">${packs.map((p) => `<div class="rrow"><div class="grow"><b>${esc(t(p.name))}</b> ${packState(p)}
           <div class="sub" title="${esc(t(p.note))}">${esc(t(p.note))} · ${mb(p.size)}</div></div>
-        ${p.missing ? `<button data-get="${p.id}" title="${t("约 {0}", mb(p.missing_size))}">${p.missing === p.files ? t("下载") : t("下载缺的 {0} 个", p.missing)}</button>` : ""}
-        ${p.have ? `<button data-rmp="${p.id}">${t("删除")}</button>` : ""}</div>`).join("")}</div>
+        ${packButtons(p)}</div>`).join("")}${winRow}</div>
+      ${others.length ? `<div class="meta" style="margin-top:8px">${t("目录里的其他字体：{0}", esc(others.map((x) => x.file).join(t("、"))))}</div>` : ""}
       <div id="fonttask" class="meta"></div>
       <div class="btnrow" style="margin-top:16px"><button id="fontdir">${t("打开字体目录")}</button>
-        <span class="meta">${t("下载失败时，可以手动下载后放进这个目录。")}</span></div>
+        <span class="meta">${t("放进去的字体会用到所有 prefix；下载失败时也可以手动放进去")}</span></div>
     </section>`;
   document.querySelectorAll('input[name="src"]').forEach((r) => r.onchange = async () => {
     try { await call("SavePrefs", { ...pr, fonts: { ...pr.fonts, source: r.value } }); toast(t("已保存")); } catch (e) { fail(e); }
     renderFonts();
   });
+  document.querySelectorAll('input[name="core"]').forEach((r) => r.onchange = async () => {
+    try { await call("SavePrefs", { ...pr, fonts: { ...pr.fonts, core: r.value } }); toast(t("已保存，程序下次启动时生效")); } catch (e) { fail(e); }
+    renderFonts();
+  });
+  $("#wincheck").onclick = async () => { await renderFonts(); toast(t("已检查字体目录")); };
   document.querySelectorAll("[data-get]").forEach((b) => b.onclick = async () => {
     try { watchFontTask(await call("GetFontPack", b.dataset.get)); } catch (e) { fail(e); }
   });

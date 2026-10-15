@@ -90,8 +90,13 @@ func File(family string) (string, error) {
 }
 
 // Resolve finds the font for "<set>.<role>" (cjk.SC) under the policy.
+// core's roles are the chosen English core fonts': Microsoft's, or
+// Liberation's; the one not chosen never stands in.
 func Resolve(ref string) (Face, error) {
 	id, role, _ := strings.Cut(ref, ".")
+	if ms, ok := config.MSCoreFor[role]; ok && id == "core" && CorePack() == "mscore" {
+		return Resolve("mscore." + ms)
+	}
 	fs := config.FontSetByID(id)
 	if fs == nil {
 		return Face{}, fmt.Errorf("unknown font set %q", id)
@@ -218,6 +223,14 @@ type Status struct {
 	Total  int    `json:"total,omitempty"`
 }
 
+// CorePack is the pack of the chosen English core fonts.
+func CorePack() string {
+	if prefs.Load().Fonts.Core == prefs.CoreLiberation {
+		return "liberation"
+	}
+	return "mscore"
+}
+
 // Statuses resolves each choosable set's Primary.
 func Statuses() []Status {
 	var out []Status
@@ -234,6 +247,9 @@ func Statuses() []Status {
 			continue
 		}
 		st := Status{ID: fs.ID, Pack: fs.Roles[fs.Primary].Pack}
+		if fs.ID == "core" {
+			st.Pack = CorePack()
+		}
 		f, err := Resolve(fs.ID + "." + fs.Primary)
 		switch {
 		case err != nil:

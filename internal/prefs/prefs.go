@@ -19,6 +19,15 @@ const (
 	LibraryOnly = "library-only" // only the library's: the same on every machine
 )
 
+// English core fonts, one or the other: Microsoft's own (Core fonts for
+// the Web, the mscore pack; the default), or the metric-compatible
+// Liberation fonts standing in for them by name. WPF needs a real Arial:
+// it falls back to it by name and does not read substitutes.
+const (
+	CoreLiberation = "liberation"
+	CoreMicrosoft  = "microsoft"
+)
+
 // UI choices for the GUI; "" follows the system.
 const (
 	LangZH = "zh"
@@ -47,6 +56,7 @@ type UI struct {
 
 type Fonts struct {
 	Source string `toml:"source" json:"source"`
+	Core   string `toml:"core,omitempty" json:"core"`
 }
 
 func path() string { return filepath.Join(store.Home(), "settings.toml") }
@@ -63,6 +73,9 @@ func Load() Prefs {
 	default:
 		p.Fonts.Source = HostFirst
 	}
+	if p.Fonts.Core != CoreLiberation {
+		p.Fonts.Core = CoreMicrosoft
+	}
 	if p.UI.Language != LangZH && p.UI.Language != LangEN {
 		p.UI.Language = ""
 	}
@@ -77,6 +90,11 @@ func Save(p Prefs) error {
 	case HostFirst, LibraryOnly:
 	default:
 		return fmt.Errorf("font source %q (want %s or %s)", p.Fonts.Source, HostFirst, LibraryOnly)
+	}
+	switch p.Fonts.Core {
+	case "", CoreLiberation, CoreMicrosoft:
+	default:
+		return fmt.Errorf("core fonts %q (want %s or %s)", p.Fonts.Core, CoreLiberation, CoreMicrosoft)
 	}
 	switch p.UI.Language {
 	case "", LangZH, LangEN:

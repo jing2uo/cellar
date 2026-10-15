@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 
 	"github.com/jing2uo/cellar/internal/config"
@@ -105,7 +106,12 @@ func GetPack(id string, progress func(done, total int, file string)) error {
 			defer wg.Done()
 			sem <- struct{}{}
 			defer func() { <-sem }()
-			err := downloadArchive(url, want)
+			var err error
+			if strings.HasSuffix(url, ".exe") {
+				err = downloadCabinet(url, group[0].Sum, want)
+			} else {
+				err = downloadArchive(url, want)
+			}
 			mu.Lock()
 			defer mu.Unlock()
 			for _, f := range group {

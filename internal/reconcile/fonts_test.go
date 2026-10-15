@@ -9,6 +9,7 @@ import (
 
 	"github.com/jing2uo/cellar/internal/config"
 	"github.com/jing2uo/cellar/internal/fonts"
+	"github.com/jing2uo/cellar/internal/fonts/fontstest"
 	"github.com/jing2uo/cellar/internal/store"
 )
 
@@ -29,14 +30,20 @@ func fakeFcList(t *testing.T, families map[string]string) {
 }
 
 // home is a cellar home with the font source policy set ("" leaves the
-// default, host-first).
-func home(t *testing.T, policy string) string {
+// default, host-first) and the English core fonts (none: the default,
+// Microsoft's).
+func home(t *testing.T, policy string, core ...string) string {
 	t.Helper()
 	h := t.TempDir()
 	t.Setenv("CELLAR_HOME", h)
+	settings := "[fonts]\n"
 	if policy != "" {
-		os.WriteFile(filepath.Join(h, "settings.toml"), []byte("[fonts]\nsource = \""+policy+"\"\n"), 0o644)
+		settings += "source = \"" + policy + "\"\n"
 	}
+	if len(core) > 0 {
+		settings += "core = \"" + core[0] + "\"\n"
+	}
+	os.WriteFile(filepath.Join(h, "settings.toml"), []byte(settings), 0o644)
 	return h
 }
 
@@ -75,9 +82,9 @@ func TestAllFromHost(t *testing.T) {
 		!strings.Contains(link, `"NotoSansThai-Regular.ttf"`) || strings.Contains(link, "Arabic") {
 		t.Errorf("SystemLink %v", link)
 	}
-	// all brings in core, whose Liberation is missing here: a warning
-	// saying how to get it, no winetricks fallback.
-	if len(warns) != 1 || !strings.Contains(warns[0], "cellar fonts get liberation") {
+	// all brings in core, whose fonts (Microsoft's, the default) are
+	// missing here: a warning saying how to get them.
+	if len(warns) != 1 || !strings.Contains(warns[0], "cellar fonts get mscore") {
 		t.Errorf("warns %v", warns)
 	}
 }
@@ -116,7 +123,7 @@ func TestLibraryOnly(t *testing.T) {
 }
 
 func TestCoreFontsWithoutLiberation(t *testing.T) {
-	home(t, "")
+	home(t, "", "liberation")
 	fakeFcList(t, nil)
 	d, warns, err := want(loadSets(t, `"core"`))
 	if err != nil {
@@ -170,7 +177,7 @@ func TestLongChainFitsWine(t *testing.T) {
 	h := home(t, "")
 	fakeFcList(t, nil)
 	os.MkdirAll(filepath.Join(h, "fonts"), 0o755)
-	for _, pack := range []string{"liberation", "cjk", "cjk-serif", "scripts"} {
+	for _, pack := range []string{"mscore", "cjk", "cjk-serif", "scripts"} {
 		for _, f := range config.PackFaces(pack) {
 			os.WriteFile(filepath.Join(h, "fonts", f.File), []byte("font"), 0o644)
 		}
@@ -223,7 +230,7 @@ func TestLinkDrift(t *testing.T) {
 
 func TestCoreFromLibrary(t *testing.T) {
 	// English from the library: Liberation is linked.
-	h := home(t, "library-only")
+	h := home(t, "library-only", "liberation")
 	fakeFcList(t, nil)
 	os.MkdirAll(filepath.Join(h, "fonts"), 0o755)
 	for _, f := range config.PackFaces("liberation") {
@@ -258,5 +265,59 @@ func TestDrifted(t *testing.T) {
 	st.Fonts["gone.ttf"] = "/src/gone.ttf"
 	if !Drifted(p, st) {
 		t.Error("font gone: not drifted")
+	}
+}
+
+func TestExtraFontsWin(t *testing.T) {
+	// A real Microsoft YaHei in the library goes in and is no longer
+	// substituted; SimSun, not here, still is.
+	h := home(t, "")
+	fakeFcList(t, map[string]string{"Noto Sans CJK SC": otc})
+	lib := filepath.Join(h, "fonts")
+	os.MkdirAll(lib, 0o755)
+	os.WriteFile(filepath.Join(lib, "msyh.ttc"), fontstest.Collection(
+		[]string{"Microsoft YaHei", "微软雅黑"}, []string{"Microsoft YaHei UI"}), 0o644)
+	d, _, err := want(loadSets(t, `"cjk"`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	sub := d.reg[normKey(substK)]
+	if d.fonts["msyh.ttc"] == "" || sub["Microsoft YaHei"] != "" || sub["Microsoft YaHei UI"] != "" || sub["微软雅黑"] != "" ||
+		sub["SimSun"] != "sz:Noto Sans CJK SC" {
+		t.Errorf("fonts %v subst %v", d.fonts, sub)
+	}
+	// A prefix with no font set is left alone.
+	if d, _, _ := want(loadSets(t, ``)); len(d.fonts) != 0 {
+		t.Errorf("no font set: fonts %v", d.fonts)
+	}
+}
+
+func TestMicrosoftCore(t *testing.T) {
+	h := home(t, "") // Microsoft's core fonts: the default
+	fakeFcList(t, map[string]string{"Liberation Sans": "/f/LiberationSans-Regular.ttf"})
+	// Not downloaded yet: Liberation, though here, does not stand in; a
+	// warning says what to get.
+	d, warns, _ := want(loadSets(t, `"core"`))
+	if len(d.reg[normKey(substK)]) != 0 || len(d.fonts) != 0 || len(warns) != 1 || !strings.Contains(warns[0], "cellar fonts get mscore") {
+		t.Errorf("subst %v fonts %v warns %v", d.reg[normKey(substK)], d.fonts, warns)
+	}
+	lib := filepath.Join(h, "fonts")
+	os.MkdirAll(lib, 0o755)
+	for _, f := range []string{"arial.ttf", "arialbd.ttf", "times.ttf", "cour.ttf", "verdana.ttf"} {
+		os.WriteFile(filepath.Join(lib, f), []byte("ttf"), 0o644)
+	}
+	// Downloaded: Arial is Arial (no substitute), and the styles and the
+	// other families come along.
+	d, warns, _ = want(loadSets(t, `"core"`))
+	if len(d.reg[normKey(substK)]) != 0 || len(warns) != 0 {
+		t.Errorf("subst %v warns %v", d.reg[normKey(substK)], warns)
+	}
+	for _, f := range []string{"arial.ttf", "arialbd.ttf", "times.ttf", "cour.ttf", "verdana.ttf"} {
+		if d.fonts[f] == "" {
+			t.Errorf("%s not linked: %v", f, d.fonts)
+		}
+	}
+	if d.fonts["LiberationSans-Regular.ttf"] != "" {
+		t.Errorf("Liberation still linked: %v", d.fonts)
 	}
 }
