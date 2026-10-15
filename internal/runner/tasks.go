@@ -27,12 +27,13 @@ var systemProcs = map[string]bool{
 // Tasks lists the prefix's processes. It asks the wineserver (tasklist), so
 // processes started from another Flatpak instance, out of this one's sight
 // in /proc, are there too. With no wineserver up nothing runs, and none is
-// started just to say so.
-func (r *Runner) Tasks(prefix string) ([]Process, error) {
+// started just to say so. env is the prefix's (its locale above all: see
+// Command).
+func (r *Runner) Tasks(prefix string, env map[string]string) ([]Process, error) {
 	if !ServerUp(prefix) {
 		return []Process{}, nil
 	}
-	out, err := r.Command(prefix, nil, "tasklist", "/fo", "csv", "/nh").Output()
+	out, err := r.Command(prefix, env, "tasklist", "/fo", "csv", "/nh").Output()
 	if err != nil {
 		return nil, fmt.Errorf("tasklist: %w", err)
 	}
@@ -73,7 +74,7 @@ func parseTasklist(out []byte) ([]Process, error) {
 }
 
 // TaskKill ends processes by pid (taskkill /f).
-func (r *Runner) TaskKill(prefix string, pids []int) error {
+func (r *Runner) TaskKill(prefix string, env map[string]string, pids []int) error {
 	if len(pids) == 0 {
 		return nil
 	}
@@ -81,7 +82,7 @@ func (r *Runner) TaskKill(prefix string, pids []int) error {
 	for _, p := range pids {
 		args = append(args, "/pid", strconv.Itoa(p))
 	}
-	if out, err := r.Command(prefix, nil, args...).CombinedOutput(); err != nil {
+	if out, err := r.Command(prefix, env, args...).CombinedOutput(); err != nil {
 		return fmt.Errorf("taskkill: %v\n%s", err, bytes.TrimSpace(out))
 	}
 	return nil

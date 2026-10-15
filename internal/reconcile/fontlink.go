@@ -12,6 +12,7 @@ import (
 
 	"github.com/jing2uo/cellar/internal/config"
 	"github.com/jing2uo/cellar/internal/regfile"
+	"github.com/jing2uo/cellar/internal/store"
 )
 
 const linkKey = `HKEY_LOCAL_MACHINE\Software\Microsoft\Windows NT\CurrentVersion\FontLink\SystemLink`
@@ -92,6 +93,23 @@ func spreadLinks(reg map[string]map[string]value) int {
 
 func linkWarning(n int) string {
 	return fmt.Sprintf("font fallback: %d script fonts left out, more than Wine reads of the SystemLink entries", n)
+}
+
+// Drifted tells, from files alone (no wine, cheap enough for a list), that
+// the prefix moved away from what was applied behind cellar's back: font
+// links Wine put back, or applied fonts gone from C:\windows\Fonts. Compute
+// finds these and the rest.
+func Drifted(p *store.Prefix, st *store.State) bool {
+	if len(linkDrift(p.Pfx, st.Registry[linkKey])) > 0 {
+		return true
+	}
+	dir := filepath.Join(p.Pfx, "drive_c", "windows", "Fonts")
+	for f := range st.Fonts {
+		if _, err := os.Stat(filepath.Join(dir, f)); err != nil {
+			return true
+		}
+	}
+	return false
 }
 
 // linkDrift names the applied SystemLink entries system.reg no longer

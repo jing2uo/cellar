@@ -321,7 +321,7 @@ func (s *Service) Prefixes() ([]PrefixRow, error) {
 		switch {
 		case st.Hash == "":
 			r.State = "new"
-		case st.Hash != c.Hash():
+		case st.Hash != c.Hash(), reconcile.Drifted(p, st):
 			r.State = "changed"
 		default:
 			r.State = "applied"
@@ -879,7 +879,7 @@ func (s *Service) Processes(name string) ([]runner.Process, error) {
 	if err != nil {
 		return nil, err
 	}
-	return r.Tasks(p.Pfx)
+	return r.Tasks(p.Pfx, c.Env)
 }
 
 // EndProcesses ends processes of the prefix by pid.
@@ -892,7 +892,7 @@ func (s *Service) EndProcesses(name string, pids []int) error {
 	if err != nil {
 		return err
 	}
-	return r.TaskKill(p.Pfx, pids)
+	return r.TaskKill(p.Pfx, c.Env, pids)
 }
 
 // Blocked lists the programs kept from running (disabled .exe overrides).
@@ -935,6 +935,6 @@ func (s *Service) Kill(name string) error {
 	if err != nil {
 		return err
 	}
-	r.Kill(p.Pfx)
+	r.Kill(p.Pfx, c.Env)
 	return nil
 }

@@ -311,7 +311,11 @@ func (c *counter) Write(p []byte) (int, error) {
 }
 
 // Command builds a wine invocation against prefix. env is layered over the
-// caller's environment; WINEDEBUG defaults to quiet.
+// caller's environment; WINEDEBUG defaults to quiet. Pass the prefix's env
+// (config.Env, which holds its locale) even for a tool: Wine started under
+// another code page puts its own Tahoma and Microsoft Sans Serif font links
+// back, over cellar's, and the GUI's own locale is not the prefix's (in the
+// Flatpak, LC_CTYPE=C.UTF-8).
 func (r *Runner) Command(prefix string, env map[string]string, args ...string) *exec.Cmd {
 	cmd := exec.Command(r.Wine, args...)
 	cmd.Env = Environ(prefix, env)
@@ -330,11 +334,11 @@ func (r *Runner) Server(prefix string, args ...string) error {
 // started from another flatpak instance (another pid namespace: a desktop
 // launcher, say) keeps out of sight; wineboot -k asks the server itself
 // (-s: the desktop process too).
-func (r *Runner) Kill(prefix string) {
+func (r *Runner) Kill(prefix string, env map[string]string) {
 	if !ServerUp(prefix) {
 		return
 	}
-	r.Command(prefix, nil, "wineboot", "-k", "-s").Run()
+	r.Command(prefix, env, "wineboot", "-k", "-s").Run()
 	r.Server(prefix, "-k")
 	r.Server(prefix, "-w")
 }

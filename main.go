@@ -598,7 +598,7 @@ func cmdKill(args []string) error {
 	if err != nil {
 		return err
 	}
-	r.Kill(p.Pfx)
+	r.Kill(p.Pfx, c.Env)
 	return nil
 }
 

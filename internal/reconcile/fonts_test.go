@@ -9,6 +9,7 @@ import (
 
 	"github.com/jing2uo/cellar/internal/config"
 	"github.com/jing2uo/cellar/internal/fonts"
+	"github.com/jing2uo/cellar/internal/store"
 )
 
 // fakeFcList puts an fc-list on PATH that lists the given families (family
@@ -231,5 +232,31 @@ func TestCoreFromLibrary(t *testing.T) {
 	d, warns, _ := want(loadSets(t, `"core"`))
 	if d.reg[normKey(substK)]["Arial"] != "sz:Liberation Sans" || d.fonts["LiberationMono-Regular.ttf"] == "" || len(warns) != 0 {
 		t.Errorf("subst %v fonts %v warns %v", d.reg[normKey(substK)], d.fonts, warns)
+	}
+}
+
+func TestDrifted(t *testing.T) {
+	dir := t.TempDir()
+	p := &store.Prefix{Pfx: filepath.Join(dir, "pfx")}
+	fonts := filepath.Join(p.Pfx, "drive_c", "windows", "Fonts")
+	os.MkdirAll(fonts, 0o755)
+	os.WriteFile(filepath.Join(fonts, "a.ttf"), nil, 0o644)
+	os.WriteFile(filepath.Join(p.Pfx, "system.reg"), []byte("[Software\\\\Microsoft\\\\Windows NT\\\\CurrentVersion\\\\FontLink\\\\SystemLink] 1\n"+
+		`"Microsoft Sans Serif"=str(7):"a.ttf,A\0"`+"\n"), 0o644)
+	st := &store.State{
+		Registry: map[string]map[string]string{linkKey: {"Microsoft Sans Serif": `multi_sz:["a.ttf,A"]`}},
+		Fonts:    map[string]string{"a.ttf": "/src/a.ttf"},
+	}
+	if Drifted(p, st) {
+		t.Error("in step, reported drifted")
+	}
+	st.Registry[linkKey]["Microsoft Sans Serif"] = `multi_sz:["b.ttf,B"]`
+	if !Drifted(p, st) {
+		t.Error("links Wine put back: not drifted")
+	}
+	st.Registry[linkKey]["Microsoft Sans Serif"] = `multi_sz:["a.ttf,A"]`
+	st.Fonts["gone.ttf"] = "/src/gone.ttf"
+	if !Drifted(p, st) {
+		t.Error("font gone: not drifted")
 	}
 }

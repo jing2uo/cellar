@@ -206,7 +206,7 @@ func DeletePrefix(p *store.Prefix) error {
 	}
 	if c, err := p.Load(); err == nil {
 		if r, err := runner.Resolve(c.Runner); err == nil {
-			r.Kill(p.Pfx)
+			r.Kill(p.Pfx, c.Env)
 		}
 		for _, a := range c.Apps {
 			desktop.Remove(p, a.ID)
