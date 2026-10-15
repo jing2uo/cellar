@@ -18,6 +18,7 @@ type Settings struct {
 	WindowsVersion string   `json:"windows_version"`
 	VirtualDesktop string   `json:"virtual_desktop"`
 	DPI            int      `json:"dpi"`
+	CoreFonts      string   `json:"core_fonts"` // [fonts] core; "" follows cellar's settings
 }
 
 func ReadSettings(path string) (Settings, error) {
@@ -30,7 +31,7 @@ func ReadSettings(path string) (Settings, error) {
 		return Settings{}, err
 	}
 	st := Settings{Runner: c.Runner, WindowsVersion: c.WindowsVersion,
-		VirtualDesktop: c.VirtualDesktop, DPI: c.DPI}
+		VirtualDesktop: c.VirtualDesktop, DPI: c.DPI, CoreFonts: c.Fonts.Core}
 	file, err := parse(b, path)
 	if err != nil {
 		return Settings{}, err
@@ -91,6 +92,11 @@ func WriteSettings(path string, st Settings) error {
 	opt("windows_version", st.WindowsVersion, st.WindowsVersion == "")
 	opt("virtual_desktop", st.VirtualDesktop, st.VirtualDesktop == "")
 	opt("dpi", st.DPI, st.DPI == 0)
+	core := ""
+	if st.CoreFonts != "" {
+		core = Literal(st.CoreFonts)
+	}
+	e.SetIn("fonts", "core", core)
 	return e.Save()
 }
 

@@ -155,7 +155,7 @@ func (s *Service) Legacy32() Legacy32 {
 
 // FontStatus tells what each font set would use on this machine (it runs
 // fc-list, so the dialogs ask for it, not every refresh).
-func (s *Service) FontStatus() []fonts.Status { return fonts.Statuses() }
+func (s *Service) FontStatus(core string) []fonts.Status { return fonts.Statuses(core) }
 
 // Prefs and SavePrefs are cellar's own settings (the settings page).
 func (s *Service) Prefs() prefs.Prefs { return prefs.Load() }
@@ -306,7 +306,8 @@ type PrefixRow struct {
 	Runner   string       `json:"runner"`
 	Locale   string       `json:"locale"`
 	FontSets []string     `json:"font_sets"`
-	State    string       `json:"state"` // new | applied | changed | error
+	CorePack string       `json:"core_pack"` // the English core fonts it uses: mscore | liberation
+	State    string       `json:"state"`     // new | applied | changed | error
 	Apps     []AppRow     `json:"apps"`
 	Config   string       `json:"config"`
 	Error    string       `json:"error,omitempty"`
@@ -334,10 +335,11 @@ func (s *Service) Prefixes() ([]PrefixRow, error) {
 		}
 		st, _ := p.State()
 		r.Runner, r.Locale, r.FontSets = c.Runner, c.Locale, c.FontSets
+		r.CorePack = fonts.CorePack(c.Fonts.Core)
 		switch {
 		case st.Hash == "":
 			r.State = "new"
-		case st.Hash != c.Hash(), reconcile.Drifted(p, st):
+		case st.Hash != c.Hash(), reconcile.Drifted(p, c, st):
 			r.State = "changed"
 		default:
 			r.State = "applied"

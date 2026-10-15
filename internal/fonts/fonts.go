@@ -90,13 +90,10 @@ func File(family string) (string, error) {
 }
 
 // Resolve finds the font for "<set>.<role>" (cjk.SC) under the policy.
-// core's roles are the chosen English core fonts': Microsoft's, or
-// Liberation's; the one not chosen never stands in.
+// core's roles are Liberation's; CoreRef turns them into Microsoft's when
+// those are chosen.
 func Resolve(ref string) (Face, error) {
 	id, role, _ := strings.Cut(ref, ".")
-	if ms, ok := config.MSCoreFor[role]; ok && id == "core" && CorePack() == "mscore" {
-		return Resolve("mscore." + ms)
-	}
 	fs := config.FontSetByID(id)
 	if fs == nil {
 		return Face{}, fmt.Errorf("unknown font set %q", id)
@@ -223,16 +220,31 @@ type Status struct {
 	Total  int    `json:"total,omitempty"`
 }
 
-// CorePack is the pack of the chosen English core fonts.
-func CorePack() string {
-	if prefs.Load().Fonts.Core == prefs.CoreLiberation {
-		return "liberation"
+// CorePack is the pack of the English core fonts a prefix uses: its own
+// choice (config.Fonts.Core), else cellar's settings'.
+func CorePack(choice string) string {
+	if choice == "" {
+		choice = prefs.Load().Fonts.Core
 	}
-	return "mscore"
+	if choice == prefs.CoreMicrosoft {
+		return "mscore"
+	}
+	return "liberation"
 }
 
-// Statuses resolves each choosable set's Primary.
-func Statuses() []Status {
+// CoreRef is the reference ("<set>.<role>") that fills a core role under
+// the choice: Liberation's own role, or the Microsoft font standing for
+// it. The one not chosen never stands in.
+func CoreRef(role, choice string) string {
+	if ms, ok := config.MSCoreFor[role]; ok && CorePack(choice) == "mscore" {
+		return "mscore." + ms
+	}
+	return "core." + role
+}
+
+// Statuses resolves each choosable set's Primary; core's under the choice
+// (a prefix's [fonts] core, "" for cellar's settings).
+func Statuses(core string) []Status {
 	var out []Status
 	for _, fs := range config.FontSets {
 		if fs.Includes != nil {
@@ -247,10 +259,11 @@ func Statuses() []Status {
 			continue
 		}
 		st := Status{ID: fs.ID, Pack: fs.Roles[fs.Primary].Pack}
+		ref := fs.ID + "." + fs.Primary
 		if fs.ID == "core" {
-			st.Pack = CorePack()
+			st.Pack, ref = CorePack(core), CoreRef(fs.Primary, core)
 		}
-		f, err := Resolve(fs.ID + "." + fs.Primary)
+		f, err := Resolve(ref)
 		switch {
 		case err != nil:
 			st.Source = "missing"

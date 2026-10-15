@@ -91,7 +91,7 @@ func cmdConfig(args []string) error {
 			emit(st)
 			return nil
 		}
-		show := func(k, v, note string) { fmt.Printf("%-8s %-22s %s\n", k, v, note) }
+		show := func(k, v, note string) { fmt.Printf("%-10s %-22s %s\n", k, v, note) }
 		show("runner", or(st.Runner, "(default)"), "")
 		loc := or(st.Locale, "(host's)")
 		for _, l := range config.Locales {
@@ -102,6 +102,7 @@ func cmdConfig(args []string) error {
 		show("locale", loc, "")
 		show("fonts", or(strings.Join(st.FontSets, ","), "none"), "core cjk all (all includes the other two)")
 		show("winver", or(st.WindowsVersion, "(win10)"), "win11 win10 win81 win7 winxp")
+		show("corefonts", or(st.CoreFonts, "default ("+prefs.Load().Fonts.Core+")"), "microsoft liberation, or default (cellar fonts core)")
 		desk := "WxH or off"
 		if w, h := display.Screen(); w > 0 {
 			desk += fmt.Sprintf(" (screen %s: Wine lists %s; any other size works too)", display.Format(w, h), strings.Join(display.Sizes(w, h), " "))
@@ -140,6 +141,15 @@ func cmdConfig(args []string) error {
 			}
 		case "winver":
 			st.WindowsVersion = v
+		case "corefonts":
+			switch v {
+			case "default", "":
+				st.CoreFonts = ""
+			case prefs.CoreMicrosoft, prefs.CoreLiberation:
+				st.CoreFonts = v
+			default:
+				return fmt.Errorf("corefonts %q: microsoft, liberation or default", v)
+			}
 		case "desktop":
 			if v == "off" {
 				v = ""
@@ -154,7 +164,7 @@ func cmdConfig(args []string) error {
 				return fmt.Errorf("dpi %q: a number like 120, or auto", v)
 			}
 		default:
-			return fmt.Errorf("unknown setting %q (runner locale fonts winver desktop dpi)", k)
+			return fmt.Errorf("unknown setting %q (runner locale fonts corefonts winver desktop dpi)", k)
 		}
 	}
 	if err := config.WriteSettings(p.Config, st); err != nil {
@@ -312,7 +322,7 @@ func cmdFonts(args []string) error {
 	}
 	switch pos[0] {
 	case "list":
-		pr, packs, sets := prefs.Load(), fonts.Packs(), fonts.Statuses()
+		pr, packs, sets := prefs.Load(), fonts.Packs(), fonts.Statuses("")
 		if jsonOut {
 			emit(map[string]any{"source": pr.Fonts.Source, "core": pr.Fonts.Core, "packs": packs, "sets": sets,
 				"library": fonts.LibraryDir(), "windows": fonts.WindowsFonts(), "extras": fonts.Extras()})
@@ -394,7 +404,7 @@ func cmdFonts(args []string) error {
 		if err := prefs.Save(pr); err != nil {
 			return err
 		}
-		for _, st := range fonts.Statuses() {
+		for _, st := range fonts.Statuses("") {
 			if st.ID == "core" && st.Source == "missing" && !jsonOut {
 				fmt.Println("not here yet: cellar fonts get " + st.Pack)
 			}

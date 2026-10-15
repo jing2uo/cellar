@@ -295,7 +295,8 @@ async function renderMain() {
       <div><h1>${esc(p.name)}</h1>
         <div class="meta"><span class="badge s-${p.state}">${stateText(p.state)}</span>
           <span>${t("runner：{0}", esc(p.runner))}</span><span>${t("区域：{0}", p.locale ? esc(localeName(p.locale)) : t("未设置"))}</span>
-          ${(p.font_sets || []).length ? `<span>${t("字体：{0}", esc(p.font_sets.map(fontSetName).join(t("、"))))}</span>` : ""}</div></div>
+          ${(p.font_sets || []).length ? `<span>${t("字体：{0}", esc(p.font_sets.map((id) => id === "core" || id === "all"
+            ? t("{0}（{1}）", fontSetName(id), corePackName(p.core_pack)) : fontSetName(id)).join(t("、"))))}</span>` : ""}</div></div>
       <button id="pmenu" class="more" title="${t("更多操作")}">⋯</button>
     </div>
     ${noWine()}${p.error ? `<section><div class="err">${esc(p.error)}</div></section>` : ""}
@@ -497,9 +498,10 @@ function renderSettings() {
 const onTab = (tab) => sel === SETTINGS && setTab === tab && $("#settab");
 
 // The English core fonts: one or the other, the one chosen used alone.
+// This is the default; a prefix may choose for itself in its settings.
 const coreChoices = () => [
-  ["microsoft", t("微软核心字体"), t("Arial、Times New Roman、Verdana 等原版，WPF 程序需要真 Arial")],
   ["liberation", t("Liberation（开源替代）"), t("开源，字宽与 Arial、Times New Roman、Courier New 相同，按名字替换它们")],
+  ["microsoft", t("微软核心字体"), t("Arial、Times New Roman、Verdana 等原版，WPF 程序需要真 Arial")],
 ];
 
 async function renderFonts() {
@@ -532,7 +534,7 @@ async function renderFonts() {
       <div class="meta">${t("字体来源")}</div>
       <div class="radios">${fontSources().map(([v, label, note]) => `<label><input type="radio" name="src" value="${v}" ${pr.fonts.source === v ? "checked" : ""}>
         <span>${label}<small>${note}</small></span></label>`).join("")}</div>
-      <div class="meta" style="margin-top:14px">${t("英文核心字体")}</div>
+      <div class="meta" style="margin-top:14px">${t("默认英文核心字体")} · ${t("prefix 没单独设置时用这个，可在 prefix 设置里改")}</div>
       <div class="rlist" style="margin-top:6px">${coreChoices().map(([v, label, note]) => { const p = corePack[v]; return `<div class="rrow">
         <input type="radio" name="core" id="core-${v}" value="${v}" ${pr.fonts.core === v ? "checked" : ""} style="width:auto;margin:0">
         <label class="grow" for="core-${v}"><b>${label}</b> ${p ? packState(p) : ""}
@@ -829,6 +831,7 @@ function runExe(name) {
 // page; each font set maps one script's Windows fonts to host fonts.
 const localeName = (id) => (env.locales.find((l) => l.id === id) || { name: id }).name;
 const fontSetName = (id) => t((env.font_sets.find((f) => f.id === id) || { name: id }).name);
+const corePackName = (pack) => pack === "mscore" ? t("微软") : "Liberation";
 // localeField is the region picker: a box that filters the list by code or
 // name as you type. It starts on the prefix's locale, else the host's,
 // marked （系统）; whatever is picked is written out, so what it shows is
@@ -845,27 +848,40 @@ function localeLabel(id) {
 // fontField lists the sets with what each would use here: the font found
 // (host, runtime or library), the winetricks verb installed instead, or a
 // pointer to the settings page to download it.
-const fontField = (sets) => `<div class="fsets">${env.font_sets.map((f) =>
-  `<label><input type="checkbox" value="${f.id}" ${sets.includes(f.id) ? "checked" : ""}><span>${esc(t(f.name))}<small>${esc(t(f.note))}</small><small data-fs="${f.id}">${t("查找字体…")}</small></span></label>`).join("")}</div>`;
+// core, when given (a prefix's [fonts] core, "" following cellar's
+// settings, whose choice is globalCore), adds the English core fonts
+// picker beside the English set.
+const fontField = (sets, core, globalCore) => `<div class="fsets">${env.font_sets.map((f) =>
+  `<label><input type="checkbox" value="${f.id}" ${sets.includes(f.id) ? "checked" : ""}><span>${esc(t(f.name))}${f.id === "core" && core !== undefined ? coreSelect(core, globalCore) : ""}<small>${esc(t(f.note))}</small><small data-fs="${f.id}">${t("查找字体…")}</small></span></label>`).join("")}</div>`;
+const coreSelect = (core, globalCore) => `<select id="corefonts" style="width:auto;margin:0 0 0 8px;padding:1px 6px">
+    <option value="" ${!core ? "selected" : ""}>${t("跟随全局（{0}）", corePackName(globalCore === "microsoft" ? "mscore" : "liberation"))}</option>
+    <option value="microsoft" ${core === "microsoft" ? "selected" : ""}>${t("微软核心字体")}</option>
+    <option value="liberation" ${core === "liberation" ? "selected" : ""}>Liberation</option></select>`;
+const readCore = (d) => d.querySelector("#corefonts")?.value || "";
 const mb = (n) => `${Math.max(1, Math.round(n / 1048576))} MB`;
 // wireFonts makes "all" carry the sets it includes: ticked, it ticks and
 // locks them.
 function wireFonts(d) {
   const all = env.font_sets.find((f) => f.includes);
   const boxes = (ids) => ids.map((id) => d.querySelector(`.fsets input[value="${id}"]`)).filter(Boolean);
+  const pick = d.querySelector("#corefonts");
   const sync = () => {
     const on = d.querySelector(`.fsets input[value="${all.id}"]`).checked;
     boxes(all.includes).forEach((b) => { if (on) b.checked = true; b.disabled = on; });
+    if (pick) pick.disabled = !d.querySelector('.fsets input[value="core"]').checked;
   };
   d.querySelector(`.fsets input[value="${all.id}"]`).addEventListener("change", sync);
+  d.querySelector('.fsets input[value="core"]')?.addEventListener("change", sync);
+  if (pick) pick.onchange = () => showFontStatus(d);
   sync();
 }
 async function showFontStatus(d) {
   let st;
-  try { st = await call("FontStatus"); } catch { return; }
+  try { st = await call("FontStatus", readCore(d)); } catch { return; }
   for (const s of st) {
     const el = d.querySelector(`[data-fs="${s.id}"]`);
     if (!el) continue;
+    el.classList.remove("warn");
     const where = { host: t("（本机）"), runtime: t("（Cellar 自带）"), library: t("（已下载）") }[s.source];
     if (s.source === "scripts") {
       el.textContent = s.have === s.total ? t("{0} 种文字里 {1} 种有字体", s.total, s.have) : t("{0} 种文字里 {1} 种有字体，其余可在 设置 → 字体 下载", s.total, s.have);
@@ -968,7 +984,7 @@ function readSize(d) {
 }
 
 async function settings(name) {
-  const [st, ds] = await Promise.all([call("Settings", name), call("DesktopSizes")]);
+  const [st, ds, pr] = await Promise.all([call("Settings", name), call("DesktopSizes"), call("Prefs")]);
   dialog(`<b>${t("{0} 设置", esc(name))}</b>
     <div class="form">
       <label>${t("Windows 版本")}</label><select id="wv"><option value="">${t("默认（Windows 10）")}</option>${WINVER.map(([v, label]) => `<option value="${v}" ${st.windows_version === v ? "selected" : ""}>${label}</option>`).join("")}</select>
@@ -977,7 +993,7 @@ async function settings(name) {
       <label>${t("缩放（DPI）")}</label><select id="dpi">${DPIS().map(([v, label]) => `<option value="${v}" ${st.dpi === v ? "selected" : ""}>${label}${v ? t("（{0}）", v) : ""}</option>`).join("")}
         ${st.dpi && !DPIS().some(([v]) => v === st.dpi) ? `<option value="${st.dpi}" selected>${st.dpi}</option>` : ""}</select>
       <label>${t("区域")}</label><div>${localeField(st.locale)}<small class="meta">${LOCALE_NOTE()}</small></div>
-      <label>${t("字体")}</label><div>${fontField(st.font_sets)}<small class="meta">${FONTS_NOTE()}</small></div>
+      <label>${t("字体")}</label><div>${fontField(st.font_sets, st.core_fonts || "", pr.fonts.core)}<small class="meta">${FONTS_NOTE()}</small></div>
     </div>
     <div id="e" class="err"></div>
     <div class="row"><button id="c">${t("取消")}</button><button id="s" class="primary">${t("保存并应用")}</button></div>`, (d) => {
@@ -988,7 +1004,7 @@ async function settings(name) {
     d.querySelector("#c").onclick = () => d.close();
     d.querySelector("#s").onclick = async () => {
       try {
-        const next = { ...st, locale: readLocale(d), font_sets: readFonts(d), windows_version: d.querySelector("#wv").value,
+        const next = { ...st, locale: readLocale(d), font_sets: readFonts(d), core_fonts: readCore(d), windows_version: d.querySelector("#wv").value,
           virtual_desktop: readSize(d), dpi: +d.querySelector("#dpi").value };
         await call("SaveSettings", name, next); d.close(); await applyNow(name);
       }

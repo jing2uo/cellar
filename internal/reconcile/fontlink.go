@@ -11,6 +11,7 @@ import (
 	"unicode/utf16"
 
 	"github.com/jing2uo/cellar/internal/config"
+	"github.com/jing2uo/cellar/internal/fonts"
 	"github.com/jing2uo/cellar/internal/regfile"
 	"github.com/jing2uo/cellar/internal/store"
 )
@@ -97,9 +98,13 @@ func linkWarning(n int) string {
 
 // Drifted tells, from files alone (no wine, cheap enough for a list), that
 // the prefix moved away from what was applied behind cellar's back: font
-// links Wine put back, or applied fonts gone from C:\windows\Fonts. Compute
-// finds these and the rest.
-func Drifted(p *store.Prefix, st *store.State) bool {
+// links Wine put back, applied fonts gone from C:\windows\Fonts, or the
+// English core fonts switched in cellar's settings for a prefix following
+// them. Compute finds these and the rest.
+func Drifted(p *store.Prefix, c *config.Config, st *store.State) bool {
+	if st.CorePack != "" && st.CorePack != fonts.CorePack(c.Fonts.Core) {
+		return true
+	}
 	if len(linkDrift(p.Pfx, st.Registry[linkKey])) > 0 {
 		return true
 	}

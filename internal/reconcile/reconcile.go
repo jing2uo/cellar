@@ -94,6 +94,7 @@ type desired struct {
 	reg    map[string]map[string]value
 	fonts  map[string]string // file name -> host path
 	drives map[string]string
+	core   string // the English core fonts' pack, "" without the core set
 }
 
 // errUnresolved marks a font role reference nothing installed fills: the
@@ -262,7 +263,16 @@ func want(c *config.Config) (*desired, []string, error) {
 	// (below).
 	resolved := map[string]fonts.Face{}
 	failed := map[string]error{}
+	// The core set's roles are Liberation's; Microsoft's fonts fill them
+	// when the prefix (or, for it, cellar's settings) chooses those.
+	eff, _ := config.EffectiveFontSets(c.FontSets)
+	if slices.Contains(eff, "core") {
+		d.core = fonts.CorePack(c.Fonts.Core)
+	}
 	resolve := func(name string) (fonts.Face, error) {
+		if role, ok := strings.CutPrefix(name, "@core."); ok {
+			name = "@" + fonts.CoreRef(role, c.Fonts.Core)
+		}
 		if f, ok := resolved[name]; ok {
 			return f, nil
 		}
@@ -300,9 +310,8 @@ func want(c *config.Config) (*desired, []string, error) {
 		// fonts put there any other way.
 		d.fonts[filepath.Base(f.Path)] = f.Path
 	}
-	eff, _ := config.EffectiveFontSets(c.FontSets)
 	// Microsoft's core fonts, when chosen, come in whole, styles too.
-	if slices.Contains(eff, "core") && fonts.CorePack() == "mscore" {
+	if d.core == "mscore" {
 		for _, r := range config.MSCoreRoles() {
 			if f, err := resolve(config.RoleRef("mscore", r)); err == nil {
 				d.fonts[filepath.Base(f.Path)] = f.Path
@@ -331,7 +340,7 @@ func want(c *config.Config) (*desired, []string, error) {
 		}
 		pack := fs.Roles[fs.Primary].Pack
 		if id == "core" {
-			pack = fonts.CorePack()
+			pack = d.core
 		}
 		switch {
 		case pack != "":
@@ -578,7 +587,7 @@ func (pl *Plan) Apply(log func(string)) error {
 	st := &store.State{
 		Hash: pl.Hash, Runner: pl.Runner, Wine: pl.Wine,
 		Registry: map[string]map[string]string{}, Fonts: maps.Clone(pl.want.fonts),
-		Drives: maps.Clone(pl.want.drives), Install: installFP, AppliedAt: time.Now().UTC(),
+		Drives: maps.Clone(pl.want.drives), Install: installFP, CorePack: pl.want.core, AppliedAt: time.Now().UTC(),
 	}
 	for key, vals := range pl.want.reg {
 		st.Registry[key] = map[string]string{}

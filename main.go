@@ -45,7 +45,8 @@ const usage = `cellar - Wine prefixes from cellar.toml
                                      --exe: a program in C:, a host path (an installer, .msi
                                      too) or a Wine tool: winecfg control regedit explorer
   cellar config <prefix> [key=value ...]   show or change settings, applied at once:
-                                     runner locale fonts=core,cjk|all|none winver desktop=WxH|off dpi=N|auto
+                                     runner locale fonts=core,cjk|all|none corefonts=microsoft|liberation|default
+                                     winver desktop=WxH|off dpi=N|auto
   cellar deps <prefix> [add|rm <verb>...]  winetricks verbs (dlls, fonts); add installs at once
   cellar deps common                 the verbs most programs need
   cellar deps search <word>...       find winetricks verbs
@@ -333,7 +334,7 @@ func cmdList(args []string) error {
 			if c, err = p.Load(); err == nil {
 				st, _ := p.State()
 				r.Runner, r.Locale, r.Fonts, r.Applied = c.Runner, c.Locale, c.FontSets, st.Hash != ""
-				r.Dirty = r.Applied && (st.Hash != c.Hash() || reconcile.Drifted(p, st))
+				r.Dirty = r.Applied && (st.Hash != c.Hash() || reconcile.Drifted(p, c, st))
 				for _, a := range c.Apps {
 					r.Apps = append(r.Apps, a.ID)
 				}

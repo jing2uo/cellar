@@ -19,10 +19,12 @@ const (
 	LibraryOnly = "library-only" // only the library's: the same on every machine
 )
 
-// English core fonts, one or the other: Microsoft's own (Core fonts for
-// the Web, the mscore pack; the default), or the metric-compatible
-// Liberation fonts standing in for them by name. WPF needs a real Arial:
-// it falls back to it by name and does not read substitutes.
+// English core fonts, one or the other: the metric-compatible Liberation
+// fonts standing in by name (the default: nothing to download, the Flatpak
+// runtime has them), or Microsoft's own (Core fonts for the Web, the
+// mscore pack). WPF needs a real Arial: it falls back to it by name and
+// does not read substitutes. A prefix may choose for itself ([fonts] core
+// in its cellar.toml); this is the choice for the ones that do not.
 const (
 	CoreLiberation = "liberation"
 	CoreMicrosoft  = "microsoft"
@@ -73,8 +75,8 @@ func Load() Prefs {
 	default:
 		p.Fonts.Source = HostFirst
 	}
-	if p.Fonts.Core != CoreLiberation {
-		p.Fonts.Core = CoreMicrosoft
+	if p.Fonts.Core != CoreMicrosoft {
+		p.Fonts.Core = CoreLiberation
 	}
 	if p.UI.Language != LangZH && p.UI.Language != LangEN {
 		p.UI.Language = ""

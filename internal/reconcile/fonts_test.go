@@ -31,7 +31,7 @@ func fakeFcList(t *testing.T, families map[string]string) {
 
 // home is a cellar home with the font source policy set ("" leaves the
 // default, host-first) and the English core fonts (none: the default,
-// Microsoft's).
+// Liberation).
 func home(t *testing.T, policy string, core ...string) string {
 	t.Helper()
 	h := t.TempDir()
@@ -82,9 +82,9 @@ func TestAllFromHost(t *testing.T) {
 		!strings.Contains(link, `"NotoSansThai-Regular.ttf"`) || strings.Contains(link, "Arabic") {
 		t.Errorf("SystemLink %v", link)
 	}
-	// all brings in core, whose fonts (Microsoft's, the default) are
-	// missing here: a warning saying how to get them.
-	if len(warns) != 1 || !strings.Contains(warns[0], "cellar fonts get mscore") {
+	// all brings in core, whose Liberation is missing here: a warning
+	// saying how to get it.
+	if len(warns) != 1 || !strings.Contains(warns[0], "cellar fonts get liberation") {
 		t.Errorf("warns %v", warns)
 	}
 }
@@ -177,7 +177,7 @@ func TestLongChainFitsWine(t *testing.T) {
 	h := home(t, "")
 	fakeFcList(t, nil)
 	os.MkdirAll(filepath.Join(h, "fonts"), 0o755)
-	for _, pack := range []string{"mscore", "cjk", "cjk-serif", "scripts"} {
+	for _, pack := range []string{"liberation", "cjk", "cjk-serif", "scripts"} {
 		for _, f := range config.PackFaces(pack) {
 			os.WriteFile(filepath.Join(h, "fonts", f.File), []byte("font"), 0o644)
 		}
@@ -254,16 +254,16 @@ func TestDrifted(t *testing.T) {
 		Registry: map[string]map[string]string{linkKey: {"Microsoft Sans Serif": `multi_sz:["a.ttf,A"]`}},
 		Fonts:    map[string]string{"a.ttf": "/src/a.ttf"},
 	}
-	if Drifted(p, st) {
+	if Drifted(p, &config.Config{}, st) {
 		t.Error("in step, reported drifted")
 	}
 	st.Registry[linkKey]["Microsoft Sans Serif"] = `multi_sz:["b.ttf,B"]`
-	if !Drifted(p, st) {
+	if !Drifted(p, &config.Config{}, st) {
 		t.Error("links Wine put back: not drifted")
 	}
 	st.Registry[linkKey]["Microsoft Sans Serif"] = `multi_sz:["a.ttf,A"]`
 	st.Fonts["gone.ttf"] = "/src/gone.ttf"
-	if !Drifted(p, st) {
+	if !Drifted(p, &config.Config{}, st) {
 		t.Error("font gone: not drifted")
 	}
 }
@@ -293,7 +293,7 @@ func TestExtraFontsWin(t *testing.T) {
 }
 
 func TestMicrosoftCore(t *testing.T) {
-	h := home(t, "") // Microsoft's core fonts: the default
+	h := home(t, "", "microsoft")
 	fakeFcList(t, map[string]string{"Liberation Sans": "/f/LiberationSans-Regular.ttf"})
 	// Not downloaded yet: Liberation, though here, does not stand in; a
 	// warning says what to get.
@@ -319,5 +319,66 @@ func TestMicrosoftCore(t *testing.T) {
 	}
 	if d.fonts["LiberationSans-Regular.ttf"] != "" {
 		t.Errorf("Liberation still linked: %v", d.fonts)
+	}
+}
+
+func TestPrefixCoreChoice(t *testing.T) {
+	// cellar's settings say Liberation (the default); a prefix choosing
+	// Microsoft's gets those, and one saying nothing follows the settings.
+	h := home(t, "")
+	fakeFcList(t, map[string]string{"Liberation Sans": "/f/LiberationSans-Regular.ttf"})
+	lib := filepath.Join(h, "fonts")
+	os.MkdirAll(lib, 0o755)
+	os.WriteFile(filepath.Join(lib, "arial.ttf"), []byte("ttf"), 0o644)
+	load := func(core string) *config.Config {
+		p := filepath.Join(t.TempDir(), "cellar.toml")
+		body := "font_sets = [\"core\"]\n"
+		if core != "" {
+			body += "[fonts]\ncore = \"" + core + "\"\n"
+		}
+		os.WriteFile(p, []byte(body), 0o644)
+		c, err := config.Load(p)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return c
+	}
+	d, _, _ := want(load("microsoft"))
+	if d.core != "mscore" || d.fonts["arial.ttf"] == "" || d.fonts["LiberationSans-Regular.ttf"] != "" || d.reg[normKey(substK)]["Arial"] != "" {
+		t.Errorf("microsoft: core %q fonts %v subst %v", d.core, d.fonts, d.reg[normKey(substK)])
+	}
+	d, _, _ = want(load(""))
+	if d.core != "liberation" || d.fonts["arial.ttf"] != "" || d.reg[normKey(substK)]["Arial"] != "sz:Liberation Sans" {
+		t.Errorf("following: core %q fonts %v subst %v", d.core, d.fonts, d.reg[normKey(substK)])
+	}
+	// The other way round: settings say Microsoft's, the prefix Liberation.
+	os.WriteFile(filepath.Join(h, "settings.toml"), []byte("[fonts]\ncore = \"microsoft\"\n"), 0o644)
+	d, _, _ = want(load("liberation"))
+	if d.core != "liberation" || d.fonts["arial.ttf"] != "" || d.reg[normKey(substK)]["Arial"] != "sz:Liberation Sans" {
+		t.Errorf("liberation: core %q fonts %v subst %v", d.core, d.fonts, d.reg[normKey(substK)])
+	}
+	if _, err := config.Load(func() string {
+		p := filepath.Join(t.TempDir(), "cellar.toml")
+		os.WriteFile(p, []byte("[fonts]\ncore = \"comic\"\n"), 0o644)
+		return p
+	}()); err == nil {
+		t.Error("fonts.core = comic accepted")
+	}
+}
+
+func TestDriftedCoreSwitch(t *testing.T) {
+	// Applied with Liberation while following cellar's settings, which now
+	// say Microsoft's: drifted. A prefix choosing for itself is not.
+	home(t, "", "microsoft")
+	p := &store.Prefix{Pfx: filepath.Join(t.TempDir(), "pfx")}
+	st := &store.State{CorePack: "liberation"}
+	if !Drifted(p, &config.Config{}, st) {
+		t.Error("settings switched: not drifted")
+	}
+	if Drifted(p, &config.Config{Fonts: config.Fonts{Core: "liberation"}}, st) {
+		t.Error("own choice: drifted")
+	}
+	if Drifted(p, &config.Config{}, &store.State{}) {
+		t.Error("no core set: drifted")
 	}
 }

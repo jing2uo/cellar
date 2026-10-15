@@ -84,6 +84,9 @@ type Fonts struct {
 	// Link names host font families (resolved with fc-match) to link into
 	// C:\windows\Fonts and register under HKLM ...\Fonts.
 	Link []string `toml:"link,omitempty" json:"link,omitempty"`
+	// Core picks the English core fonts of the core set: "microsoft" or
+	// "liberation"; "" follows cellar's settings ([fonts] core there).
+	Core string `toml:"core,omitempty" json:"core,omitempty"`
 }
 
 type Init struct {
@@ -173,6 +176,11 @@ func Load(path string) (*Config, error) {
 		return nil, fmt.Errorf("%s: %w", path, err)
 	}
 	c.Locale, c.FontSets = locale, sets
+	switch c.Fonts.Core {
+	case "", "microsoft", "liberation":
+	default:
+		return nil, fmt.Errorf("%s: fonts.core %q (want microsoft or liberation, or leave it out)", path, c.Fonts.Core)
+	}
 	c.applyFontSets()
 	return &c, nil
 }

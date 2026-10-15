@@ -192,14 +192,18 @@ func (p *Prefix) RevertConfig() error {
 // State is what the last successful apply did. Registry holds only values
 // cellar itself wrote, so a later apply knows what it may delete.
 type State struct {
-	Hash      string                       `json:"hash"`
-	Runner    string                       `json:"runner"`
-	Wine      string                       `json:"wine_version"`
-	Registry  map[string]map[string]string `json:"registry"`
-	Fonts     map[string]string            `json:"fonts"`
-	Drives    map[string]string            `json:"drives"`
-	Install   string                       `json:"install,omitempty"` // fingerprint of the installer last run/unpacked
-	AppliedAt time.Time                    `json:"applied_at"`
+	Hash     string                       `json:"hash"`
+	Runner   string                       `json:"runner"`
+	Wine     string                       `json:"wine_version"`
+	Registry map[string]map[string]string `json:"registry"`
+	Fonts    map[string]string            `json:"fonts"`
+	Drives   map[string]string            `json:"drives"`
+	Install  string                       `json:"install,omitempty"` // fingerprint of the installer last run/unpacked
+	// CorePack is the English core fonts' pack applied (mscore or
+	// liberation), "" without the core set: what the prefix followed when
+	// cellar's settings, not its cellar.toml, chose it.
+	CorePack  string    `json:"core_pack,omitempty"`
+	AppliedAt time.Time `json:"applied_at"`
 }
 
 func (p *Prefix) statePath() string { return filepath.Join(p.Dir, "state.json") }
