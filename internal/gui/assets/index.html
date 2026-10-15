@@ -45,6 +45,7 @@ aside { width: 240px; background: var(--side); border-right: 1px solid var(--lin
 .item.sel { background: var(--accent-soft); color: var(--accent); font-weight: 600; }
 .item small { color: var(--mute); font-weight: 400; }
 .withico { display: flex; align-items: center; gap: 8px; }
+button.withico { gap: 6px; }
 .ico { width: 16px; height: 16px; flex: none; }
 .sys { padding: 6px 8px; border-top: 1px solid var(--line); }
 main { flex: 1; min-width: 0; overflow: auto; padding: 28px 32px; }
@@ -296,7 +297,7 @@ async function renderMain() {
       <button id="pmenu" class="more" title="${t("更多操作")}">⋯</button>
     </div>
     ${noWine()}${p.error ? `<section><div class="err">${esc(p.error)}</div></section>` : ""}
-    <section><div class="sechead"><h2>${t("应用")}</h2><div class="actions"><button id="install">${t("运行程序")}</button><button id="addapp">${t("添加应用")}</button></div></div><div class="apps">${p.apps.map((a) => `
+    <section><div class="sechead"><h2>${t("应用")}</h2><div class="actions"><button id="procs" class="withico"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>${t("进程管理")}</button><button id="install" class="withico"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="6 4 20 12 6 20 6 4"/></svg>${t("运行程序")}</button><button id="addapp" class="withico"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>${t("添加应用")}</button></div></div><div class="apps">${p.apps.map((a) => `
       <div class="app"><div class="top">${a.icon ? `<img src="${a.icon}">` : ""}<b title="${esc(a.name)}">${esc(a.name)}</b>
         <button class="dots" data-appmenu="${esc(a.id)}" title="${t("改名、删除")}">⋯</button></div>
       <code title="${esc(a.exe)}">${esc(a.exe)}</code>
@@ -310,6 +311,7 @@ async function renderMain() {
     openMenu(prefixMenu(p.name), r.left, r.bottom + 4);
     $("#ctx").style.left = Math.max(8, r.right - $("#ctx").offsetWidth) + "px";
   };
+  $("#procs").onclick = () => procs(p.name);
   $("#install").onclick = () => install(p.name);
   $("#addapp").onclick = () => addApp(p.name);
   document.querySelectorAll("[data-app]").forEach((b) => b.onclick = () => launch(p.name, b.dataset.app, b));
@@ -380,9 +382,20 @@ window.addEventListener("blur", () => { $("#ctx").hidden = true; });
 // ── background tasks ──────────────────────────────────────────────────────
 // applyNow starts applying before the page reloads, so the reload sees the
 // task and does not offer the changes it is applying.
+// Steps that run wine tools (wineboot, winetricks, an installer) need the
+// prefix to themselves; the rest goes in live while programs run.
 async function applyNow(name) {
   let id;
-  try { id = await call("ApplyTask", name); } catch (e) { fail(e); }
+  try {
+    const busy = await call("ApplyBusy", name);
+    if (busy.length) {
+      const progs = [...new Set(busy.filter((p) => !p.system).map((p) => p.name))];
+      if (!await ask(progs.length ? t("这些更改要在程序都结束后才能应用。结束 {0} 并应用？", progs.join(t("、")))
+        : t("这些更改要在 Wine 后台进程结束后才能应用。结束并应用？"))) return;
+      await call("Kill", name);
+    }
+    id = await call("ApplyTask", name);
+  } catch (e) { fail(e); }
   await load();
   if (id) watchTask(name, id);
 }
@@ -927,6 +940,80 @@ async function settings(name) {
 // offers. Unticking only stops asking for one: winetricks cannot remove
 // what it installed.
 const WINETRICKS_URL = "https://github.com/Winetricks/winetricks";
+// ── processes ─────────────────────────────────────────────────────────────
+// What runs in the prefix, refreshed while the dialog is open. Picked
+// processes can be ended, or blocked: their .exe goes into dll_overrides as
+// disabled, and Wine refuses to start it again.
+const memText = (kb) => kb >= 1024 ? `${Math.round(kb / 1024)} MB` : `${kb} KB`;
+function procs(name) {
+  const picked = new Set(); // pids
+  let list = [], showSys = false, timer, gen = 0, seen = "";
+  dialog(`<div class="row" style="justify-content:space-between"><b>${t("{0}：进程管理", esc(name))}</b>
+      <label class="inline"><input type="checkbox" id="sys">${t("显示 Wine 系统进程")}</label></div>
+    <div class="meta">${t("禁止运行会把程序名写进 DLL 覆盖并设为禁用，Wine 不会再启动它。")}</div>
+    <div class="vlist" id="pl"><div class="empty" style="padding:10px">${t("读取中…")}</div></div>
+    <div id="bl"></div>
+    <div class="row"><span class="meta" id="cnt"></span><span style="flex:1"></span>
+      <button id="c">${t("关闭")}</button><button id="blk">${t("禁止运行")}</button><button id="end" class="primary">${t("结束进程")}</button></div>`, (d) => {
+    d.addEventListener("close", () => { gen++; clearTimeout(timer); load(); }, { once: true });
+    d.querySelector("#c").onclick = () => d.close();
+    const chosen = () => list.filter((p) => picked.has(p.pid));
+    const sync = () => {
+      const s = chosen();
+      d.querySelector("#cnt").textContent = s.length ? t("已选 {0} 个", s.length) : "";
+      d.querySelector("#end").disabled = !s.length;
+      d.querySelector("#blk").disabled = !s.length || s.some((p) => p.system);
+    };
+    const render = () => {
+      const rows = list.filter((p) => showSys || !p.system || picked.has(p.pid));
+      d.querySelector("#pl").innerHTML = rows.map((p) => `<label class="vrow"><input type="checkbox" value="${p.pid}" ${picked.has(p.pid) ? "checked" : ""}>
+        <code>${esc(p.name)}</code><span class="t">${p.system ? `<small>${t("Wine 系统进程")}</small>` : ""}</span>
+        <small>PID ${p.pid}</small><small style="min-width:64px;text-align:right">${memText(p.memory)}</small></label>`).join("")
+        || `<div class="empty" style="padding:10px">${t("没有正在运行的程序")}</div>`;
+      d.querySelectorAll("#pl input").forEach((i) => i.onchange = () => { i.checked ? picked.add(+i.value) : picked.delete(+i.value); sync(); });
+      sync();
+    };
+    // Re-render only on change, so a refresh never swaps a row out from
+    // under a click.
+    const poll = async (g) => {
+      try {
+        list = await call("Processes", name);
+        for (const pid of [...picked]) if (!list.some((p) => p.pid === pid)) picked.delete(pid);
+        const sig = JSON.stringify([list, showSys]);
+        if (g === gen && sig !== seen) { seen = sig; render(); }
+      } catch (e) { d.querySelector("#pl").innerHTML = `<div class="err" style="padding:10px">${esc(e.message || e)}</div>`; }
+      if (g === gen && d.open) timer = setTimeout(() => poll(g), 2000);
+    };
+    const refresh = (ms = 0) => { const g = ++gen; clearTimeout(timer); timer = setTimeout(() => poll(g), ms); };
+    const blocked = async () => {
+      let bl = [];
+      try { bl = await call("Blocked", name); } catch (e) { fail(e); }
+      d.querySelector("#bl").innerHTML = bl.length ? `<div class="meta" style="margin:4px 0 10px;gap:6px">${t("已禁止运行：")}${bl.map((n) =>
+        `<span class="tag">${esc(n)} <a href="#" data-ub="${esc(n)}" title="${t("允许运行")}">×</a></span>`).join("")}</div>` : "";
+      d.querySelectorAll("[data-ub]").forEach((a) => a.onclick = async (ev) => {
+        ev.preventDefault();
+        try { await call("Block", name, [a.dataset.ub], [], false); toast(t("已允许 {0} 运行", a.dataset.ub)); } catch (e) { fail(e); }
+        blocked();
+      });
+    };
+    d.querySelector("#sys").onchange = (ev) => { showSys = ev.target.checked; seen = ""; render(); };
+    d.querySelector("#end").onclick = async () => {
+      const s = chosen();
+      if (s.some((p) => p.system) && !await ask(t("结束 Wine 系统进程可能让这个 prefix 里的程序全部退出。继续？"))) return;
+      try { await call("EndProcesses", name, s.map((p) => p.pid)); } catch (e) { fail(e); }
+      picked.clear(); refresh(500); refreshRuns(name, 1500);
+    };
+    d.querySelector("#blk").onclick = async () => {
+      const s = chosen();
+      const names = [...new Set(s.map((p) => p.name.toLowerCase()))];
+      if (!await ask(t("禁止 {0} 运行？正在运行的会被结束，以后也不会再启动。可以在这里恢复。", names.join(t("、"))))) return;
+      try { await call("Block", name, names, s.map((p) => p.pid), true); toast(t("已禁止 {0}", names.join(t("、")))); } catch (e) { fail(e); }
+      picked.clear(); refresh(500); blocked();
+    };
+    refresh(); blocked();
+  });
+}
+
 async function deps(name) {
   dialog(`<b>${t("{0} 的依赖", esc(name))}</b>
     <div class="meta">${t("用 winetricks 安装，已装的会跳过，装上后无法卸载。说明见 {0}。", `<a href="#" id="wtl">winetricks</a>`)}</div>

@@ -2,6 +2,8 @@ package config
 
 import (
 	"os"
+	"slices"
+	"strings"
 
 	"github.com/pelletier/go-toml/v2"
 )
@@ -89,5 +91,43 @@ func WriteSettings(path string, st Settings) error {
 	opt("windows_version", st.WindowsVersion, st.WindowsVersion == "")
 	opt("virtual_desktop", st.VirtualDesktop, st.VirtualDesktop == "")
 	opt("dpi", st.DPI, st.DPI == 0)
+	return e.Save()
+}
+
+// ReadBlocked lists the programs the file keeps from running: dll overrides
+// of an .exe set to disabled, which Wine refuses to start.
+func ReadBlocked(path string) ([]string, error) {
+	b, err := os.ReadFile(path)
+	if err != nil {
+		return nil, err
+	}
+	var c Config
+	if err := toml.Unmarshal(b, &c); err != nil {
+		return nil, err
+	}
+	out := []string{}
+	for name, mode := range c.DllOverrides {
+		if strings.HasSuffix(strings.ToLower(name), ".exe") && (mode == "disabled" || mode == "") {
+			out = append(out, name)
+		}
+	}
+	slices.Sort(out)
+	return out, nil
+}
+
+// SetBlocked blocks programs by file name (written in lower case; Wine
+// ignores case), or lets them run again (names as ReadBlocked gives them).
+func SetBlocked(path string, names []string, block bool) error {
+	e, err := Edit(path)
+	if err != nil {
+		return err
+	}
+	for _, n := range names {
+		if block {
+			e.SetIn("dll_overrides", strings.ToLower(n), Literal("disabled"))
+		} else {
+			e.SetIn("dll_overrides", n, "")
+		}
+	}
 	return e.Save()
 }

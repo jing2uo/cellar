@@ -497,7 +497,12 @@ func cmdRun(args []string) error {
 		return err
 	}
 	if len(pl.Changes) > 0 {
-		if err := pl.Apply(func(s string) { fmt.Fprintln(os.Stderr, "cellar: apply:", s) }); err != nil {
+		err := pl.Apply(func(s string) { fmt.Fprintln(os.Stderr, "cellar: apply:", s) })
+		if errors.Is(err, reconcile.ErrBusy) {
+			// Another program of the prefix is open: launch anyway, the
+			// changes go in on a later launch.
+			fmt.Fprintln(os.Stderr, "cellar: apply put off: other programs are running in the prefix")
+		} else if err != nil {
 			return fmt.Errorf("apply before run: %w", err)
 		}
 	}

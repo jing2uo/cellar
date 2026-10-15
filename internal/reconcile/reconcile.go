@@ -423,9 +423,30 @@ func hostPath(s string) (string, error) {
 	return s, nil
 }
 
+// ErrBusy: the plan runs wine tools (wineboot, winetricks, the installer)
+// while programs run in the prefix.
+var ErrBusy = errors.New("programs are running in the prefix; end them first")
+
+// NeedsIdle tells whether the plan runs wine tools, which Apply does only
+// with no program running in the prefix.
+func (pl *Plan) NeedsIdle() bool {
+	return slices.ContainsFunc(pl.Changes, func(c Change) bool {
+		return c.Op == "init" || c.Op == "update" || c.Op == "install"
+	})
+}
+
 // Apply executes the plan. Steps run in order; state.json is written only
 // when all of them succeed.
+//
+// Programs already running keep the prefix's wineserver up. Registry, fonts
+// and drives then go in live, and Apply does not wait for the server to exit
+// to flush the registry (that would wait on the programs); the server writes
+// it out when it does exit. Steps that run wine tools give ErrBusy instead.
 func (pl *Plan) Apply(log func(string)) error {
+	busy := runner.ServerUp(pl.p.Pfx)
+	if busy && pl.NeedsIdle() {
+		return ErrBusy
+	}
 	if len(pl.Changes) > 0 && (pl.Changes[0].Op == "init" || pl.Changes[0].Op == "update") {
 		arg := "-i"
 		if pl.Changes[0].Op == "update" {
@@ -518,8 +539,10 @@ func (pl *Plan) Apply(log func(string)) error {
 	}
 
 	// Make wineserver flush the registry before we record success.
-	if err := pl.r.Server(pl.p.Pfx, "-w"); err != nil {
-		return fmt.Errorf("wineserver -w: %w", err)
+	if !busy {
+		if err := pl.r.Server(pl.p.Pfx, "-w"); err != nil {
+			return fmt.Errorf("wineserver -w: %w", err)
+		}
 	}
 
 	st := &store.State{

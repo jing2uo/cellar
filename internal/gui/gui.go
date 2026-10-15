@@ -840,6 +840,74 @@ func (s *Service) RemoveApp(name, id string) error {
 	return appmgr.Remove(p, id)
 }
 
+// ApplyBusy tells the page, before it applies, that the plan needs what
+// runs in the prefix ended first (reconcile.ErrBusy): it lists the
+// processes. Empty: apply goes ahead, live if programs run.
+func (s *Service) ApplyBusy(name string) ([]runner.Process, error) {
+	pl, err := s.Plan(name)
+	if err != nil || !pl.NeedsIdle() {
+		return []runner.Process{}, err
+	}
+	return s.Processes(name)
+}
+
+// Processes lists what runs in the prefix, Wine's own processes included
+// (marked System).
+func (s *Service) Processes(name string) ([]runner.Process, error) {
+	p, c, err := open(name)
+	if err != nil {
+		return nil, err
+	}
+	r, err := runner.Resolve(c.Runner)
+	if err != nil {
+		return nil, err
+	}
+	return r.Tasks(p.Pfx)
+}
+
+// EndProcesses ends processes of the prefix by pid.
+func (s *Service) EndProcesses(name string, pids []int) error {
+	p, c, err := open(name)
+	if err != nil {
+		return err
+	}
+	r, err := runner.Resolve(c.Runner)
+	if err != nil {
+		return err
+	}
+	return r.TaskKill(p.Pfx, pids)
+}
+
+// Blocked lists the programs kept from running (disabled .exe overrides).
+func (s *Service) Blocked(name string) ([]string, error) {
+	p, err := store.Open(name)
+	if err != nil {
+		return nil, err
+	}
+	return config.ReadBlocked(p.Config)
+}
+
+// Block keeps programs from running: they go into cellar.toml's
+// dll_overrides as disabled, which applies at once (live, with programs
+// running), and then the running ones (pids) are ended. Unblock (block
+// false) lets them run again.
+func (s *Service) Block(name string, names []string, pids []int, block bool) error {
+	p, err := store.Open(name)
+	if err != nil {
+		return err
+	}
+	if err := config.SetBlocked(p.Config, names, block); err != nil {
+		return err
+	}
+	if _, err := s.Apply(name); errors.Is(err, reconcile.ErrBusy) {
+		return errors.New(tr("已写入 cellar.toml，但还有其他改动要等程序都结束后才能应用",
+			"Written to cellar.toml, but other pending changes can be applied only once the programs end"))
+	} else if err != nil {
+		return err
+	}
+	return s.EndProcesses(name, pids)
+}
+
 // Kill ends every process in the prefix (wineserver -k).
 func (s *Service) Kill(name string) error {
 	p, c, err := open(name)
