@@ -21,6 +21,7 @@ import (
 	"github.com/jing2uo/cellar/internal/desktop"
 	"github.com/jing2uo/cellar/internal/importer"
 	"github.com/jing2uo/cellar/internal/launch"
+	"github.com/jing2uo/cellar/internal/prefs"
 	"github.com/jing2uo/cellar/internal/reconcile"
 	"github.com/jing2uo/cellar/internal/runner"
 	"github.com/jing2uo/cellar/internal/store"
@@ -31,7 +32,7 @@ var version = "dev"
 
 const usage = `cellar - Wine prefixes from cellar.toml
 
-  cellar new <prefix> [--runner R] [--locale zh_CN] [--fonts core,cjk|all|none] [--no-apply]
+  cellar new <prefix> [--runner R] [--locale zh_CN] [--fonts core,cjk|all|none] [--corefonts microsoft|liberation] [--no-apply]
                                      (alias: create; fonts default: core, plus cjk for a CJK region;
                                      then applies: wineboot and fonts)
   cellar list
@@ -225,6 +226,7 @@ func cmdNew(args []string) error {
 	rn := fs.String("runner", "", "runner (default: system Wine, else newest download)")
 	loc := fs.String("locale", "", "Windows region (zh_CN, ja_JP...; default: the host's)")
 	fonts := fs.String("fonts", "", "font sets: core, cjk, all, comma-separated, or none (default: core, and cjk for a CJK region)")
+	core := fs.String("corefonts", "", "English core fonts: microsoft or liberation (default: cellar's settings)")
 	noApply := fs.Bool("no-apply", false, "only write cellar.toml")
 	pos, _, err := parse(fs, args)
 	if err != nil {
@@ -253,9 +255,22 @@ func cmdNew(args []string) error {
 	} else if *fonts != "" {
 		sets = strings.Split(*fonts, ",")
 	}
+	switch *core {
+	case "", "default":
+		*core = ""
+	case prefs.CoreMicrosoft, prefs.CoreLiberation:
+	default:
+		return fmt.Errorf("corefonts %q: microsoft, liberation or default", *core)
+	}
 	p, err := store.Create(pos[0], *rn, locale, sets)
 	if err != nil {
 		return err
+	}
+	if *core != "" {
+		if err := config.WriteCoreFonts(p.Config, *core); err != nil {
+			os.RemoveAll(p.Dir)
+			return err
+		}
 	}
 	if _, err := p.Load(); err != nil {
 		os.RemoveAll(p.Dir)

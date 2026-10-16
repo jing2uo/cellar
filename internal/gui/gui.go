@@ -468,7 +468,7 @@ func (s *Service) Launch(name, app, exe string) error {
 
 // Create makes the prefix and starts its first apply (wineboot, fonts),
 // returning the task id.
-func (s *Service) Create(name, runnerName, locale string, fontSets []string) (string, error) {
+func (s *Service) Create(name, runnerName, locale string, fontSets []string, core string) (string, error) {
 	if runnerName == "" {
 		var err error
 		if runnerName, err = runner.Default(); err != nil {
@@ -481,8 +481,15 @@ func (s *Service) Create(name, runnerName, locale string, fontSets []string) (st
 	if fontSets == nil {
 		fontSets = []string{}
 	}
-	if _, err := store.Create(name, runnerName, locale, fontSets); err != nil {
+	p, err := store.Create(name, runnerName, locale, fontSets)
+	if err != nil {
 		return "", err
+	}
+	if core != "" {
+		if err := config.WriteCoreFonts(p.Config, core); err != nil {
+			os.RemoveAll(p.Dir)
+			return "", err
+		}
 	}
 	return s.ApplyTask(name)
 }

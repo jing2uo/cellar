@@ -100,6 +100,21 @@ func WriteSettings(path string, st Settings) error {
 	return e.Save()
 }
 
+// WriteCoreFonts sets [fonts] core; empty removes it, following cellar's
+// settings.
+func WriteCoreFonts(path, core string) error {
+	e, err := Edit(path)
+	if err != nil {
+		return err
+	}
+	v := ""
+	if core != "" {
+		v = Literal(core)
+	}
+	e.SetIn("fonts", "core", v)
+	return e.Save()
+}
+
 // ReadBlocked lists the programs the file keeps from running: dll overrides
 // of an .exe set to disabled, which Wine refuses to start.
 func ReadBlocked(path string) ([]string, error) {

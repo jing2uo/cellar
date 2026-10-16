@@ -1197,12 +1197,13 @@ async function browse(d, name, path, act = { label: t("添加"), fn: (e) => doAd
   d.querySelectorAll("[data-k]").forEach((b) => b.onclick = (ev) => { ev.stopPropagation(); act.fn(ents[+b.dataset.k]); });
 }
 
-function newPrefix() {
+async function newPrefix() {
   if (!env.runners.length) { openSettings("runner"); return; }
+  const pr = await call("Prefs");
   dialog(`<b>${t("新建 prefix")}</b><div class="meta">${t("名称")}</div><input id="n" placeholder="${t("例如 wechat")}">
     <div class="meta">runner</div><select id="r">${env.runners.map((r) => `<option value="${esc(r.name)}" ${r.default ? "selected" : ""}>${esc(r.name)} — ${esc(r.version)}${r.problems && r.problems.length ? t("（{0}）", t("⚠ 缺 32 位支持")) : ""}</option>`).join("")}</select>
     <div class="meta">${t("区域")} · ${LOCALE_NOTE()}</div>${localeField(env.host_locale)}
-    <div class="meta">${t("字体")}</div>${fontField(env.default_font_sets)}
+    <div class="meta">${t("字体")}</div>${fontField(env.default_font_sets, "", pr.fonts.core)}
     <div id="e" class="err"></div><div class="row"><button id="c">${t("取消")}</button><button id="k" class="primary">${t("创建")}</button></div>`, (d) => {
     d.querySelector("#c").onclick = () => d.close();
     // The region decides CJK until the boxes are touched.
@@ -1218,7 +1219,7 @@ function newPrefix() {
       const n = d.querySelector("#n").value.trim();
       const k = d.querySelector("#k");
       k.disabled = true; k.textContent = t("创建中…");
-      try { const id = await call("Create", n, d.querySelector("#r").value, readLocale(d), readFonts(d)); sel = n; d.close(); await load(); if (id) watchTask(n, id); }
+      try { const id = await call("Create", n, d.querySelector("#r").value, readLocale(d), readFonts(d), readCore(d)); sel = n; d.close(); await load(); if (id) watchTask(n, id); }
       catch (e) { d.querySelector("#e").textContent = e.message || e; k.disabled = false; k.textContent = t("创建"); }
     };
   });

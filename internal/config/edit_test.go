@@ -166,3 +166,21 @@ func TestDependencies(t *testing.T) {
 		t.Fatalf("not removed:\n%s", b)
 	}
 }
+
+// A new prefix may choose its English core fonts; the file still loads.
+func TestWriteCoreFonts(t *testing.T) {
+	p := filepath.Join(t.TempDir(), "cellar.toml")
+	os.WriteFile(p, []byte(Template("x", "system", "zh_CN", []string{"core"})), 0o644)
+	if err := WriteCoreFonts(p, "microsoft"); err != nil {
+		t.Fatal(err)
+	}
+	c, err := Load(p)
+	if err != nil || c.Fonts.Core != "microsoft" {
+		b, _ := os.ReadFile(p)
+		t.Fatalf("%v %q\n%s", err, c.Fonts.Core, b)
+	}
+	WriteCoreFonts(p, "")
+	if st, _ := ReadSettings(p); st.CoreFonts != "" {
+		t.Fatal(st.CoreFonts)
+	}
+}
