@@ -660,7 +660,7 @@ func (s *Service) Delete(name string) error {
 	if err != nil {
 		return err
 	}
-	return appmgr.DeletePrefix(p)
+	return noAgent(appmgr.DeletePrefix(p))
 }
 
 func (s *Service) Task(id string) (Task, error) {
@@ -923,7 +923,17 @@ func (s *Service) Processes(name string) ([]runner.Process, error) {
 	if err != nil {
 		return nil, err
 	}
-	return r.Tasks(p.Pfx, c.Env)
+	ps, err := r.Tasks(p.Pfx, c.Env)
+	return ps, noAgent(err)
+}
+
+// noAgent words runner.ErrNoAgent for the page.
+func noAgent(err error) error {
+	if errors.Is(err, runner.ErrNoAgent) {
+		return errors.New(tr("这个 prefix 的 Wine 在另一个 cellar 实例里运行（菜单启动器，或已关闭的窗口），那边没有可接管请求的进程；在那边结束程序，或等它们退出",
+			"This prefix's Wine runs in another cellar instance (a menu launcher, or a window since closed) that takes no requests; end its programs there, or wait for them to exit"))
+	}
+	return err
 }
 
 // EndProcesses ends processes of the prefix by pid.
@@ -936,7 +946,7 @@ func (s *Service) EndProcesses(name string, pids []int) error {
 	if err != nil {
 		return err
 	}
-	return r.TaskKill(p.Pfx, c.Env, pids)
+	return noAgent(r.TaskKill(p.Pfx, c.Env, pids))
 }
 
 // Blocked lists the programs kept from running (disabled .exe overrides).
@@ -974,6 +984,5 @@ func (s *Service) Kill(name string) error {
 	if err != nil {
 		return err
 	}
-	r.Kill(p.Pfx, c.Env)
-	return nil
+	return noAgent(r.Kill(p.Pfx, c.Env))
 }

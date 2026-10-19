@@ -24,7 +24,6 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
-	"syscall"
 
 	"github.com/jing2uo/cellar/internal/store"
 	"github.com/ulikunitz/xz"
@@ -315,10 +314,16 @@ func (c *counter) Write(p []byte) (int, error) {
 // (config.Env, which holds its locale) even for a tool: Wine started under
 // another code page puts its own Tahoma and Microsoft Sans Serif font links
 // back, over cellar's, and the GUI's own locale is not the prefix's (in the
-// Flatpak, LC_CTYPE=C.UTF-8).
+// Flatpak, LC_CTYPE=C.UTF-8). With the prefix's wineserver in another
+// Flatpak instance, the command goes through an agent there (agent.go).
 func (r *Runner) Command(prefix string, env map[string]string, args ...string) *exec.Cmd {
 	cmd := exec.Command(r.Wine, args...)
 	cmd.Env = Environ(prefix, env)
+	if serverOwner(prefix) == foreignServer {
+		if self, err := os.Executable(); err == nil {
+			cmd.Path, cmd.Args = self, append([]string{self, ProxyCommand, r.Wine}, args...)
+		}
+	}
 	return cmd
 }
 
@@ -330,27 +335,34 @@ func (r *Runner) Server(prefix string, args ...string) error {
 }
 
 // Kill ends every process in the prefix and waits for its wineserver to go.
-// wineserver -k signals the pid holding the server's lock, which a server
-// started from another flatpak instance (another pid namespace: a desktop
-// launcher, say) keeps out of sight; wineboot -k asks the server itself
-// (-s: the desktop process too).
-func (r *Runner) Kill(prefix string, env map[string]string) {
+// wineboot -k asks the server itself (-s: the desktop process too), through
+// an agent for a server in another flatpak instance. wineserver -k signals
+// the pid holding the server's lock, which such a server keeps out of
+// sight, so it is left out then; with no agent there it fails and ends
+// nothing.
+func (r *Runner) Kill(prefix string, env map[string]string) error {
 	if !ServerUp(prefix) {
-		return
+		return nil
 	}
-	r.Command(prefix, env, "wineboot", "-k", "-s").Run()
-	r.Server(prefix, "-k")
+	if serverOwner(prefix) == foreignServer {
+		if out, err := r.Command(prefix, env, "wineboot", "-k", "-s").CombinedOutput(); err != nil {
+			return cmdError("wineboot -k", err, out)
+		}
+	} else {
+		r.Command(prefix, env, "wineboot", "-k", "-s").Run()
+		r.Server(prefix, "-k")
+	}
 	r.Server(prefix, "-w")
+	return nil
 }
 
 // ServerUp tells whether a wineserver serves the prefix: its socket is in
 // /tmp/.wine-<uid>/server-<dev>-<inode>, as Wine names it.
 func ServerUp(prefix string) bool {
-	var st syscall.Stat_t
-	if syscall.Stat(prefix, &st) != nil {
+	dir := serverDir(prefix)
+	if dir == "" {
 		return false
 	}
-	dir := filepath.Join("/tmp", fmt.Sprintf(".wine-%d", os.Getuid()), fmt.Sprintf("server-%x-%x", st.Dev, st.Ino))
 	_, err := os.Stat(filepath.Join(dir, "socket"))
 	return err == nil
 }

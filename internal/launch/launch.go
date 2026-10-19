@@ -157,6 +157,10 @@ func Run(p *store.Prefix, c *config.Config, r *runner.Runner, o Options) (*Meta,
 	sigs := make(chan os.Signal, 1)
 	signal.Notify(sigs, syscall.SIGINT, syscall.SIGTERM)
 	defer signal.Stop(sigs)
+	// Other instances' wine commands for this prefix come through here
+	// while its server is up (runner.Serve).
+	agent := runner.Serve(p.Pfx)
+	defer agent(false)
 	if err := cmd.Start(); err != nil {
 		return nil, err
 	}
@@ -180,6 +184,7 @@ func Run(p *store.Prefix, c *config.Config, r *runner.Runner, o Options) (*Meta,
 		return m, err
 	}
 	prune(p.RunsDir())
+	agent(true)
 	return m, nil
 }
 

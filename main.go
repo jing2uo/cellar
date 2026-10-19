@@ -101,6 +101,9 @@ func main() {
 		"version": func([]string) error { fmt.Println(version); return nil },
 	}
 	cmds["extract"], cmds["icon"], cmds["edit"], cmds["about"] = cmdExtract, cmdIcon, cmdEdit, cmdAbout
+	// Not for people: how a wine command reaches a server in another
+	// Flatpak instance (runner.Command).
+	cmds[runner.ProxyCommand] = func(a []string) error { os.Exit(runner.Proxy(a)); return nil }
 	f, ok := cmds[os.Args[1]]
 	if !ok && store.Packaged() {
 		// Inside a package the launcher is called as `cellar [files...]`
@@ -482,7 +485,9 @@ func cmdApply(args []string) error {
 	}
 	if *kill && pl.NeedsIdle() {
 		if r, err := runner.Resolve(c.Runner); err == nil {
-			r.Kill(p.Pfx, c.Env)
+			if err := r.Kill(p.Pfx, c.Env); err != nil {
+				return err
+			}
 		}
 	}
 	logf := func(s string) {

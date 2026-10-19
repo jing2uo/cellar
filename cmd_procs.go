@@ -85,8 +85,7 @@ func cmdKill(args []string) error {
 	}
 	which := afterPrefix(pos)
 	if len(which) == 0 {
-		r.Kill(p.Pfx, c.Env)
-		return nil
+		return r.Kill(p.Pfx, c.Env)
 	}
 	var pids []int
 	var names []string

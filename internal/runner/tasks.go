@@ -3,7 +3,9 @@ package runner
 import (
 	"bytes"
 	"encoding/csv"
+	"errors"
 	"fmt"
+	"os/exec"
 	"strconv"
 	"strings"
 )
@@ -35,6 +37,10 @@ func (r *Runner) Tasks(prefix string, env map[string]string) ([]Process, error) 
 	}
 	out, err := r.Command(prefix, env, "tasklist", "/fo", "csv", "/nh").Output()
 	if err != nil {
+		var ee *exec.ExitError
+		if errors.As(err, &ee) {
+			return nil, cmdError("tasklist", err, ee.Stderr)
+		}
 		return nil, fmt.Errorf("tasklist: %w", err)
 	}
 	return parseTasklist(out)
@@ -83,7 +89,20 @@ func (r *Runner) TaskKill(prefix string, env map[string]string, pids []int) erro
 		args = append(args, "/pid", strconv.Itoa(p))
 	}
 	if out, err := r.Command(prefix, env, args...).CombinedOutput(); err != nil {
-		return fmt.Errorf("taskkill: %v\n%s", err, bytes.TrimSpace(out))
+		return cmdError("taskkill", err, out)
 	}
 	return nil
+}
+
+// cmdError names a failed wine command with its output, or is ErrNoAgent.
+func cmdError(name string, err error, out []byte) error {
+	out = bytes.TrimSpace(out)
+	var ee *exec.ExitError
+	if errors.As(err, &ee) && ee.ExitCode() == proxyNoAgent && bytes.Contains(out, []byte(ErrNoAgent.Error())) {
+		return ErrNoAgent
+	}
+	if len(out) == 0 {
+		return fmt.Errorf("%s: %w", name, err)
+	}
+	return fmt.Errorf("%s: %v\n%s", name, err, out)
 }

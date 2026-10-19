@@ -206,7 +206,9 @@ func DeletePrefix(p *store.Prefix) error {
 	}
 	if c, err := p.Load(); err == nil {
 		if r, err := runner.Resolve(c.Runner); err == nil {
-			r.Kill(p.Pfx, c.Env)
+			if err := r.Kill(p.Pfx, c.Env); err != nil {
+				return err // its programs still run: keep the prefix
+			}
 		}
 		for _, a := range c.Apps {
 			desktop.Remove(p, a.ID)
