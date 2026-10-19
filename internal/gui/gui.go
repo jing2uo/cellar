@@ -161,6 +161,9 @@ func (s *Service) FontStatus(core string) []fonts.Status { return fonts.Statuses
 func (s *Service) Prefs() prefs.Prefs { return prefs.Load() }
 
 func (s *Service) SavePrefs(p prefs.Prefs) error {
+	// The pages hold the settings from when they rendered; the order is
+	// SetPrefixOrder's, and a drag since must not be undone.
+	p.UI.Order = prefs.Load().UI.Order
 	if err := prefs.Save(p); err != nil {
 		return err
 	}
@@ -319,6 +322,15 @@ func (s *Service) Prefixes() ([]PrefixRow, error) {
 	if err != nil {
 		return nil, err
 	}
+	order := prefs.Load().UI.Order
+	rank := func(n string) int {
+		if i := slices.Index(order, n); i >= 0 {
+			return i
+		}
+		return len(order)
+	}
+	// store.List is sorted by name, so a stable sort keeps the rest by name.
+	slices.SortStableFunc(names, func(a, b string) int { return rank(a) - rank(b) })
 	rows := []PrefixRow{}
 	for _, n := range names {
 		r := PrefixRow{Name: n, Source: "local", State: "error", Apps: []AppRow{}}
@@ -360,6 +372,13 @@ func (s *Service) Prefixes() ([]PrefixRow, error) {
 		rows = append(rows, r)
 	}
 	return rows, nil
+}
+
+// SetPrefixOrder keeps the sidebar's order after a drag.
+func (s *Service) SetPrefixOrder(names []string) error {
+	p := prefs.Load()
+	p.UI.Order = names
+	return prefs.Save(p)
 }
 
 func open(name string) (*store.Prefix, *config.Config, error) {

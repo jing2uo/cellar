@@ -44,6 +44,11 @@ aside { width: 240px; background: var(--side); border-right: 1px solid var(--lin
 .item:hover { background: color-mix(in srgb, var(--text) 6%, transparent); }
 .item.sel { background: var(--accent-soft); color: var(--accent); font-weight: 600; }
 .item small { color: var(--mute); font-weight: 400; }
+.item.dragging { position: fixed; z-index: 50; pointer-events: none; background: var(--panel); color: var(--accent);
+  border: 1px solid var(--accent); box-shadow: 0 10px 28px rgba(0,0,0,.28); transform: scale(1.04) rotate(-1deg); }
+.item.slot { border: 2px dashed color-mix(in srgb, var(--accent) 55%, transparent); background: var(--accent-soft); }
+.item.slot:hover { background: var(--accent-soft); }
+.item.shift { transition: transform .15s ease; }
 .withico { display: flex; align-items: center; gap: 8px; }
 button.withico { gap: 6px; }
 .ico { width: 16px; height: 16px; flex: none; }
@@ -265,10 +270,68 @@ function renderList() {
       <span>${esc(p.name)}</span><small class="s-${p.state}">●</small></div>`).join("") || `<div class="empty item">${t("还没有 prefix")}</div>`);
   $("#sys").innerHTML = `<div class="item ${sel === SETTINGS ? "sel" : ""}" id="settingsitem"><span class="withico"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>${t("设置")}</span></div>`;
   document.querySelectorAll(".item[data-n]").forEach((el) => {
-    el.onclick = () => { sel = el.dataset.n; renderList(); renderMain(); };
+    el.onclick = () => { if (dragged) return; sel = el.dataset.n; renderList(); renderMain(); };
+    el.onpointerdown = (ev) => dragItem(el, ev);
   });
   $("#new").onclick = newPrefix;
   $("#settingsitem").onclick = () => { sel = SETTINGS; renderList(); renderMain(); };
+}
+
+// dragItem reorders the prefix list by dragging an item, with pointer
+// events: WebKitGTK under Wails does not reliably deliver HTML5 drag and
+// drop. A move under a few pixels is still a click.
+let dragged = false;
+function dragItem(el, ev) {
+  if (ev.button !== 0) return;
+  const list = $("#list"), x0 = ev.clientX, y0 = ev.clientY;
+  let slot = null, dx = 0, dy = 0;
+  // lift takes the item out of the list to follow the pointer, leaving a
+  // slot where it will land.
+  const lift = () => {
+    const r = el.getBoundingClientRect();
+    dx = x0 - r.left; dy = y0 - r.top;
+    slot = document.createElement("div");
+    slot.className = "item slot"; slot.style.height = r.height + "px";
+    list.insertBefore(slot, el);
+    Object.assign(el.style, { width: r.width + "px", left: r.left + "px", top: r.top + "px" });
+    el.classList.add("dragging");
+  };
+  // place moves the slot, sliding the items it passes into their new places.
+  const place = (y) => {
+    const items = [...list.querySelectorAll(".item[data-n]:not(.dragging)")];
+    const after = items.find((x) => { const r = x.getBoundingClientRect(); return y < r.top + r.height / 2; }) || null;
+    if (after === slot.nextElementSibling) return;
+    const before = new Map(items.map((x) => [x, x.getBoundingClientRect().top]));
+    list.insertBefore(slot, after);
+    for (const [x, top] of before) {
+      const d = top - x.getBoundingClientRect().top; if (!d) continue;
+      x.classList.remove("shift"); x.style.transform = `translateY(${d}px)`;
+      void x.offsetWidth; x.classList.add("shift"); x.style.transform = "";
+    }
+  };
+  const move = (e) => {
+    if (!slot) { if (Math.hypot(e.clientX - x0, e.clientY - y0) < 5) return; lift(); }
+    el.style.left = e.clientX - dx + "px"; el.style.top = e.clientY - dy + "px";
+    place(e.clientY);
+  };
+  const up = async () => {
+    removeEventListener("pointermove", move);
+    removeEventListener("pointerup", up);
+    removeEventListener("pointercancel", up);
+    if (!slot) return;
+    list.replaceChild(el, slot);
+    el.classList.remove("dragging"); el.removeAttribute("style");
+    list.querySelectorAll(".shift").forEach((x) => x.classList.remove("shift"));
+    // The click that ends the drag must not select the item.
+    dragged = true; setTimeout(() => dragged = false);
+    const names = [...list.querySelectorAll(".item[data-n]")].map((x) => x.dataset.n);
+    if (names.join("\0") === prefixes.filter((p) => p.source === "local").map((p) => p.name).join("\0")) return;
+    prefixes.sort((a, b) => names.indexOf(a.name) - names.indexOf(b.name));
+    try { await call("SetPrefixOrder", names); } catch (e) { fail(e); }
+  };
+  addEventListener("pointermove", move);
+  addEventListener("pointerup", up);
+  addEventListener("pointercancel", up);
 }
 
 const noWine = () => env.runners.length ? "" : `<div class="banner"><div><b>${t("没有找到 Wine")}</b><div class="meta">${env.flatpak

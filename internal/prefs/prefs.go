@@ -54,6 +54,9 @@ type Runners struct {
 type UI struct {
 	Language string `toml:"language,omitempty" json:"language"` // "" | zh | en
 	Theme    string `toml:"theme,omitempty" json:"theme"`       // "" | light | dark
+	// Order is the sidebar's prefix order, as dragged; prefixes not in it
+	// follow, by name.
+	Order []string `toml:"order,omitempty" json:"order"`
 }
 
 type Fonts struct {
