@@ -58,6 +58,14 @@ type Prefix struct {
 
 var validName = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._-]*$`)
 
+// CheckName vets a prefix name: it becomes a directory under the prefixes.
+func CheckName(name string) error {
+	if !validName.MatchString(name) {
+		return fmt.Errorf("bad prefix name %q", name)
+	}
+	return nil
+}
+
 // Open finds a prefix by name. In packaged mode there is exactly one prefix
 // and name is ignored.
 func Open(name string) (*Prefix, error) {

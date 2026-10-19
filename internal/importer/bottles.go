@@ -198,6 +198,9 @@ func Import(bottleDir, name string) (*Result, error) {
 	if name == "" {
 		name = slug(filepath.Base(bottleDir))
 	}
+	if err := store.CheckName(name); err != nil {
+		return nil, err
+	}
 	dir := filepath.Join(store.PrefixesDir(), name)
 	if _, err := os.Stat(dir); err == nil {
 		return nil, fmt.Errorf("prefix %q already exists", name)
