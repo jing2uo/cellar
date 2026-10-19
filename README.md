@@ -28,8 +28,9 @@ vendor's installer, and cellar builds and maintains each user's prefix from it.
   extracts their icons and adds desktop launchers.
 - **Logs**: every run is recorded (the last 20 per prefix), console output in
   the prefix's code page decoded for reading.
-- **Bottles import**: brings over existing bottles, their DLL overrides and
-  settings included.
+- **Import**: brings over existing bottles, their DLL overrides and settings
+  included, and prefixes of another cellar (the system-installed one's into
+  the Flatpak, or the other way round).
 
 ## Install
 

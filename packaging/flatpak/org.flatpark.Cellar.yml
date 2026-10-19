@@ -30,6 +30,8 @@ finish-args:
   - --filesystem=xdg-data/applications:create
   # Read-only, to import bottles from the Bottles Flatpak.
   - --filesystem=~/.var/app/com.usebottles.bottles/data/bottles:ro
+  # Read-only, to import prefixes of a system-installed cellar.
+  - --filesystem=~/.local/share/cellar/prefixes:ro
   # New-WoW64 Wine runs 32-bit Windows code with no 32-bit Linux libraries,
   # but Flatpak's default seccomp filter still kills it: without this every
   # 32-bit program fails in NtCreateUserProcess.

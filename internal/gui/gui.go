@@ -83,6 +83,7 @@ type Service struct {
 
 	mu        sync.Mutex
 	bottleDir string // picked in the import page; replaces the default places
+	cellarDir string // likewise, for prefixes of another cellar
 
 	vmu   sync.Mutex
 	verbs []runner.Verb // winetricks' list, once asked
@@ -549,19 +550,71 @@ type BottleRow struct {
 	Imported bool `json:"imported"`
 }
 
+// CellarPrefixes lists the prefixes of the other cellar (the
+// system-installed one's from the Flatpak, or the other way round) that could
+// be imported.
+func (s *Service) CellarPrefixes() []BottleRow {
+	s.mu.Lock()
+	dir := s.cellarDir
+	s.mu.Unlock()
+	found := importer.FindCellar()
+	if dir != "" {
+		found = importer.ScanCellar(dir)
+	}
+	return importRows(found)
+}
+
+// PickCellar asks for another cellar's prefixes directory, or one prefix,
+// as PickBottles does for Bottles. "" means cancelled.
+func (s *Service) PickCellar() (string, error) {
+	start, _ := os.UserHomeDir()
+	for _, d := range importer.CellarDirs() {
+		if _, err := os.Stat(d); err == nil {
+			start = d
+			break
+		}
+	}
+	dir, err := s.app.Dialog.OpenFile().
+		SetTitle(tr("选择另一个 cellar 的 prefixes 目录，或其中一个 prefix", "Choose another cellar's prefixes directory or one prefix")).
+		SetDirectory(start).
+		CanChooseDirectories(true).
+		CanChooseFiles(false).
+		ShowHiddenFiles(true).
+		PromptForSingleSelection()
+	if err != nil || dir == "" {
+		return "", err
+	}
+	if len(importer.ScanCellar(dir)) == 0 {
+		return "", fmt.Errorf(tr("%s 里没有 prefix：选 cellar 的 prefixes 目录，或某个含 cellar.toml 的 prefix 目录", "No prefix found in %s: choose a cellar prefixes directory or a prefix directory containing cellar.toml"), dir)
+	}
+	s.mu.Lock()
+	s.cellarDir = dir
+	s.mu.Unlock()
+	return dir, nil
+}
+
+func (s *Service) ImportCellar(dir string) (*importer.Result, error) {
+	return importer.ImportCellar(dir, "")
+}
+
 // Bottles lists Bottles bottles that could be imported.
 func (s *Service) Bottles() []BottleRow {
-	have := map[string]bool{}
-	names, _ := store.List()
-	for _, n := range names {
-		have[n] = true
-	}
 	s.mu.Lock()
 	dir := s.bottleDir
 	s.mu.Unlock()
 	found := importer.Find()
 	if dir != "" {
 		found = importer.Scan(dir)
+	}
+	return importRows(found)
+}
+
+// importRows marks what is already imported: a prefix of that name exists.
+func importRows(found []importer.Bottle) []BottleRow {
+	have := map[string]bool{}
+	names, _ := store.List()
+	for _, n := range names {
+		have[n] = true
 	}
 	rows := []BottleRow{}
 	for _, b := range found {

@@ -66,6 +66,8 @@ const usage = `cellar - Wine prefixes from cellar.toml
   cellar app rename <prefix> <id> <name>
   cellar import bottles [--list] [--dir D] [<bottle>...] [--as NAME]
                                      --dir: Bottles' bottles directory, if not the usual one
+  cellar import cellar [--list] [--dir D] [<prefix>...] [--as NAME]
+                                     prefixes of the other cellar (system-installed <-> Flatpak)
   cellar runner list | available [--n 3] | install <source[@ver]|url> | rm <name>
   cellar icon <program.exe> <out.png>   extract a program's icon (packaging)
   cellar extract                     a package's apply_extra: unpack its installer
@@ -761,20 +763,30 @@ func cmdRunner(args []string) error {
 }
 
 func cmdImport(args []string) error {
-	if len(args) == 0 || args[0] != "bottles" {
-		return errors.New("usage: cellar import bottles [--list] [--dir D] [<bottle>...]")
+	usage := errors.New("usage: cellar import bottles|cellar [--list] [--dir D] [--as N] [<name>...]")
+	if len(args) == 0 {
+		return usage
+	}
+	kind := args[0]
+	find, scan, dirs, imp := importer.Find, importer.Scan, importer.BottlesDirs, importer.Import
+	switch kind {
+	case "bottles":
+	case "cellar":
+		find, scan, dirs, imp = importer.FindCellar, importer.ScanCellar, importer.CellarDirs, importer.ImportCellar
+	default:
+		return usage
 	}
 	fs := flag.NewFlagSet("import", flag.ContinueOnError)
 	list := fs.Bool("list", false, "list bottles found")
-	as := fs.String("as", "", "prefix name (one bottle only)")
-	from := fs.String("dir", "", "where the bottles are (default: Bottles' usual places)")
+	as := fs.String("as", "", "prefix name (one only)")
+	from := fs.String("dir", "", "where they are (default: Bottles' or the other cellar's usual places)")
 	pos, _, err := parse(fs, args[1:])
 	if err != nil {
 		return err
 	}
-	found, where := importer.Find(), importer.BottlesDirs()
+	found, where := find(), dirs()
 	if *from != "" {
-		found, where = importer.Scan(*from), []string{*from}
+		found, where = scan(*from), []string{*from}
 	}
 	if *list || len(pos) == 0 {
 		have, _ := store.List()
@@ -791,7 +803,7 @@ func cmdImport(args []string) error {
 			return nil
 		}
 		if len(found) == 0 {
-			fmt.Println("no bottles in", strings.Join(where, ", "))
+			fmt.Println("nothing to import in", strings.Join(where, ", "))
 		}
 		for _, r := range rows {
 			mark := " "
@@ -804,12 +816,12 @@ func cmdImport(args []string) error {
 			fmt.Printf("%s %-16s %-16s %-30s %s%s\n", mark, r.Name, r.Runner, strings.Join(r.Apps, ","), r.Dir, r.Error)
 		}
 		if len(found) > 0 {
-			fmt.Println("\n✓ imported.  cellar import bottles <name>...")
+			fmt.Printf("\n✓ imported.  cellar import %s <name>...\n", kind)
 		}
 		return nil
 	}
 	if *as != "" && len(pos) > 1 {
-		return errors.New("--as takes one bottle")
+		return errors.New("--as takes one name")
 	}
 	var results []*importer.Result
 	for _, want := range pos {
@@ -822,10 +834,10 @@ func cmdImport(args []string) error {
 				}
 			}
 			if dir == "" {
-				return fmt.Errorf("no bottle %q", want)
+				return fmt.Errorf("no %q to import", want)
 			}
 		}
-		r, err := importer.Import(dir, *as)
+		r, err := imp(dir, *as)
 		if err != nil {
 			return fmt.Errorf("%s: %w", want, err)
 		}

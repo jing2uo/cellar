@@ -215,7 +215,7 @@ const SETTINGS = "\u0000settings";
 // setTab is the settings page's tab: general, fonts, runner or import.
 let setTab = "general";
 function openSettings(tab) { sel = SETTINGS; setTab = tab; renderList(); renderMain(); }
-let bottles = [];
+let bottles = [], cellars = [];
 
 // load refreshes the data; it re-renders only when something changed and no
 // dialog is open, so a refresh on window focus never swaps the page out from
@@ -244,11 +244,11 @@ function ask(title, value = null) {
 }
 
 async function load(force = true) {
-  const [e, ps, bs] = await Promise.all([call("Env"), call("Prefixes"), call("Bottles")]);
-  const sig = JSON.stringify([e, ps, bs, sel]);
+  const [e, ps, bs, cs] = await Promise.all([call("Env"), call("Prefixes"), call("Bottles"), call("CellarPrefixes")]);
+  const sig = JSON.stringify([e, ps, bs, cs, sel]);
   if (!force && (sig === lastSig || $("#dlg").open)) return;
   lastSig = sig;
-  env = e; prefixes = ps; bottles = bs;
+  env = e; prefixes = ps; bottles = bs; cellars = cs;
   setLang(env.lang);
   applyTheme(env.theme);
   if (!sel && location.hash.length > 1) { sel = decodeURIComponent(location.hash.slice(1)); if (sel === "runners") { sel = SETTINGS; setTab = "runner"; } }
@@ -510,28 +510,36 @@ async function watchTask(name, id) {
 }
 const kindText = (kind) => kind === "legacy" ? t("传统 32 位") : "WoW64";
 
-function renderImport() {
-  $("#settab").innerHTML = `<section><div class="sechead"><h2>${t("从 Bottles 导入")}</h2><button id="pickb">${t("选择目录")}</button></div>
-      <div class="meta" style="margin-bottom:8px">${t("从 Bottles 复制导入，不影响原数据。")}</div>
-      <div class="rlist">${bottles.map((b) => `
+// importSection lists what one source (another cellar, Bottles) has to import.
+const importSection = (kind, title, note, rows, empty) => `<section><div class="sechead"><h2>${title}</h2><button data-pick="${kind}">${t("选择目录")}</button></div>
+      <div class="meta" style="margin-bottom:8px">${note}</div>
+      <div class="rlist">${rows.map((b) => `
       <div class="rrow"><div class="grow"><b>${esc(b.name)}</b>
         ${b.imported ? `<span class="tag">${t("已导入为 {0}", esc(b.prefix))}</span>` : ""} ${b.runner ? `<span class="tag">${esc(b.runner)}</span>` : ""}
         <div class="sub">${(b.apps || []).length ? esc(b.apps.join(t("、"))) : t("没有登记的程序")} · ${esc(b.dir)}</div>
         ${b.error ? `<div class="warn">⚠ ${esc(b.error)}</div>` : ""}</div>
         ${b.imported ? `<button data-open="${esc(b.prefix)}">${t("查看")}</button>`
-          : `<button data-bdir="${esc(b.dir)}" class="primary" ${b.error ? "disabled" : ""}>${t("导入")}</button>`}</div>`).join("")
-      || `<div class="empty">${t("没找到 Bottles 数据。可以点“选择目录”，选 bottles 目录或单个 bottle。")}</div>`}</div></section>`;
-  $("#pickb").onclick = async () => {
+          : `<button data-import="${kind}" data-dir="${esc(b.dir)}" class="primary" ${b.error ? "disabled" : ""}>${t("导入")}</button>`}</div>`).join("")
+      || `<div class="empty">${empty}</div>`}</div></section>`;
+
+function renderImport() {
+  $("#settab").innerHTML =
+    importSection("cellar", t("从其他 Cellar 导入"), t("复制另一个 Cellar（系统安装版或 Flatpak 版）的 prefix，不影响原数据。先关掉其中运行的程序。"), cellars,
+      t("没找到其他 Cellar 的 prefix。可以点“选择目录”，选 prefixes 目录或单个 prefix。")) +
+    importSection("bottles", t("从 Bottles 导入"), t("从 Bottles 复制导入，不影响原数据。"), bottles,
+      t("没找到 Bottles 数据。可以点“选择目录”，选 bottles 目录或单个 bottle。"));
+  const methods = { cellar: ["PickCellar", "ImportCellar"], bottles: ["PickBottles", "ImportBottle"] };
+  document.querySelectorAll("[data-pick]").forEach((b) => b.onclick = async () => {
     let dir;
-    try { dir = await call("PickBottles"); } catch (e) { fail(e); return; }
+    try { dir = await call(methods[b.dataset.pick][0]); } catch (e) { fail(e); return; }
     if (dir) await load();
-  };
+  });
   document.querySelectorAll("[data-open]").forEach((b) => b.onclick = () => { sel = b.dataset.open; renderList(); renderMain(); });
-  document.querySelectorAll("[data-bdir]").forEach((b) => b.onclick = async () => {
-    document.querySelectorAll("[data-bdir]").forEach((x) => x.disabled = true);
+  document.querySelectorAll("[data-import]").forEach((b) => b.onclick = async () => {
+    document.querySelectorAll("[data-import]").forEach((x) => x.disabled = true);
     b.textContent = t("导入中…");
     let res;
-    try { res = await call("ImportBottle", b.dataset.bdir); } catch (e) { fail(e); await load(); return; }
+    try { res = await call(methods[b.dataset.import][1], b.dataset.dir); } catch (e) { fail(e); await load(); return; }
     sel = res.prefix; await load();
     if ((res.notes || []).length) {
       dialog(`<b>${t("已导入 {0}，有几点要看一下", esc(res.prefix))}</b><ul>${res.notes.map((n) => `<li>${esc(n)}</li>`).join("")}</ul>
@@ -547,7 +555,7 @@ const fontSources = () => [
 ];
 
 const settingTabs = () => {
-  const n = bottles.filter((b) => !b.imported).length;
+  const n = [...cellars, ...bottles].filter((b) => !b.imported).length;
   return [["general", t("通用")], ["fonts", t("字体")], ["runner", "Runner"], ["import", n ? t("导入（{0}）", n) : t("导入")]];
 };
 
