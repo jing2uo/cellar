@@ -46,7 +46,7 @@ type Config struct {
 	// VirtualDesktop runs apps inside a Wine desktop window of this size
 	// ("1920x1080"); "" means each program gets its own windows.
 	VirtualDesktop string `toml:"virtual_desktop,omitempty" json:"virtual_desktop,omitempty"`
-	Init           Init   `toml:"init,omitempty" json:"init,omitempty"`
+	Addons         Addons `toml:"addons,omitempty" json:"addons,omitempty"`
 	// Dependencies are winetricks verbs (vcrun2022, corefonts, dotnet48...)
 	// installed once each; removing one from the list does not uninstall it.
 	Dependencies []string `toml:"dependencies,omitempty" json:"dependencies,omitempty"`
@@ -89,11 +89,12 @@ type Fonts struct {
 	Core string `toml:"core,omitempty" json:"core,omitempty"`
 }
 
-type Init struct {
-	// Mono and Gecko give the prefix Wine's .NET runtime / HTML engine:
-	// unpacked where the runner's version is found (reconcile/addons.go),
-	// else wineboot offers the download. Off by default: that prompt
-	// blocks a headless first run.
+// Addons give the prefix Wine's .NET runtime (Mono) and HTML engine
+// (Gecko). On, the prefix uses the runner's version unpacked where it is
+// found (reconcile/addons.go), else Wine offers its download. Off, the
+// prefix goes without: Wine is kept from asking. Off by default: that
+// prompt blocks a headless first run.
+type Addons struct {
 	Mono  bool `toml:"mono,omitempty" json:"mono,omitempty"`
 	Gecko bool `toml:"gecko,omitempty" json:"gecko,omitempty"`
 }

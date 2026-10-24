@@ -184,3 +184,26 @@ func TestWriteCoreFonts(t *testing.T) {
 		t.Fatal(st.CoreFonts)
 	}
 }
+
+func TestWriteAddons(t *testing.T) {
+	p := filepath.Join(t.TempDir(), "cellar.toml")
+	os.WriteFile(p, []byte(Template("x", "system", "zh_CN", []string{"core"})), 0o644)
+	if err := WriteAddons(p, true, false); err != nil {
+		t.Fatal(err)
+	}
+	c, err := Load(p)
+	if err != nil || !c.Addons.Gecko || c.Addons.Mono {
+		b, _ := os.ReadFile(p)
+		t.Fatalf("%v %+v\n%s", err, c.Addons, b)
+	}
+	st, _ := ReadSettings(p)
+	st.Gecko, st.Mono = false, true
+	WriteSettings(p, st)
+	if st, _ := ReadSettings(p); st.Gecko || !st.Mono {
+		t.Fatalf("%+v", st)
+	}
+	WriteAddons(p, false, false)
+	if b, _ := os.ReadFile(p); strings.Contains(string(b), "[addons]") {
+		t.Fatalf("empty table kept:\n%s", b)
+	}
+}

@@ -113,6 +113,15 @@ func cmdConfig(args []string) error {
 			dpi = strconv.Itoa(st.DPI)
 		}
 		show("dpi", dpi, "96 120 144 168 192, or auto")
+		onOff := func(b bool) string {
+			if b {
+				return "on"
+			}
+			return "off"
+		}
+		addons := "on: Wine's, found unpacked or downloaded when Wine offers"
+		show("gecko", onOff(st.Gecko), addons)
+		show("mono", onOff(st.Mono), addons)
 		fmt.Printf("\nchange: cellar config %s key=value ...  (applies at once; --no-apply only writes)\n", or(p.Name, "<prefix>"))
 		return nil
 	}
@@ -163,8 +172,17 @@ func cmdConfig(args []string) error {
 			} else if st.DPI, err = strconv.Atoi(v); err != nil || st.DPI < 48 {
 				return fmt.Errorf("dpi %q: a number like 120, or auto", v)
 			}
+		case "gecko", "mono":
+			if v != "on" && v != "off" {
+				return fmt.Errorf("%s %q: on or off", k, v)
+			}
+			if k == "gecko" {
+				st.Gecko = v == "on"
+			} else {
+				st.Mono = v == "on"
+			}
 		default:
-			return fmt.Errorf("unknown setting %q (runner locale fonts corefonts winver desktop dpi)", k)
+			return fmt.Errorf("unknown setting %q (runner locale fonts corefonts winver desktop dpi gecko mono)", k)
 		}
 	}
 	if err := config.WriteSettings(p.Config, st); err != nil {

@@ -3,6 +3,7 @@ package reconcile
 import (
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 
 	"github.com/jing2uo/cellar/internal/config"
@@ -10,10 +11,10 @@ import (
 )
 
 // addonsDir holds a prefix's links to the unpacked Gecko and Mono it uses
-// ([init] gecko / mono): on C:, so the registry can name them without a
+// ([addons] gecko / mono): on C:, so the registry can name them without a
 // drive letter covering the host path. Mshtml and mscoree load them from
 // there. Where the runner's version is not found unpacked, Wine offers its
-// download when the prefix is made, as before.
+// download when wineboot registers it.
 const addonsDir = `windows\cellar-addons`
 
 // Gecko's path goes under its version; Mono's is checked only for being
@@ -25,7 +26,7 @@ const (
 )
 
 // wantAddons adds the add-ons' links and registry values to d.
-func wantAddons(d *desired, c config.Init, a runner.Addons) {
+func wantAddons(d *desired, c config.Addons, a runner.Addons) {
 	d.addons = map[string]string{}
 	add := func(ad *runner.Addon, key, name string) {
 		if ad == nil {
@@ -41,6 +42,31 @@ func wantAddons(d *desired, c config.Init, a runner.Addons) {
 	if c.Mono {
 		add(a.Mono, monoKey, "RuntimePath")
 	}
+}
+
+// addonsOn names the add-ons c turns on.
+func addonsOn(c config.Addons) []string {
+	var on []string
+	if c.Gecko {
+		on = append(on, "gecko")
+	}
+	if c.Mono {
+		on = append(on, "mono")
+	}
+	return on
+}
+
+// addonsAdded are those on in c but not when the prefix was last applied:
+// wineboot registers them, which takes up the unpacked add-on or has Wine
+// offer the download.
+func addonsAdded(applied []string, c config.Addons) []string {
+	var out []string
+	for _, a := range addonsOn(c) {
+		if !slices.Contains(applied, a) {
+			out = append(out, a)
+		}
+	}
+	return out
 }
 
 // addonsPending tells which add-on paths sets write. Wineboot must not

@@ -210,7 +210,10 @@ type State struct {
 	// CorePack is the English core fonts' pack applied (mscore or
 	// liberation), "" without the core set: what the prefix followed when
 	// cellar's settings, not its cellar.toml, chose it.
-	CorePack  string    `json:"core_pack,omitempty"`
+	CorePack string `json:"core_pack,omitempty"`
+	// Addons are the add-ons on when it was applied (gecko, mono): one
+	// turned on since needs a wineboot to take it up.
+	Addons    []string  `json:"addons,omitempty"`
 	AppliedAt time.Time `json:"applied_at"`
 }
 

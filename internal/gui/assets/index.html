@@ -86,7 +86,7 @@ section h2 { font-size: 13px; font-weight: 600; color: var(--mute); margin: 0 0 
 .changes { font-family: var(--mono); font-size: 12px; margin: 0; padding: 0; list-style: none; max-height: 260px; overflow: auto; }
 .changes li { padding: 3px 0; border-bottom: 1px dashed var(--line); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .op { display: inline-block; width: 56px; font-weight: 600; }
-.op-set, .op-link, .op-map, .op-init, .op-download { color: var(--ok); } .op-delete, .op-unlink, .op-unmap { color: var(--err); } .op-update { color: var(--warn); }
+.op-set, .op-link, .op-map, .op-init, .op-addons, .op-download { color: var(--ok); } .op-delete, .op-unlink, .op-unmap { color: var(--err); } .op-update { color: var(--warn); }
 table { width: 100%; border-collapse: collapse; font-size: 13px; }
 td { white-space: nowrap; padding: 6px 4px; border-bottom: 1px solid var(--line); }
 /* The command takes what width is left and is cut short, not the page widened. */
@@ -148,10 +148,10 @@ select { font: inherit; padding: 6px 10px; border: 1px solid var(--line); border
 .copt.cur { font-weight: 600; }
 .copt.on { background: var(--accent-soft); }
 .clist .empty { padding: 8px 10px; }
-.fsets { display: grid; grid-template-columns: 1fr 1fr; gap: 4px 14px; }
-.fsets label { display: flex; gap: 6px; align-items: flex-start; color: var(--text); font-size: 13px; }
-.fsets input { width: auto; margin: 3px 0 0; }
-.fsets small { color: var(--mute); display: block; }
+.fsets, .adds { display: grid; grid-template-columns: 1fr 1fr; gap: 4px 14px; }
+.fsets label, .adds label { display: flex; gap: 6px; align-items: flex-start; color: var(--text); font-size: 13px; }
+.fsets input, .adds input { width: auto; margin: 3px 0 0; }
+.fsets small, .adds small { color: var(--mute); display: block; }
 .fsets small.warn { color: var(--err); }
 .tabs { display: flex; gap: 4px; margin: -8px 0 16px; border-bottom: 1px solid var(--line); }
 .tabs button { border: none; background: none; border-radius: 0; padding: 8px 14px; color: var(--mute); border-bottom: 2px solid transparent; margin-bottom: -1px; }
@@ -808,7 +808,7 @@ async function showPlan(name) {
 }
 
 function fmt(c) {
-  if (c.op === "init" || c.op === "update") return c.value;
+  if (c.op === "init" || c.op === "update" || c.op === "addons") return c.value;
   if (c.op === "set") return `${c.key}\\${c.name} = ${c.value}`;
   if (c.op === "delete") return `${c.key}\\${c.name}`;
   if (c.op === "link" || c.op === "unlink") return `${c.name} → ${c.value}`;
@@ -1025,6 +1025,13 @@ const readFonts = (d) => {
 };
 const LOCALE_NOTE = () => t("Windows 界面语言和编码，老软件乱码时改它");
 const FONTS_NOTE = () => t("界面缺的字用 Noto 字体补齐，在 设置 → 字体 里管理");
+// addonField is the [addons] boxes. On, the prefix uses Wine's Gecko / Mono
+// where they are found unpacked, else Wine offers the download.
+function addonField(gecko, mono) {
+  const box = (id, on, name, note) => `<label><input type="checkbox" id="${id}" ${on ? "checked" : ""}><span>${name}<small>${note}</small></span></label>`;
+  return `<div class="adds">${box("gecko", gecko, "Gecko", t("内置浏览器（IE、网页控件）"))}${box("mono", mono, "Mono", t(".NET 程序"))}</div>`;
+}
+const ADDONS_NOTE = () => t("Wine 的组件，需要的程序才开；没装时 Wine 会提示下载");
 const WINVER = [["win11", "Windows 11"], ["win10", "Windows 10"], ["win81", "Windows 8.1"], ["win7", "Windows 7"], ["winxp", "Windows XP"]];
 const DPIS = () => [[0, t("自动（跟随系统 Xft.dpi）")], [96, "100%"], [120, "125%"], [144, "150%"], [168, "175%"], [192, "200%"]];
 
@@ -1065,6 +1072,7 @@ async function settings(name) {
         ${st.dpi && !DPIS().some(([v]) => v === st.dpi) ? `<option value="${st.dpi}" selected>${st.dpi}</option>` : ""}</select>
       <label>${t("区域")}</label><div>${localeField(st.locale)}<small class="meta">${LOCALE_NOTE()}</small></div>
       <label>${t("字体")}</label><div>${fontField(st.font_sets, st.core_fonts || "", pr.fonts.core)}<small class="meta">${FONTS_NOTE()}</small></div>
+      <label>${t("组件")}</label><div>${addonField(st.gecko, st.mono)}<small class="meta">${ADDONS_NOTE()}</small></div>
     </div>
     <div id="e" class="err"></div>
     <div class="row"><button id="c">${t("取消")}</button><button id="s" class="primary">${t("保存并应用")}</button></div>`, (d) => {
@@ -1076,7 +1084,8 @@ async function settings(name) {
     d.querySelector("#s").onclick = async () => {
       try {
         const next = { ...st, locale: readLocale(d), font_sets: readFonts(d), core_fonts: readCore(d), windows_version: d.querySelector("#wv").value,
-          virtual_desktop: readSize(d), dpi: +d.querySelector("#dpi").value };
+          virtual_desktop: readSize(d), dpi: +d.querySelector("#dpi").value,
+          gecko: d.querySelector("#gecko").checked, mono: d.querySelector("#mono").checked };
         await call("SaveSettings", name, next); d.close(); await applyNow(name);
       }
       catch (e) { d.querySelector("#e").textContent = e.message || e; }
@@ -1275,6 +1284,7 @@ async function newPrefix() {
     <div class="meta">runner</div><select id="r">${env.runners.map((r) => `<option value="${esc(r.name)}" ${r.default ? "selected" : ""}>${esc(r.name)} — ${esc(r.version)}${r.problems && r.problems.length ? t("（{0}）", t("⚠ 缺 32 位支持")) : ""}</option>`).join("")}</select>
     <div class="meta">${t("区域")} · ${LOCALE_NOTE()}</div>${localeField(env.host_locale)}
     <div class="meta">${t("字体")}</div>${fontField(env.default_font_sets, "", pr.fonts.core)}
+    <div class="meta">${t("组件")} · ${ADDONS_NOTE()}</div>${addonField(false, false)}
     <div id="e" class="err"></div><div class="row"><button id="c">${t("取消")}</button><button id="k" class="primary">${t("创建")}</button></div>`, (d) => {
     d.querySelector("#c").onclick = () => d.close();
     // The region decides CJK until the boxes are touched.
@@ -1290,7 +1300,7 @@ async function newPrefix() {
       const n = d.querySelector("#n").value.trim();
       const k = d.querySelector("#k");
       k.disabled = true; k.textContent = t("创建中…");
-      try { const id = await call("Create", n, d.querySelector("#r").value, readLocale(d), readFonts(d), readCore(d)); sel = n; d.close(); await load(); if (id) watchTask(n, id); }
+      try { const id = await call("Create", n, d.querySelector("#r").value, readLocale(d), readFonts(d), readCore(d), d.querySelector("#gecko").checked, d.querySelector("#mono").checked); sel = n; d.close(); await load(); if (id) watchTask(n, id); }
       catch (e) { d.querySelector("#e").textContent = e.message || e; k.disabled = false; k.textContent = t("创建"); }
     };
   });

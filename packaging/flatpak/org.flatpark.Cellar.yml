@@ -47,7 +47,7 @@ finish-args:
 add-extensions:
   # org.winehq.Wine's Gecko and Mono, where Wine looks for them, when the
   # user has them (they come with org.winehq.Wine): cellar links them into
-  # prefixes that turn on [init] gecko / mono.
+  # prefixes that turn on [addons] gecko / mono.
   org.winehq.Wine.gecko:
     directory: share/wine/gecko
     version: stable-26.08

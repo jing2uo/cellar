@@ -19,6 +19,8 @@ type Settings struct {
 	VirtualDesktop string   `json:"virtual_desktop"`
 	DPI            int      `json:"dpi"`
 	CoreFonts      string   `json:"core_fonts"` // [fonts] core; "" follows cellar's settings
+	Gecko          bool     `json:"gecko"`      // [addons]
+	Mono           bool     `json:"mono"`
 }
 
 func ReadSettings(path string) (Settings, error) {
@@ -31,7 +33,8 @@ func ReadSettings(path string) (Settings, error) {
 		return Settings{}, err
 	}
 	st := Settings{Runner: c.Runner, WindowsVersion: c.WindowsVersion,
-		VirtualDesktop: c.VirtualDesktop, DPI: c.DPI, CoreFonts: c.Fonts.Core}
+		VirtualDesktop: c.VirtualDesktop, DPI: c.DPI, CoreFonts: c.Fonts.Core,
+		Gecko: c.Addons.Gecko, Mono: c.Addons.Mono}
 	file, err := parse(b, path)
 	if err != nil {
 		return Settings{}, err
@@ -97,7 +100,29 @@ func WriteSettings(path string, st Settings) error {
 		core = Literal(st.CoreFonts)
 	}
 	e.SetIn("fonts", "core", core)
+	setAddons(e, st.Gecko, st.Mono)
 	return e.Save()
+}
+
+// WriteAddons sets [addons]; off removes the key.
+func WriteAddons(path string, gecko, mono bool) error {
+	e, err := Edit(path)
+	if err != nil {
+		return err
+	}
+	setAddons(e, gecko, mono)
+	return e.Save()
+}
+
+func setAddons(e *Editor, gecko, mono bool) {
+	on := func(b bool) string {
+		if b {
+			return "true"
+		}
+		return ""
+	}
+	e.SetIn("addons", "gecko", on(gecko))
+	e.SetIn("addons", "mono", on(mono))
 }
 
 // WriteCoreFonts sets [fonts] core; empty removes it, following cellar's

@@ -32,7 +32,8 @@ var version = "dev"
 
 const usage = `cellar - Wine prefixes from cellar.toml
 
-  cellar new <prefix> [--runner R] [--locale zh_CN] [--fonts core,cjk|all|none] [--corefonts microsoft|liberation] [--no-apply]
+  cellar new <prefix> [--runner R] [--locale zh_CN] [--fonts core,cjk|all|none] [--corefonts microsoft|liberation]
+                     [--addons gecko,mono] [--no-apply]
                                      (alias: create; fonts default: core, plus cjk for a CJK region;
                                      then applies: wineboot and fonts)
   cellar list
@@ -47,7 +48,7 @@ const usage = `cellar - Wine prefixes from cellar.toml
                                      too) or a Wine tool: winecfg control regedit explorer
   cellar config <prefix> [key=value ...]   show or change settings, applied at once:
                                      runner locale fonts=core,cjk|all|none corefonts=microsoft|liberation|default
-                                     winver desktop=WxH|off dpi=N|auto
+                                     winver desktop=WxH|off dpi=N|auto gecko=on|off mono=on|off
   cellar deps <prefix> [add|rm <verb>...]  winetricks verbs (dlls, fonts); add installs at once
   cellar deps common                 the verbs most programs need
   cellar deps search <word>...       find winetricks verbs
@@ -232,6 +233,7 @@ func cmdNew(args []string) error {
 	loc := fs.String("locale", "", "Windows region (zh_CN, ja_JP...; default: the host's)")
 	fonts := fs.String("fonts", "", "font sets: core, cjk, all, comma-separated, or none (default: core, and cjk for a CJK region)")
 	core := fs.String("corefonts", "", "English core fonts: microsoft or liberation (default: cellar's settings)")
+	addons := fs.String("addons", "", "Wine add-ons to use: gecko, mono, comma-separated (default: none)")
 	noApply := fs.Bool("no-apply", false, "only write cellar.toml")
 	pos, _, err := parse(fs, args)
 	if err != nil {
@@ -239,6 +241,18 @@ func cmdNew(args []string) error {
 	}
 	if len(pos) != 1 {
 		return errors.New("usage: cellar new <prefix>")
+	}
+	var gecko, mono bool
+	for _, a := range strings.Split(*addons, ",") {
+		switch a {
+		case "":
+		case "gecko":
+			gecko = true
+		case "mono":
+			mono = true
+		default:
+			return fmt.Errorf("add-on %q (have gecko, mono)", a)
+		}
 	}
 	if *rn == "" {
 		if *rn, err = runner.Default(); err != nil {
@@ -276,6 +290,10 @@ func cmdNew(args []string) error {
 			os.RemoveAll(p.Dir)
 			return err
 		}
+	}
+	if err := config.WriteAddons(p.Config, gecko, mono); err != nil {
+		os.RemoveAll(p.Dir)
+		return err
 	}
 	if _, err := p.Load(); err != nil {
 		os.RemoveAll(p.Dir)

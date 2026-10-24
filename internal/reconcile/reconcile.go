@@ -28,7 +28,7 @@ import (
 )
 
 type Change struct {
-	Op    string `json:"op"` // init update set delete link(copy font) unlink map unmap install
+	Op    string `json:"op"` // init update addons set delete link(copy font) unlink map unmap install
 	Key   string `json:"key,omitempty"`
 	Name  string `json:"name,omitempty"`
 	Value string `json:"value,omitempty"`
@@ -39,6 +39,8 @@ func (c Change) String() string {
 	switch c.Op {
 	case "init", "update":
 		return fmt.Sprintf("%-6s prefix  %s", c.Op, c.Value)
+	case "addons":
+		return "addons  " + c.Value + "  (wineboot -u)"
 	case "set":
 		s := fmt.Sprintf("set    %s\\%s = %s", c.Key, c.Name, c.Value)
 		if c.Old != "" {
@@ -119,7 +121,7 @@ func Compute(p *store.Prefix, c *config.Config, force bool) (*Plan, error) {
 	if err != nil {
 		return nil, err
 	}
-	wantAddons(pl.want, c.Init, r.Addons())
+	wantAddons(pl.want, c.Addons, r.Addons())
 	if c.DPI == 0 {
 		// Automatic: follow the host's Xft.dpi; with no display to ask (a
 		// headless apply), keep whatever was applied last.
@@ -155,6 +157,10 @@ func (pl *Plan) diff(force bool) {
 		applied = nil
 	case pl.st.Wine != "" && (pl.st.Wine != pl.Wine || pl.st.Runner != pl.Runner):
 		pl.Changes = append(pl.Changes, Change{Op: "update", Value: pl.st.Wine + " -> " + pl.Wine})
+	default:
+		if on := addonsAdded(pl.st.Addons, pl.c.Addons); len(on) > 0 {
+			pl.Changes = append(pl.Changes, Change{Op: "addons", Value: strings.Join(on, " ")})
+		}
 	}
 
 	pl.sets, pl.dels = map[string]map[string]value{}, map[string]map[string]value{}
@@ -239,7 +245,7 @@ func (pl *Plan) diff(force bool) {
 }
 
 func opOrder(c Change) string {
-	o := map[string]string{"init": "0", "update": "0", "delete": "1", "set": "2", "unlink": "3", "link": "4", "unmap": "5", "map": "6", "install": "7"}[c.Op]
+	o := map[string]string{"init": "0", "update": "0", "addons": "0", "delete": "1", "set": "2", "unlink": "3", "link": "4", "unmap": "5", "map": "6", "install": "7"}[c.Op]
 	if c.Op == "install" {
 		return o // dependencies in config order, the app's installer last
 	}
@@ -473,7 +479,7 @@ var ErrBusy = errors.New("programs are running in the prefix; end them first")
 func (pl *Plan) NeedsIdle() bool {
 	gecko, mono := addonsPending(pl.sets)
 	return gecko || mono || slices.ContainsFunc(pl.Changes, func(c Change) bool {
-		return c.Op == "init" || c.Op == "update" || c.Op == "install"
+		return c.Op == "init" || c.Op == "update" || c.Op == "addons" || c.Op == "install"
 	})
 }
 
@@ -496,13 +502,14 @@ func (pl *Plan) Apply(log func(string)) error {
 		}
 		log(fmt.Sprintf("wineboot %s (%s)", arg, pl.Wine))
 		gecko, mono := addonsPending(pl.sets)
-		if err := pl.wineboot(arg, pl.c.Init.Gecko && !gecko, pl.c.Init.Mono && !mono); err != nil {
+		if err := pl.wineboot(arg, pl.c.Addons.Gecko && !gecko, pl.c.Addons.Mono && !mono); err != nil {
 			return err
 		}
 		if pl.Changes[0].Op == "init" {
 			pl.st.Registry = nil
 		}
-		pl.diff(false) // dosdevices and Fonts exist now
+		pl.st.Addons = addonsOn(pl.c.Addons) // registered by that wineboot
+		pl.diff(false)                       // dosdevices and Fonts exist now
 	}
 
 	if err := linkAddons(pl.p.Pfx, pl.want.addons); err != nil {
@@ -514,9 +521,10 @@ func (pl *Plan) Apply(log func(string)) error {
 			return err
 		}
 	}
-	if gecko, mono := addonsPending(pl.sets); gecko || mono {
+	added := slices.ContainsFunc(pl.Changes, func(c Change) bool { return c.Op == "addons" })
+	if gecko, mono := addonsPending(pl.sets); gecko || mono || added {
 		log("wineboot -u (Gecko / Mono)")
-		if err := pl.wineboot("-u", pl.c.Init.Gecko, pl.c.Init.Mono); err != nil {
+		if err := pl.wineboot("-u", pl.c.Addons.Gecko, pl.c.Addons.Mono); err != nil {
 			return err
 		}
 	}
@@ -600,7 +608,8 @@ func (pl *Plan) Apply(log func(string)) error {
 	st := &store.State{
 		Hash: pl.Hash, Runner: pl.Runner, Wine: pl.Wine,
 		Registry: map[string]map[string]string{}, Fonts: maps.Clone(pl.want.fonts),
-		Drives: maps.Clone(pl.want.drives), Install: installFP, CorePack: pl.want.core, AppliedAt: time.Now().UTC(),
+		Drives: maps.Clone(pl.want.drives), Install: installFP, CorePack: pl.want.core,
+		Addons: addonsOn(pl.c.Addons), AppliedAt: time.Now().UTC(),
 	}
 	for key, vals := range pl.want.reg {
 		st.Registry[key] = map[string]string{}

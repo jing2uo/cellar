@@ -21,10 +21,10 @@ vendor's installer, and cellar builds and maintains each user's prefix from it.
   installed it), or community builds downloaded on demand (Kron4ek vanilla /
   proton, Bottles' vaniglia).
   WoW64 builds run 32-bit programs with no 32-bit host libraries.
-  With `[init] gecko` / `mono`, a prefix uses Wine Gecko / Mono unpacked where
-  the runner's version is found (its own, the distribution's, or in the
-  Flatpak the `org.winehq.Wine.gecko` / `.mono` extensions), else Wine offers
-  the download.
+  Wine Gecko / Mono are off per prefix until turned on (`[addons]`, or the
+  create and settings dialogs); on, a prefix uses the runner's version unpacked
+  where found (the runner's own, or in the Flatpak the `org.winehq.Wine.gecko`
+  / `.mono` extensions), else Wine offers the download.
 - **Fonts**: core and CJK font sets copied into the prefix and wired up with
   font links and substitutes, so CJK text renders without manual registry work.
 - **Dependencies**: every winetricks verb, searchable, with the common ones
