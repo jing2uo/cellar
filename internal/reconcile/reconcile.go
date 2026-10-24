@@ -144,6 +144,15 @@ func Compute(p *store.Prefix, c *config.Config, force bool) (*Plan, error) {
 		return nil
 	}
 	pl.diff(force)
+	// A file that means what the applied one did (keys moved, a field
+	// cellar renamed) has nothing to apply: take it as applied, or the
+	// prefix reads as changed with no change to make.
+	if len(pl.Changes) == 0 && st.Hash != "" && st.Hash != pl.Hash && !strings.HasPrefix(st.Hash, "partial:") {
+		st.Hash = pl.Hash
+		if p.SaveState(st) == nil && pl.file != nil && !p.Packaged {
+			os.WriteFile(p.AppliedConfig(), pl.file, 0o644)
+		}
+	}
 	return pl, nil
 }
 
