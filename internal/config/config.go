@@ -90,8 +90,10 @@ type Fonts struct {
 }
 
 type Init struct {
-	// Mono and Gecko let wineboot offer its .NET / HTML engine installers.
-	// Off by default: the prompts block a headless first run.
+	// Mono and Gecko give the prefix Wine's .NET runtime / HTML engine:
+	// unpacked where the runner's version is found (reconcile/addons.go),
+	// else wineboot offers the download. Off by default: that prompt
+	// blocks a headless first run.
 	Mono  bool `toml:"mono,omitempty" json:"mono,omitempty"`
 	Gecko bool `toml:"gecko,omitempty" json:"gecko,omitempty"`
 }

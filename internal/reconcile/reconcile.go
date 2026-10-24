@@ -94,7 +94,8 @@ type desired struct {
 	reg    map[string]map[string]value
 	fonts  map[string]string // file name -> host path
 	drives map[string]string
-	core   string // the English core fonts' pack, "" without the core set
+	core   string            // the English core fonts' pack, "" without the core set
+	addons map[string]string // link name -> unpacked add-on dir (addons.go)
 }
 
 // errUnresolved marks a font role reference nothing installed fills: the
@@ -118,6 +119,7 @@ func Compute(p *store.Prefix, c *config.Config, force bool) (*Plan, error) {
 	if err != nil {
 		return nil, err
 	}
+	wantAddons(pl.want, c.Init, r.Addons())
 	if c.DPI == 0 {
 		// Automatic: follow the host's Xft.dpi; with no display to ask (a
 		// headless apply), keep whatever was applied last.
@@ -469,7 +471,8 @@ var ErrBusy = errors.New("programs are running in the prefix; end them first")
 // NeedsIdle tells whether the plan runs wine tools, which Apply does only
 // with no program running in the prefix.
 func (pl *Plan) NeedsIdle() bool {
-	return slices.ContainsFunc(pl.Changes, func(c Change) bool {
+	gecko, mono := addonsPending(pl.sets)
+	return gecko || mono || slices.ContainsFunc(pl.Changes, func(c Change) bool {
 		return c.Op == "init" || c.Op == "update" || c.Op == "install"
 	})
 }
@@ -492,7 +495,8 @@ func (pl *Plan) Apply(log func(string)) error {
 			arg = "-u"
 		}
 		log(fmt.Sprintf("wineboot %s (%s)", arg, pl.Wine))
-		if err := pl.wineboot(arg); err != nil {
+		gecko, mono := addonsPending(pl.sets)
+		if err := pl.wineboot(arg, pl.c.Init.Gecko && !gecko, pl.c.Init.Mono && !mono); err != nil {
 			return err
 		}
 		if pl.Changes[0].Op == "init" {
@@ -501,9 +505,18 @@ func (pl *Plan) Apply(log func(string)) error {
 		pl.diff(false) // dosdevices and Fonts exist now
 	}
 
+	if err := linkAddons(pl.p.Pfx, pl.want.addons); err != nil {
+		return fmt.Errorf("add-ons: %w", err)
+	}
 	if len(pl.sets)+len(pl.dels) > 0 {
 		log(fmt.Sprintf("registry: %d set, %d delete", count(pl.sets), count(pl.dels)))
 		if err := pl.importReg(); err != nil {
+			return err
+		}
+	}
+	if gecko, mono := addonsPending(pl.sets); gecko || mono {
+		log("wineboot -u (Gecko / Mono)")
+		if err := pl.wineboot("-u", pl.c.Init.Gecko, pl.c.Init.Mono); err != nil {
 			return err
 		}
 	}
@@ -613,15 +626,17 @@ func (pl *Plan) Apply(log func(string)) error {
 	return nil
 }
 
-func (pl *Plan) wineboot(arg string) error {
+// wineboot runs wineboot with mshtml / mscoree off unless gecko / mono ask
+// to register them, which finds their add-on or offers to download it.
+func (pl *Plan) wineboot(arg string, gecko, mono bool) error {
 	if err := os.MkdirAll(pl.p.Pfx, 0o755); err != nil {
 		return err
 	}
 	var skip []string
-	if !pl.c.Init.Mono {
+	if !mono {
 		skip = append(skip, "mscoree")
 	}
-	if !pl.c.Init.Gecko {
+	if !gecko {
 		skip = append(skip, "mshtml")
 	}
 	env := maps.Clone(pl.c.Env)
