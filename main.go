@@ -82,7 +82,7 @@ In a FlatPark package, leave out <prefix>: flatpak run --command=cellar <app-id>
 func main() {
 	if len(os.Args) < 2 {
 		if store.Packaged() {
-			os.Exit(exit(cmdRun(nil)))
+			os.Exit(runPackaged(nil))
 		}
 		if hasGUI {
 			os.Exit(exit(runGUI("")))
@@ -111,7 +111,7 @@ func main() {
 	if !ok && store.Packaged() {
 		// Inside a package the launcher is called as `cellar [files...]`
 		// (the .desktop Exec): run the default app with them.
-		os.Exit(exit(cmdRun(append([]string{"--"}, os.Args[1:]...))))
+		os.Exit(runPackaged(append([]string{"--"}, os.Args[1:]...)))
 	}
 	if !ok {
 		if os.Args[1] == "help" || os.Args[1] == "-h" || os.Args[1] == "--help" {
