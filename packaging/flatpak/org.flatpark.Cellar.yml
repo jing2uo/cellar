@@ -31,15 +31,10 @@ finish-args:
   - --filesystem=~/.var/app/com.usebottles.bottles/data/bottles:ro
   # Read-only, to import prefixes of a system-installed cellar.
   - --filesystem=~/.local/share/cellar/prefixes:ro
-  # org.winehq.Wine and its Gecko / Mono extensions where flatpak installs
-  # them, per user and system-wide: the "system" runner, and the add-ons
-  # cellar links into prefixes that turn on [init] gecko / mono.
+  # org.winehq.Wine where flatpak installs it, per user and system-wide: the
+  # "system" runner. An app, so it can't be mounted as an extension.
   - --filesystem=~/.local/share/flatpak/app/org.winehq.Wine:ro
-  - --filesystem=~/.local/share/flatpak/runtime/org.winehq.Wine.gecko:ro
-  - --filesystem=~/.local/share/flatpak/runtime/org.winehq.Wine.mono:ro
   - --filesystem=/var/lib/flatpak/app/org.winehq.Wine:ro
-  - --filesystem=/var/lib/flatpak/runtime/org.winehq.Wine.gecko:ro
-  - --filesystem=/var/lib/flatpak/runtime/org.winehq.Wine.mono:ro
   # New-WoW64 Wine runs 32-bit Windows code with no 32-bit Linux libraries,
   # but Flatpak's default seccomp filter still kills it: without this every
   # 32-bit program fails in NtCreateUserProcess.
@@ -50,6 +45,19 @@ finish-args:
 # load no i386 Linux libraries. Turning on 32-bit runners in the settings
 # shows the install command when they are missing.
 add-extensions:
+  # org.winehq.Wine's Gecko and Mono, where Wine looks for them, when the
+  # user has them (they come with org.winehq.Wine): cellar links them into
+  # prefixes that turn on [init] gecko / mono.
+  org.winehq.Wine.gecko:
+    directory: share/wine/gecko
+    version: stable-26.08
+    no-autodownload: true
+    autodelete: false
+  org.winehq.Wine.mono:
+    directory: share/wine/mono
+    version: stable-26.08
+    no-autodownload: true
+    autodelete: false
   org.freedesktop.Platform.Compat.i386:
     directory: lib/i386-linux-gnu
     version: '26.08'
@@ -72,8 +80,8 @@ modules:
       - install -Dm755 cellar /app/bin/cellar
       - install -Dm644 org.flatpark.Cellar.desktop /app/share/applications/org.flatpark.Cellar.desktop
       - install -Dm644 org.flatpark.Cellar.svg /app/share/icons/hicolor/scalable/apps/org.flatpark.Cellar.svg
-      # Mount points of the i386 extensions above.
-      - mkdir -p /app/lib/i386-linux-gnu/GL
+      # Mount points of the extensions above.
+      - mkdir -p /app/lib/i386-linux-gnu/GL /app/share/wine/gecko /app/share/wine/mono
       # 7-Zip unpacks installers and Microsoft's core fonts, winetricks verbs
       # need cabextract: Debian's builds. 7z loads 7z.so next to argv[0], so
       # it is exec'd by its real path; cabextract carries libmspack, which

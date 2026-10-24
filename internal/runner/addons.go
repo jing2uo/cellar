@@ -14,10 +14,11 @@ import (
 // and cellar's prefixes have no Z:. Otherwise it offers to download the
 // .msi when the prefix is made.
 //
-// Addons finds the unpacked ones a runner can use: its own data dir (a
-// Flatpak's Wine base mounts its extensions there), the distribution's, then
-// org.winehq.Wine's extensions (org.winehq.Wine.gecko, .mono) as flatpak
-// installed them, which serve any runner wanting the same version.
+// Addons finds the unpacked ones a runner can use: its own data dir, then
+// the environment's. On the host that is the distribution's. In the Flatpak
+// it is /app/share/wine, where the app mounts org.winehq.Wine's extensions
+// (org.winehq.Wine.gecko, .mono) when they are installed; they serve any
+// runner wanting the same version.
 
 // Addon is one unpacked add-on: the directory name Wine expects and where
 // it is on the host.
@@ -69,13 +70,21 @@ func parseAddonVersions(b []byte) (gecko, mono string) {
 	return
 }
 
+// addonRoots are the environment's data dirs for add-ons (a var for the
+// tests).
+var addonRoots = func() []string {
+	if InFlatpak() {
+		return []string{"/app/share/wine"}
+	}
+	return []string{"/usr/share/wine", "/opt/wine"}
+}
+
 // addonDirs are where unpacked add-ons may be, by subdirectory (gecko,
 // mono), best first.
 func (r *Runner) addonDirs(sub string) []string {
-	dirs := []string{filepath.Join(r.Dir, "share/wine", sub), filepath.Join("/usr/share/wine", sub), filepath.Join("/opt/wine", sub)}
-	for _, root := range flatpakRoots() {
-		m, _ := filepath.Glob(filepath.Join(root, "runtime/org.winehq.Wine."+sub, flatpakArch(), "*/active/files"))
-		dirs = append(dirs, m...)
+	dirs := []string{filepath.Join(r.Dir, "share/wine", sub)}
+	for _, root := range addonRoots() {
+		dirs = append(dirs, filepath.Join(root, sub))
 	}
 	return dirs
 }

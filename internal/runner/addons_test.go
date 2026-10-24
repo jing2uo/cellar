@@ -50,12 +50,13 @@ func TestFlatpakWines(t *testing.T) {
 }
 
 func TestAddons(t *testing.T) {
-	home := t.TempDir()
-	t.Setenv("HOME", home)
+	root := t.TempDir()
+	defer func(f func() []string) { addonRoots = f }(addonRoots)
+	addonRoots = func() []string { return []string{root} }
 	dir := filepath.Join(t.TempDir(), "wine")
 	mkdirs(t, filepath.Join(dir, "lib/wine/x86_64-windows"))
 	os.WriteFile(filepath.Join(dir, "lib/wine/x86_64-windows/appwiz.cpl"), utf16le("wine-gecko-2.47.4-x86_64.msi wine-mono-10.4.1-x86.msi"), 0o644)
-	ext := filepath.Join(home, ".local/share/flatpak/runtime/org.winehq.Wine.gecko", flatpakArch(), "stable-26.08/active/files")
+	ext := filepath.Join(root, "gecko")
 	// The runner's own data dir wins; Mono of another version does not count.
 	mkdirs(t, filepath.Join(ext, "wine-gecko-2.47.4-x86_64"), filepath.Join(ext, "wine-gecko-2.47.4-x86"),
 		filepath.Join(dir, "share/wine/gecko/wine-gecko-2.47.4-x86_64"), filepath.Join(dir, "share/wine/mono/wine-mono-9.0.0"))
