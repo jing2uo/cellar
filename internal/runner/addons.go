@@ -14,11 +14,13 @@ import (
 // and cellar's prefixes have no Z:. Otherwise it offers to download the
 // .msi when the prefix is made.
 //
-// Addons finds the unpacked ones a runner can use: its own data dir, then
-// the environment's. On the host that is the distribution's. In the Flatpak
-// it is /app/share/wine, where the app mounts org.winehq.Wine's extensions
-// (org.winehq.Wine.gecko, .mono) when they are installed; they serve any
-// runner wanting the same version.
+// Addons finds the unpacked ones a runner can use: in its own data dir
+// (share/wine/{gecko,mono}), and in the Flatpak in /app/share/wine too,
+// where the app mounts org.winehq.Wine's extensions (org.winehq.Wine.gecko,
+// .mono) when they are installed; they serve any runner wanting the same
+// version. Distributions keep theirs each in their own place and form
+// (often the .msi), so on the host a runner without them gets Wine's
+// download.
 
 // Addon is one unpacked add-on: the directory name Wine expects and where
 // it is on the host.
@@ -70,13 +72,13 @@ func parseAddonVersions(b []byte) (gecko, mono string) {
 	return
 }
 
-// addonRoots are the environment's data dirs for add-ons (a var for the
-// tests).
+// addonRoots are the environment's data dirs for add-ons beside the
+// runner's own (a var for the tests).
 var addonRoots = func() []string {
 	if InFlatpak() {
 		return []string{"/app/share/wine"}
 	}
-	return []string{"/usr/share/wine", "/opt/wine"}
+	return nil
 }
 
 // addonDirs are where unpacked add-ons may be, by subdirectory (gecko,
