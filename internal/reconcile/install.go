@@ -12,6 +12,7 @@ import (
 	"strings"
 
 	"github.com/jing2uo/cellar/internal/config"
+	"github.com/jing2uo/cellar/internal/runner"
 	"github.com/jing2uo/cellar/internal/store"
 )
 
@@ -46,12 +47,11 @@ func sourcePath(p *store.Prefix, in *config.Install) string {
 }
 
 // Unpack extracts an installer (NSIS / 7z SFX / Inno-less exe, .msi, zip...)
-// with 7z into dst, atomically. 7z ships with the Wine base app; the
-// vendor's file is not changed.
+// with 7-Zip into dst, atomically. The vendor's file is not changed.
 func Unpack(src, dst, subdir string) error {
-	sz, err := exec.LookPath("7z")
+	sz, err := runner.SevenZip()
 	if err != nil {
-		return errors.New("7z not found (the org.winehq.Wine base ships it)")
+		return err
 	}
 	tmp := dst + ".tmp"
 	os.RemoveAll(tmp)

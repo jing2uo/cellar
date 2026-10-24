@@ -416,6 +416,17 @@ func InstallID(id string, progress io.Writer) (string, error) {
 	return Install(r.URL, r.InstallName(), progress)
 }
 
+// SevenZip finds 7-Zip: 7zz is 7-Zip's own Linux build, 7z Debian's 7zip
+// or p7zip.
+func SevenZip() (string, error) {
+	for _, n := range []string{"7zz", "7z"} {
+		if p, err := exec.LookPath(n); err == nil {
+			return p, nil
+		}
+	}
+	return "", errors.New("7-Zip not found: install 7zip (7zz) or p7zip (7z)")
+}
+
 const winetricksURL = "https://raw.githubusercontent.com/Winetricks/winetricks/master/src/winetricks"
 
 // Winetricks finds winetricks: the system's (a packaged Wine app's base

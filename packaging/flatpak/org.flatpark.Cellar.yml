@@ -74,9 +74,32 @@ modules:
       - install -Dm644 org.flatpark.Cellar.svg /app/share/icons/hicolor/scalable/apps/org.flatpark.Cellar.svg
       # Mount points of the i386 extensions above.
       - mkdir -p /app/lib/i386-linux-gnu/GL
+      # 7-Zip unpacks installers and Microsoft's core fonts, winetricks verbs
+      # need cabextract: Debian's builds. 7z loads 7z.so next to argv[0], so
+      # it is exec'd by its real path; cabextract carries libmspack, which
+      # the runtime lacks, on a library path of its own.
+      - for d in 7zip.deb cabextract.deb libmspack0t64.deb; do bsdtar -xOf $d 'data.tar*' | bsdtar --no-same-owner -xf - -C .; done
+      - install -Dm755 -t /app/lib/cellar-tools/7zip usr/lib/7zip/7z usr/lib/7zip/7z.so
+      - install -Dm755 usr/bin/cabextract /app/lib/cellar-tools/cabextract
+      - cp -a usr/lib/x86_64-linux-gnu/libmspack.so.0* /app/lib/cellar-tools/
+      - printf '#!/bin/sh\nexec /app/lib/cellar-tools/7zip/7z "$@"\n' > /app/bin/7z
+      - printf '#!/bin/sh\nLD_LIBRARY_PATH="/app/lib/cellar-tools${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}" exec /app/lib/cellar-tools/cabextract "$@"\n' > /app/bin/cabextract
+      - chmod 755 /app/bin/7z /app/bin/cabextract
     sources:
       - type: file
         path: ../../dist/cellar
+      - type: file
+        dest-filename: 7zip.deb
+        url: https://deb.debian.org/debian/pool/main/7/7zip/7zip_25.01+dfsg-1~deb13u2_amd64.deb
+        sha256: b2cb210bee3be6a10230b38b8645d71846d19364b157f44fd08e1a54cae1652f
+      - type: file
+        dest-filename: cabextract.deb
+        url: https://deb.debian.org/debian/pool/main/c/cabextract/cabextract_1.11-2_amd64.deb
+        sha256: f66dfa011a39a82c1c601b308ef031ef65b29c856cd13a3d3eb194b947c5326d
+      - type: file
+        dest-filename: libmspack0t64.deb
+        url: https://deb.debian.org/debian/pool/main/libm/libmspack/libmspack0t64_0.11-1.1+b1_amd64.deb
+        sha256: b6039006e2758fa91a0e02ea1cbeded53ae0a5955298e1b0dddbe5a91784b510
       - type: file
         path: org.flatpark.Cellar.desktop
       - type: file

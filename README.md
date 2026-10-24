@@ -45,6 +45,10 @@ binaries, with their `SHA256SUMS`:
 - `cellar-x86_64`: the GUI (Wails v3, GTK 4 / WebKitGTK 6) plus the full CLI
 - `cellar-cli-x86_64`: a static, GUI-less build of the CLI
 
+Both want 7-Zip (`7zz`, or `7z` from Debian's `7zip` or p7zip) and `cabextract` on
+`PATH`: 7-Zip unpacks installers and Microsoft's core fonts (cabextract does
+those too), winetricks verbs need cabextract. The Flatpak brings both.
+
 Builds of every commit are attached to the
 [CI runs](https://github.com/jing2uo/cellar/actions/workflows/build.yml).
 

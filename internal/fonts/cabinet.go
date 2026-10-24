@@ -10,6 +10,8 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+
+	"github.com/jing2uo/cellar/internal/runner"
 )
 
 // downloadCabinet fetches a self-extracting cabinet (Microsoft's core
@@ -54,7 +56,7 @@ func downloadCabinet(url, sum string, want map[string]string) error {
 	var cmd *exec.Cmd
 	if p, err := exec.LookPath("cabextract"); err == nil {
 		cmd = exec.Command(p, "-q", "-d", dir, exe)
-	} else if p, err := exec.LookPath("7z"); err == nil {
+	} else if p, err := runner.SevenZip(); err == nil {
 		cmd = exec.Command(p, "e", "-y", "-o"+dir, exe)
 	} else {
 		return fmt.Errorf("%s: unpacking needs cabextract or 7z", name)
