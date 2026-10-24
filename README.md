@@ -17,8 +17,9 @@ vendor's installer, and cellar builds and maintains each user's prefix from it.
   desktop, DPI, drives, winetricks verbs and apps, all in `cellar.toml`.
   `plan` shows what would change, `apply` makes it so, and `run` applies first
   whenever the file changed. Registry values cellar did not set are left alone.
-- **Runners**: the system Wine, or community builds downloaded on demand
-  (Kron4ek vanilla / proton, Bottles' vaniglia).
+- **Runners**: the system Wine (in the Flatpak: `org.winehq.Wine` as flatpak
+  installed it), or community builds downloaded on demand (Kron4ek vanilla /
+  proton, Bottles' vaniglia).
   WoW64 builds run 32-bit programs with no 32-bit host libraries.
 - **Fonts**: core and CJK font sets copied into the prefix and wired up with
   font links and substitutes, so CJK text renders without manual registry work.
@@ -44,12 +45,13 @@ Builds of every commit are attached to the
 [CI runs](https://github.com/jing2uo/cellar/actions/workflows/build.yml).
 
 The Flatpak, [`org.flatpark.Cellar`](https://flatpark.org/apps/org.flatpark.Cellar/),
-is on [FlatPark](https://flatpark.org), with Wine from the `org.winehq.Wine`
-base:
+is on [FlatPark](https://flatpark.org). It brings no Wine of its own: it
+uses `org.winehq.Wine` from Flathub when installed, or downloads a runner.
 
 ```sh
 flatpak --user remote-add --if-not-exists flatpark https://dl.flatpark.org/flatpark.flatpakrepo
 flatpak --user install flatpark org.flatpark.Cellar
+flatpak --user install flathub org.winehq.Wine//stable-26.08   # optional
 ```
 
 ## Usage

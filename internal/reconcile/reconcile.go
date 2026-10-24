@@ -758,7 +758,7 @@ func (pl *Plan) winetricks(verb string, log func(string)) error {
 	env["WINE"], env["WINESERVER"] = pl.r.Wine, pl.r.Wineserver
 	env["WINETRICKS_LATEST_VERSION_CHECK"] = "disabled"
 	cmd := exec.Command(wt, "-q", verb)
-	cmd.Env = runner.Environ(pl.p.Pfx, env)
+	cmd.Env = pl.r.Environ(pl.p.Pfx, env)
 	pr, pw := io.Pipe()
 	cmd.Stdout, cmd.Stderr = pw, pw
 	var tailBuf []string

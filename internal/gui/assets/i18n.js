@@ -54,7 +54,7 @@ export const EN = {
   "从 Bottles 导入": "Import from Bottles",
   "（{0}）": "({0})",
   "没有找到 Wine": "Wine not found",
-  "这个 Flatpak 应自带 Wine，构建可能不完整。": "This Flatpak should include Wine; the build may be incomplete.",
+  "可以从 Flathub 安装 Wine：flatpak install flathub org.winehq.Wine//stable-26.08，或在这里下载一个。": "Install Wine from Flathub: flatpak install flathub org.winehq.Wine//stable-26.08, or download one here.",
   "下载推荐的 Wine": "Download recommended Wine",
   "下载中…": "Downloading…",
   "；": "; ",

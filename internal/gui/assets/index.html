@@ -335,7 +335,7 @@ function dragItem(el, ev) {
 }
 
 const noWine = () => env.runners.length ? "" : `<div class="banner"><div><b>${t("没有找到 Wine")}</b><div class="meta">${env.flatpak
-  ? t("这个 Flatpak 应自带 Wine，构建可能不完整。") : t("没有安装 Wine。可以装发行版的包，或在这里下载一个。")}</div></div>
+  ? t("可以从 Flathub 安装 Wine：flatpak install flathub org.winehq.Wine//stable-26.08，或在这里下载一个。") : t("没有安装 Wine。可以装发行版的包，或在这里下载一个。")}</div></div>
   <button class="primary" id="getwine">${t("下载推荐的 Wine")}</button></div>`;
 
 function wireNoWine() {

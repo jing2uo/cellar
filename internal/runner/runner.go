@@ -4,8 +4,9 @@
 // WineHQ builds). Two kinds:
 //
 //   - "system": the Wine the environment provides. Inside the Flatpak that
-//     is the base app's (org.winehq.Wine, a hard dependency, so it is always
-//     there); on the host it is the distribution's or WineHQ's, if any.
+//     is org.winehq.Wine installed with flatpak (or a packaged Wine app's
+//     base under /app); on the host it is the distribution's or WineHQ's,
+//     if any.
 //   - downloaded builds under <cellar home>/runners/<name>.
 //
 // A prefix names one in cellar.toml; an absolute directory works too.
@@ -30,14 +31,18 @@ import (
 )
 
 type Runner struct {
-	Name       string `json:"name"`
-	Dir        string `json:"dir"`
-	Wine       string `json:"wine"`
-	Wineserver string `json:"wineserver"`
+	Name       string            `json:"name"`
+	Dir        string            `json:"dir"`
+	Wine       string            `json:"wine"`
+	Wineserver string            `json:"wineserver"`
+	Env        map[string]string `json:"env,omitempty"` // under the prefix's env (runnerEnv)
 }
 
 // ErrNone means no runner is available at all; the fix is to download one.
-var ErrNone = errors.New("no Wine found: install your distribution's wine, or download one with `cellar runner available` / `cellar runner install " + defaultSource() + "`")
+var ErrNone = errors.New("no Wine found: install your distribution's wine (in the Flatpak: flatpak install " + FlatpakWine + "), or download one with `cellar runner available` / `cellar runner install " + defaultSource() + "`")
+
+// FlatpakWine is the org.winehq.Wine branch built on the Flatpak's runtime.
+const FlatpakWine = "flathub org.winehq.Wine//stable-26.08"
 
 func defaultSource() string {
 	for _, s := range Sources {
@@ -60,7 +65,7 @@ func Resolve(name string) (*Runner, error) {
 		dirs := systemDirs()
 		if len(dirs) == 0 {
 			if InFlatpak() {
-				return nil, errors.New(`runner "system": /app/bin/wine missing - this Flatpak build lacks its org.winehq.Wine base`)
+				return nil, errors.New(`runner "system": no Wine found; flatpak install ` + FlatpakWine + `, or pick a downloaded runner`)
 			}
 			return nil, errors.New(`runner "system": no Wine installed on this system; pick a downloaded runner instead`)
 		}
@@ -84,7 +89,7 @@ func wineRoot(dir string) string {
 
 func at(name, dir string) (*Runner, error) {
 	dir = wineRoot(dir)
-	r := &Runner{Name: name, Dir: dir, Wine: filepath.Join(dir, "bin", "wine"), Wineserver: wineserver(dir)}
+	r := &Runner{Name: name, Dir: dir, Wine: filepath.Join(dir, "bin", "wine"), Wineserver: wineserver(dir), Env: runnerEnv(dir)}
 	if _, err := os.Stat(r.Wine); err != nil {
 		return nil, fmt.Errorf("runner %q: %s missing (have: %s)", name, r.Wine, strings.Join(Names(), ", "))
 	}
@@ -106,7 +111,9 @@ func wineserver(dir string) string {
 }
 
 func (r *Runner) Version() string {
-	out, err := exec.Command(r.Wine, "--version").Output()
+	cmd := exec.Command(r.Wine, "--version")
+	cmd.Env = r.Environ("", nil)
+	out, err := cmd.Output()
 	if err != nil {
 		return ""
 	}
@@ -318,7 +325,7 @@ func (c *counter) Write(p []byte) (int, error) {
 // Flatpak instance, the command goes through an agent there (agent.go).
 func (r *Runner) Command(prefix string, env map[string]string, args ...string) *exec.Cmd {
 	cmd := exec.Command(r.Wine, args...)
-	cmd.Env = Environ(prefix, env)
+	cmd.Env = r.Environ(prefix, env)
 	if serverOwner(prefix) == foreignServer {
 		if self, err := os.Executable(); err == nil {
 			cmd.Path, cmd.Args = self, append([]string{self, ProxyCommand, r.Wine}, args...)
@@ -330,7 +337,7 @@ func (r *Runner) Command(prefix string, env map[string]string, args ...string) *
 // Server runs wineserver with args (-w waits for it to exit, -k kills it).
 func (r *Runner) Server(prefix string, args ...string) error {
 	cmd := exec.Command(r.Wineserver, args...)
-	cmd.Env = Environ(prefix, nil)
+	cmd.Env = r.Environ(prefix, nil)
 	return cmd.Run()
 }
 
@@ -367,12 +374,20 @@ func ServerUp(prefix string) bool {
 	return err == nil
 }
 
-func Environ(prefix string, env map[string]string) []string {
+// Environ is the environment for the runner's programs in prefix: the
+// caller's, the runner's own, then env. An empty prefix leaves WINEPREFIX
+// as it is.
+func (r *Runner) Environ(prefix string, env map[string]string) []string {
 	m := map[string]string{"WINEDEBUG": "-all"}
+	for k, v := range r.Env {
+		m[k] = v
+	}
 	for k, v := range env {
 		m[k] = v
 	}
-	m["WINEPREFIX"] = prefix
+	if prefix != "" {
+		m["WINEPREFIX"] = prefix
+	}
 	out := make([]string, 0, len(os.Environ())+len(m))
 	for _, kv := range os.Environ() {
 		k, _, _ := strings.Cut(kv, "=")
@@ -403,8 +418,8 @@ func InstallID(id string, progress io.Writer) (string, error) {
 
 const winetricksURL = "https://raw.githubusercontent.com/Winetricks/winetricks/master/src/winetricks"
 
-// Winetricks finds winetricks: the Flatpak's Wine base ships it; on the host
-// it is the system's, else a copy cellar downloads once into its data dir.
+// Winetricks finds winetricks: the system's (a packaged Wine app's base
+// ships one), else a copy cellar downloads once into its data dir.
 func Winetricks() (string, error) {
 	if p, err := exec.LookPath("winetricks"); err == nil {
 		return p, nil

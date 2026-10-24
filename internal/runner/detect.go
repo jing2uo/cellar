@@ -4,6 +4,9 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
+	"sort"
+	"strings"
 )
 
 // InFlatpak reports whether cellar runs inside a Flatpak sandbox.
@@ -13,21 +16,22 @@ func InFlatpak() bool {
 }
 
 // systemDirs lists where a distribution or vendor Wine may live, best first.
-// In a Flatpak the only one is the base app's (org.winehq.Wine) under /app;
-// on the host it is whatever wine is on PATH, then WineHQ's /opt packages.
+// In a Flatpak these are a Wine base under /app (packaged Wine apps keep
+// org.winehq.Wine as theirs), then org.winehq.Wine as the user installed it
+// with flatpak, read-only through the app's filesystem permissions. On the
+// host it is whatever wine is on PATH, then WineHQ's /opt packages.
 func systemDirs() []string {
-	if InFlatpak() {
-		return []string{"/app"}
-	}
 	var dirs []string
-	if w, err := exec.LookPath("wine"); err == nil {
-		if real, err := filepath.EvalSymlinks(w); err == nil {
-			w = real
+	if InFlatpak() {
+		dirs = append([]string{"/app"}, flatpakWines()...)
+	} else {
+		if w, err := exec.LookPath("wine"); err == nil {
+			if real, err := filepath.EvalSymlinks(w); err == nil {
+				w = real
+			}
+			dirs = append(dirs, filepath.Dir(filepath.Dir(w)))
 		}
-		dirs = append(dirs, filepath.Dir(filepath.Dir(w)))
-	}
-	for _, d := range []string{"/opt/wine-staging", "/opt/wine-devel", "/opt/wine-stable", "/usr"} {
-		dirs = append(dirs, d)
+		dirs = append(dirs, "/opt/wine-staging", "/opt/wine-devel", "/opt/wine-stable", "/usr")
 	}
 	seen := map[string]bool{}
 	var out []string
@@ -41,6 +45,74 @@ func systemDirs() []string {
 		}
 	}
 	return out
+}
+
+// flatpakRoots are the user's and the system's flatpak installations. The
+// user's is the real ~/.local/share/flatpak: inside the sandbox
+// XDG_DATA_HOME points at the app's own data dir.
+func flatpakRoots() []string {
+	home, _ := os.UserHomeDir()
+	return []string{filepath.Join(home, ".local/share/flatpak"), "/var/lib/flatpak"}
+}
+
+func flatpakArch() string {
+	return map[string]string{"amd64": "x86_64", "arm64": "aarch64"}[runtime.GOARCH]
+}
+
+// flatpakWines lists the installed branches of org.winehq.Wine, newest
+// first, the user's installation before the system's for the same branch.
+// The path goes through active/, which a flatpak update repoints, so a
+// prefix keeps its runner across updates.
+func flatpakWines() []string {
+	type wine struct {
+		dir, branch string
+		root        int
+	}
+	var ws []wine
+	for i, root := range flatpakRoots() {
+		m, _ := filepath.Glob(filepath.Join(root, "app/org.winehq.Wine", flatpakArch(), "*/active/files"))
+		for _, d := range m {
+			ws = append(ws, wine{d, filepath.Base(filepath.Dir(filepath.Dir(d))), i})
+		}
+	}
+	sort.SliceStable(ws, func(i, j int) bool {
+		if ws[i].branch != ws[j].branch {
+			return ws[i].branch > ws[j].branch
+		}
+		return ws[i].root < ws[j].root
+	})
+	out := make([]string, len(ws))
+	for i, w := range ws {
+		out[i] = w.dir
+	}
+	return out
+}
+
+// flatpakWine tells whether dir is an org.winehq.Wine installed with
+// flatpak and run from outside its own sandbox.
+func flatpakWine(dir string) bool {
+	return strings.Contains(dir, "/flatpak/app/org.winehq.Wine/")
+}
+
+// runnerEnv is what a runner needs in its environment beyond the prefix's.
+// org.winehq.Wine keeps libraries the runtime lacks in its own lib/ (krb5,
+// unixODBC; samba's under lib/samba, for ntlm_auth), found through
+// /app/lib in its own sandbox but not from here; its bin/ has ntlm_auth.
+func runnerEnv(dir string) map[string]string {
+	if !flatpakWine(dir) {
+		return nil
+	}
+	return map[string]string{
+		"LD_LIBRARY_PATH": prepend(os.Getenv("LD_LIBRARY_PATH"), filepath.Join(dir, "lib"), filepath.Join(dir, "lib/samba")),
+		"PATH":            prepend(os.Getenv("PATH"), filepath.Join(dir, "bin")),
+	}
+}
+
+func prepend(list string, dirs ...string) string {
+	if list != "" {
+		dirs = append(dirs, list)
+	}
+	return strings.Join(dirs, ":")
 }
 
 // Kind tells WoW64 builds, whose unix side is x86_64 only, from legacy

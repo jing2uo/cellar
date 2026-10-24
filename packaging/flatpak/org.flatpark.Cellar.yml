@@ -1,16 +1,15 @@
 # Local test build: packages dist/cellar (make gui) as-is. The release build
 # compiles in the GNOME SDK instead.
 #
-# Wine is a hard dependency: the app is built on the org.winehq.Wine base, so
-# /app/bin/wine (the "system" runner) is always there. The base targets
-# org.freedesktop.Platform//26.08, which GNOME 51 is built on - Bottles ships
-# the same pairing. Downloaded community runners live in the app's data dir.
+# No Wine of its own. The "system" runner is org.winehq.Wine as the user
+# installed it from Flathub (stable-26.08 is built on
+# org.freedesktop.Platform//26.08, which GNOME 51 is built on), read in place
+# through the grants below. Downloaded community runners live in the app's
+# data dir.
 id: org.flatpark.Cellar
 runtime: org.gnome.Platform
 runtime-version: '51'
 sdk: org.gnome.Sdk
-base: org.winehq.Wine
-base-version: stable-26.08
 command: cellar
 finish-args:
   - --share=ipc
@@ -32,17 +31,22 @@ finish-args:
   - --filesystem=~/.var/app/com.usebottles.bottles/data/bottles:ro
   # Read-only, to import prefixes of a system-installed cellar.
   - --filesystem=~/.local/share/cellar/prefixes:ro
+  # org.winehq.Wine and its Gecko / Mono extensions where flatpak installs
+  # them, per user and system-wide: the "system" runner, and the add-ons
+  # cellar links into prefixes that turn on [init] gecko / mono.
+  - --filesystem=~/.local/share/flatpak/app/org.winehq.Wine:ro
+  - --filesystem=~/.local/share/flatpak/runtime/org.winehq.Wine.gecko:ro
+  - --filesystem=~/.local/share/flatpak/runtime/org.winehq.Wine.mono:ro
+  - --filesystem=/var/lib/flatpak/app/org.winehq.Wine:ro
+  - --filesystem=/var/lib/flatpak/runtime/org.winehq.Wine.gecko:ro
+  - --filesystem=/var/lib/flatpak/runtime/org.winehq.Wine.mono:ro
   # New-WoW64 Wine runs 32-bit Windows code with no 32-bit Linux libraries,
   # but Flatpak's default seccomp filter still kills it: without this every
   # 32-bit program fails in NtCreateUserProcess.
   - --allow=multiarch
 
-inherit-extensions:
-  - org.winehq.Wine.gecko
-  - org.winehq.Wine.mono
-
 # Only legacy (non-WoW64) community runners such as Bottles' vaniglia need these.
-# Not auto-downloaded: the base Wine and the recommended runners are WoW64 and
+# Not auto-downloaded: org.winehq.Wine and the recommended runners are WoW64 and
 # load no i386 Linux libraries. Turning on 32-bit runners in the settings
 # shows the install command when they are missing.
 add-extensions:
@@ -68,7 +72,7 @@ modules:
       - install -Dm755 cellar /app/bin/cellar
       - install -Dm644 org.flatpark.Cellar.desktop /app/share/applications/org.flatpark.Cellar.desktop
       - install -Dm644 org.flatpark.Cellar.svg /app/share/icons/hicolor/scalable/apps/org.flatpark.Cellar.svg
-      # Mount point the 26.08 Wine base no longer creates (it is WoW64-only).
+      # Mount points of the i386 extensions above.
       - mkdir -p /app/lib/i386-linux-gnu/GL
     sources:
       - type: file
