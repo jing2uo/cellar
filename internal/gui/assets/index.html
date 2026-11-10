@@ -119,7 +119,12 @@ input { font: inherit; padding: 6px 10px; border: 1px solid var(--line); border-
 .tag.warn { background: color-mix(in srgb, var(--warn) 15%, transparent); color: var(--warn); }
 .warn { color: var(--warn); font-size: 12px; }
 select { font: inherit; padding: 6px 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--bg); color: var(--text); width: 100%; margin: 4px 0 10px; }
-.head .more { font-size: 18px; line-height: 1; padding: 4px 12px; }
+.head .more { font-size: 18px; line-height: 1; padding: 4px 12px; flex: none; }
+/* A prefix's name and its ⋯ share a line, the ⋯ at the right whatever the
+   width; the meta wraps below them. */
+.head .grow { flex: 1; min-width: 0; }
+.titlerow { display: flex; justify-content: space-between; align-items: center; gap: 16px; }
+.titlerow h1 { min-width: 0; overflow-wrap: anywhere; }
 .menu { position: fixed; z-index: 10; min-width: 190px; display: flex; flex-direction: column;
   background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 6px; box-shadow: 0 8px 24px rgba(0,0,0,.18); }
 .menu[hidden] { display: none; }
@@ -355,12 +360,12 @@ async function renderMain() {
   if (!p) { $("#main").innerHTML = noWine() + `<div class="welcome">${t("新建一个 prefix 开始")}</div>`; wireNoWine(); return; }
   $("#main").innerHTML = `
     <div class="head">
-      <div><h1>${esc(p.name)}</h1>
+      <div class="grow"><div class="titlerow"><h1>${esc(p.name)}</h1>
+        <button id="pmenu" class="more" title="${t("更多操作")}">⋯</button></div>
         <div class="meta"><span class="badge s-${p.state}">${stateText(p.state)}</span>
           <span>${t("runner：{0}", esc(p.runner))}</span><span>${t("区域：{0}", p.locale ? esc(localeName(p.locale)) : t("未设置"))}</span>
           ${(p.font_sets || []).length ? `<span>${t("字体：{0}", esc(p.font_sets.map((id) => id === "core" || id === "all"
             ? t("{0}（{1}）", fontSetName(id), corePackName(p.core_pack)) : fontSetName(id)).join(t("、"))))}</span>` : ""}</div></div>
-      <button id="pmenu" class="more" title="${t("更多操作")}">⋯</button>
     </div>
     ${noWine()}${p.error ? `<section><div class="err">${esc(p.error)}</div></section>` : ""}
     <section><div class="sechead"><h2>${t("应用")}</h2><div class="actions"><button id="procs" class="withico"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>${t("进程管理")}</button><button id="install" class="withico"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="6 4 20 12 6 20 6 4"/></svg>${t("运行程序")}</button><button id="addapp" class="withico"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>${t("添加应用")}</button></div></div><div class="apps">${p.apps.map((a) => `
