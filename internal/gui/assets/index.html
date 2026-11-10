@@ -1070,6 +1070,7 @@ async function settings(name) {
   const [st, ds, pr] = await Promise.all([call("Settings", name), call("DesktopSizes"), call("Prefs")]);
   dialog(`<b>${t("{0} 设置", esc(name))}</b>
     <div class="form">
+      <label>runner</label><div>${runnerField(st.runner)}<small class="meta">${t("换了 Wine 版本，保存时会用它更新 prefix；换回更旧的版本可能出问题。")}</small></div>
       <label>${t("Windows 版本")}</label><select id="wv"><option value="">${t("默认（Windows 10）")}</option>${WINVER.map(([v, label]) => `<option value="${v}" ${st.windows_version === v ? "selected" : ""}>${label}</option>`).join("")}</select>
       <label>${t("虚拟桌面")}</label><div class="inline"><input type="checkbox" id="vd" ${st.virtual_desktop ? "checked" : ""}>
         ${sizeField(st.virtual_desktop, ds)}<small class="meta">${t("程序都开在一个 Wine 桌面窗口里")}</small></div>
@@ -1088,7 +1089,7 @@ async function settings(name) {
     d.querySelector("#c").onclick = () => d.close();
     d.querySelector("#s").onclick = async () => {
       try {
-        const next = { ...st, locale: readLocale(d), font_sets: readFonts(d), core_fonts: readCore(d), windows_version: d.querySelector("#wv").value,
+        const next = { ...st, runner: d.querySelector("#rn").value, locale: readLocale(d), font_sets: readFonts(d), core_fonts: readCore(d), windows_version: d.querySelector("#wv").value,
           virtual_desktop: readSize(d), dpi: +d.querySelector("#dpi").value,
           gecko: d.querySelector("#gecko").checked, mono: d.querySelector("#mono").checked };
         await call("SaveSettings", name, next); d.close(); await applyNow(name);
@@ -1282,11 +1283,25 @@ async function browse(d, name, path, act = { label: t("添加"), fn: (e) => doAd
   d.querySelectorAll("[data-k]").forEach((b) => b.onclick = (ev) => { ev.stopPropagation(); act.fn(ents[+b.dataset.k]); });
 }
 
+// runnerLabel is a runner as the runner pickers list it.
+const runnerLabel = (r) => `${esc(r.name)} — ${esc(r.version)}${r.problems && r.problems.length ? t("（{0}）", t("⚠ 缺 32 位支持")) : ""}`;
+
+// runnerField picks a prefix's runner; "" follows the default, so the
+// prefix moves along when the default changes. A runner the file names but
+// that is gone stays listed, so saving does not quietly switch it.
+function runnerField(cur) {
+  const def = env.runners.find((r) => r.default);
+  const gone = cur && !env.runners.some((r) => r.name === cur);
+  return `<select id="rn"><option value="">${def ? t("默认（{0}）", runnerLabel(def)) : t("默认")}</option>
+    ${env.runners.map((r) => `<option value="${esc(r.name)}" ${cur === r.name ? "selected" : ""}>${runnerLabel(r)}</option>`).join("")}
+    ${gone ? `<option value="${esc(cur)}" selected>${esc(t("{0} 未找到", cur))}</option>` : ""}</select>`;
+}
+
 async function newPrefix() {
   if (!env.runners.length) { openSettings("runner"); return; }
   const pr = await call("Prefs");
   dialog(`<b>${t("新建 prefix")}</b><div class="meta">${t("名称")}</div><input id="n" placeholder="${t("例如 wechat")}">
-    <div class="meta">runner</div><select id="r">${env.runners.map((r) => `<option value="${esc(r.name)}" ${r.default ? "selected" : ""}>${esc(r.name)} — ${esc(r.version)}${r.problems && r.problems.length ? t("（{0}）", t("⚠ 缺 32 位支持")) : ""}</option>`).join("")}</select>
+    <div class="meta">runner</div><select id="r">${env.runners.map((r) => `<option value="${esc(r.name)}" ${r.default ? "selected" : ""}>${runnerLabel(r)}</option>`).join("")}</select>
     <div class="meta">${t("区域")} · ${LOCALE_NOTE()}</div>${localeField(env.host_locale)}
     <div class="meta">${t("字体")}</div>${fontField(env.default_font_sets, "", pr.fonts.core)}
     <div class="meta">${t("组件")} · ${ADDONS_NOTE()}</div>${addonField(false, false)}

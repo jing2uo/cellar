@@ -172,6 +172,8 @@ export const EN = {
   "下载失败": "Download failed",
   "已有": "Installed",
   "默认": "Default",
+  "默认（{0}）": "Default ({0})",
+  "换了 Wine 版本，保存时会用它更新 prefix；换回更旧的版本可能出问题。": "On a switch to another Wine version, saving updates the prefix with it; going back to an older one may break it.",
   "系统": "System",
   "可下载": "Available for download",
   "正在查询 GitHub…": "Querying GitHub…",
