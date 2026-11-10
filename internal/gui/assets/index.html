@@ -158,6 +158,9 @@ select { font: inherit; padding: 6px 10px; border: 1px solid var(--line); border
 .fsets input, .adds input { width: auto; margin: 3px 0 0; }
 .fsets small, .adds small { color: var(--mute); display: block; }
 .fsets small.warn { color: var(--err); }
+.adds small.aside { display: inline; }
+/* A row whose label carries its note as a tooltip. */
+.form > label[title] { cursor: help; text-decoration: underline dotted color-mix(in srgb, var(--mute) 50%, transparent); text-underline-offset: 3px; }
 .tabs { display: flex; gap: 4px; margin: -8px 0 16px; border-bottom: 1px solid var(--line); }
 .tabs button { border: none; background: none; border-radius: 0; padding: 8px 14px; color: var(--mute); border-bottom: 2px solid transparent; margin-bottom: -1px; }
 .tabs button.on { color: var(--accent); border-bottom-color: var(--accent); font-weight: 600; }
@@ -928,7 +931,7 @@ function localeLabel(id) {
 // settings, whose choice is globalCore), adds the English core fonts
 // picker beside the English set.
 const fontField = (sets, core, globalCore) => `<div class="fsets">${env.font_sets.map((f) =>
-  `<label><input type="checkbox" value="${f.id}" ${sets.includes(f.id) ? "checked" : ""}><span>${esc(t(f.name))}${f.id === "core" && core !== undefined ? coreSelect(core, globalCore) : ""}<small>${esc(t(f.note))}</small><small data-fs="${f.id}">${t("查找字体…")}</small></span></label>`).join("")}</div>`;
+  `<label title="${esc(t(f.note))}"><input type="checkbox" value="${f.id}" ${sets.includes(f.id) ? "checked" : ""}><span>${esc(t(f.name))}${f.id === "core" && core !== undefined ? coreSelect(core, globalCore) : ""}<small data-fs="${f.id}">${t("查找字体…")}</small></span></label>`).join("")}</div>`;
 const coreSelect = (core, globalCore) => `<select id="corefonts" style="width:auto;margin:0 0 0 8px;padding:1px 6px">
     <option value="" ${!core ? "selected" : ""}>${t("跟随全局（{0}）", corePackName(globalCore === "microsoft" ? "mscore" : "liberation"))}</option>
     <option value="microsoft" ${core === "microsoft" ? "selected" : ""}>${t("微软核心字体")}</option>
@@ -1033,7 +1036,7 @@ const FONTS_NOTE = () => t("界面缺的字用 Noto 字体补齐，在 设置 �
 // addonField is the [addons] boxes. On, the prefix uses Wine's Gecko / Mono
 // where they are found unpacked, else Wine offers the download.
 function addonField(gecko, mono) {
-  const box = (id, on, name, note) => `<label><input type="checkbox" id="${id}" ${on ? "checked" : ""}><span>${name}<small>${note}</small></span></label>`;
+  const box = (id, on, name, note) => `<label><input type="checkbox" id="${id}" ${on ? "checked" : ""}><span>${name} <small class="aside">${note}</small></span></label>`;
   return `<div class="adds">${box("gecko", gecko, "Gecko", t("内置浏览器（IE、网页控件）"))}${box("mono", mono, "Mono", t(".NET 程序"))}</div>`;
 }
 const ADDONS_NOTE = () => t("Wine 的组件，需要的程序才开；没装时 Wine 会提示下载");
@@ -1070,15 +1073,15 @@ async function settings(name) {
   const [st, ds, pr] = await Promise.all([call("Settings", name), call("DesktopSizes"), call("Prefs")]);
   dialog(`<b>${t("{0} 设置", esc(name))}</b>
     <div class="form">
-      <label>runner</label><div>${runnerField(st.runner)}<small class="meta">${t("换了 Wine 版本，保存时会用它更新 prefix；换回更旧的版本可能出问题。")}</small></div>
+      <label title="${esc(t("换了 Wine 版本，保存时会用它更新 prefix；换回更旧的版本可能出问题。"))}">runner</label>${runnerField(st.runner)}
       <label>${t("Windows 版本")}</label><select id="wv"><option value="">${t("默认（Windows 10）")}</option>${WINVER.map(([v, label]) => `<option value="${v}" ${st.windows_version === v ? "selected" : ""}>${label}</option>`).join("")}</select>
-      <label>${t("虚拟桌面")}</label><div class="inline"><input type="checkbox" id="vd" ${st.virtual_desktop ? "checked" : ""}>
-        ${sizeField(st.virtual_desktop, ds)}<small class="meta">${t("程序都开在一个 Wine 桌面窗口里")}</small></div>
+      <label title="${esc(t("程序都开在一个 Wine 桌面窗口里"))}">${t("虚拟桌面")}</label><div class="inline"><input type="checkbox" id="vd" ${st.virtual_desktop ? "checked" : ""}>
+        ${sizeField(st.virtual_desktop, ds)}</div>
       <label>${t("缩放（DPI）")}</label><select id="dpi">${DPIS().map(([v, label]) => `<option value="${v}" ${st.dpi === v ? "selected" : ""}>${label}${v ? t("（{0}）", v) : ""}</option>`).join("")}
         ${st.dpi && !DPIS().some(([v]) => v === st.dpi) ? `<option value="${st.dpi}" selected>${st.dpi}</option>` : ""}</select>
-      <label>${t("区域")}</label><div>${localeField(st.locale)}<small class="meta">${LOCALE_NOTE()}</small></div>
-      <label>${t("字体")}</label><div>${fontField(st.font_sets, st.core_fonts || "", pr.fonts.core)}<small class="meta">${FONTS_NOTE()}</small></div>
-      <label>${t("组件")}</label><div>${addonField(st.gecko, st.mono)}<small class="meta">${ADDONS_NOTE()}</small></div>
+      <label title="${esc(LOCALE_NOTE())}">${t("区域")}</label>${localeField(st.locale)}
+      <label title="${esc(FONTS_NOTE())}">${t("字体")}</label>${fontField(st.font_sets, st.core_fonts || "", pr.fonts.core)}
+      <label title="${esc(ADDONS_NOTE())}">${t("组件")}</label>${addonField(st.gecko, st.mono)}
     </div>
     <div id="e" class="err"></div>
     <div class="row"><button id="c">${t("取消")}</button><button id="s" class="primary">${t("保存并应用")}</button></div>`, (d) => {
